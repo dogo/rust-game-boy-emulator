@@ -346,24 +346,12 @@ impl RAM {
         if address == 0xFF46 {
             self.memory[address as usize] = byte;
             let source_base = (byte as u16) * 0x100;
-            eprintln!("🔥 DMA Write: [FF46] = {:02X}", byte);
-            eprintln!("🔁 DMA copy from {:04X} to FE00", source_base);
 
             // DMA copia 160 bytes usando o bus normal
             for i in 0..160 {
                 let source_addr = source_base + i;
                 let data = self.read(source_addr); // usa o bus normal
                 self.ppu.write_oam(0xFE00 + i, data); // alimenta a OAM que o renderer usa
-            }
-
-            // Dump toda vez para debug
-            eprintln!("--- OAM dump após DMA ---");
-            for i in 0..40 {
-                let y = self.ppu.read_oam(i*4 + 0);
-                let x = self.ppu.read_oam(i*4 + 1);
-                let tile = self.ppu.read_oam(i*4 + 2);
-                let attr = self.ppu.read_oam(i*4 + 3);
-                eprintln!("#{i:02} Y={y:03} X={x:03} tile={tile:02X} attr={attr:02X}");
             }
             return;
         }

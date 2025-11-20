@@ -229,7 +229,7 @@ impl PPU {
         let sprite_x = sprite.x.wrapping_sub(8);
 
         // Calcular linha do tile (0-7 para 8x8, 0-15 para 8x16)
-        let mut tile_line = line - sprite_y;
+        let mut tile_line = line.wrapping_sub(sprite_y);
 
         // Flip vertical (bit 6)
         if (sprite.attributes & 0x40) != 0 {

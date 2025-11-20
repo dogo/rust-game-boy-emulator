@@ -20,7 +20,6 @@ pub fn ei(opcode: u8) -> Instruction {
 pub fn halt(opcode: u8) -> Instruction {
     fn exec(_instr: &Instruction, cpu: &mut CPU) -> u64 {
         cpu.halted = true;
-        eprintln!("💤 HALT executed! IME={} IF={:02X} IE={:02X}", cpu.ime, cpu.ram.read(0xFF0F), cpu.ram.read(0xFFFF));
         4
     }
     Instruction { opcode, name: "HALT", cycles: 4, size: 1, flags: &[], execute: exec }

@@ -86,7 +86,6 @@ impl CPU {
             let ie_reg = self.ram.read(0xFFFF);
             if (if_reg & ie_reg) != 0 {
                 self.halted = false;
-                eprintln!("💤 HALT wake up! IF={:02X} IE={:02X}", if_reg, ie_reg);
             } else {
                 // CPU ainda halted, simula 4 ciclos de espera
                 self.tick(4);
