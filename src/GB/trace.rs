@@ -1,7 +1,72 @@
 use crate::GB::CPU::CPU;
 use crate::GB::instructions;
 
+// === Funções de trace para operações da RAM ===
+
+pub fn trace_mbc_ram_enable(enabled: bool) {
+    println!("[MBC3] RAM/RTC {}", if enabled { "habilitado" } else { "desabilitado" });
+}
+
+pub fn trace_mbc_rom_bank(old_bank: u8, new_bank: u8) {
+    println!("[MBC3] Banco ROM: {:02X} -> {:02X}", old_bank, new_bank);
+}
+
+pub fn trace_mbc_ram_rtc_select(byte: u8) {
+    let desc = if byte <= 0x03 {
+        format!("RAM banco {:02X}", byte)
+    } else if byte >= 0x08 && byte <= 0x0C {
+        format!("RTC reg {:02X}", byte)
+    } else {
+        format!("valor {:02X}", byte)
+    };
+    println!("[MBC3] Seleção RAM/RTC: {}", desc);
+}
+
+pub fn trace_mbc_rtc_latch(h: u8, m: u8, s: u8, dh: u8, dl: u8) {
+    println!("[MBC3] RTC latched: {:02}:{:02}:{:02} dia={}",
+             h, m, s, ((dh as u16 & 1) << 8) | dl as u16);
+}
+
+pub fn trace_joypad_selection(dpad: bool, buttons: bool) {
+    println!("[JOYPAD] Seleção: dpad={} buttons={}", dpad as u8, buttons as u8);
+}
+
+pub fn trace_joypad_press(button: &str) {
+    println!("[JOYPAD] {} pressionado", button);
+}
+
+pub fn trace_joypad_release(button: &str) {
+    println!("[JOYPAD] {} solto", button);
+}
+
+pub fn trace_timer_div_reset() {
+    println!("[TIMER] DIV<=00 (reset)");
+}
+
+pub fn trace_timer_tac(byte: u8) {
+    let en = (byte & 0x04) != 0;
+    let freq = match byte & 0x03 { 0b00 => 4096, 0b01 => 262144, 0b10 => 65536, _ => 16384 };
+    println!("[TIMER] TAC<={:02X} (enable={}, freq={}Hz)", byte & 0x07, en as u8, freq);
+}
+
+pub fn trace_timer_tima(byte: u8) {
+    println!("[TIMER] TIMA<={:02X}", byte);
+}
+
+pub fn trace_timer_tma(byte: u8) {
+    println!("[TIMER] TMA<={:02X}", byte);
+}
+
+pub fn trace_timer_interrupt(tma: u8) {
+    println!("[TIMER] IF(TIMER)=1; TIMA<=TMA({:02X})", tma);
+}
+
+// === Loop principal de trace ===
+
 pub fn run_with_trace(cpu: &mut CPU, max_steps: usize) {
+    // Ativa trace de operações da RAM (MBC, timer, joypad)
+    cpu.ram.trace_enabled = true;
+
     for step in 0..max_steps {
         let pc = cpu.registers.get_pc();
         let opcode = cpu.ram.read(pc); // peek

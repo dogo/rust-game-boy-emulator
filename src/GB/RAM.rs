@@ -31,6 +31,8 @@ pub struct RAM {
     joypad_select_buttons: bool, // true = selecionou leitura de botões de ação
     joypad_dpad: u8,            // estado do D-pad: bit0=Right, bit1=Left, bit2=Up, bit3=Down (0=pressed, 1=released)
     joypad_buttons: u8,         // estado de ação: bit0=A, bit1=B, bit2=Select, bit3=Start (0=pressed, 1=released)
+    // Controle de trace
+    pub trace_enabled: bool,    // se true, emite logs de operações (MBC, timer, joypad)
 }
 
 impl RAM {
@@ -61,6 +63,7 @@ impl RAM {
             joypad_select_buttons: false,
             joypad_dpad: 0x0F,      // todos soltos (1111)
             joypad_buttons: 0x0F,   // todos soltos (1111)
+            trace_enabled: false,
         }
     }
 
@@ -151,8 +154,8 @@ impl RAM {
                     // Enable/disable RAM/RTC (0x0A habilita, outros desabilitam)
                     let old = self.ram_enabled;
                     self.ram_enabled = (byte & 0x0F) == 0x0A;
-                    if old != self.ram_enabled {
-                        println!("[MBC3] RAM/RTC {}", if self.ram_enabled { "habilitado" } else { "desabilitado" });
+                    if self.trace_enabled && old != self.ram_enabled {
+                        crate::GB::trace::trace_mbc_ram_enable(self.ram_enabled);
                     }
                     return;
                 }
@@ -161,7 +164,9 @@ impl RAM {
                     let mut bank = byte & 0x7F;
                     if bank == 0 { bank = 1; }
                     if self.rom_bank != bank {
-                        println!("[MBC3] Banco ROM: {:02X} -> {:02X}", self.rom_bank, bank);
+                        if self.trace_enabled {
+                            crate::GB::trace::trace_mbc_rom_bank(self.rom_bank, bank);
+                        }
                         self.rom_bank = bank;
                     } else {
                         self.rom_bank = bank;
@@ -171,14 +176,9 @@ impl RAM {
                 0x4000..=0x5FFF => {
                     // Seleção de banco RAM (00-03) ou registrador RTC (08-0C)
                     if self.ram_bank != byte {
-                        let desc = if byte <= 0x03 {
-                            format!("RAM banco {:02X}", byte)
-                        } else if byte >= 0x08 && byte <= 0x0C {
-                            format!("RTC reg {:02X}", byte)
-                        } else {
-                            format!("valor {:02X}", byte)
-                        };
-                        println!("[MBC3] Seleção RAM/RTC: {}", desc);
+                        if self.trace_enabled {
+                            crate::GB::trace::trace_mbc_ram_rtc_select(byte);
+                        }
                         self.ram_bank = byte;
                     } else {
                         self.ram_bank = byte;
@@ -193,9 +193,11 @@ impl RAM {
                         self.rtc_latched_h = self.rtc_h;
                         self.rtc_latched_dl = self.rtc_dl;
                         self.rtc_latched_dh = self.rtc_dh;
-                        println!("[MBC3] RTC latched: {:02}:{:02}:{:02} dia={}",
-                                 self.rtc_h, self.rtc_m, self.rtc_s,
-                                 ((self.rtc_dh as u16 & 1) << 8) | self.rtc_dl as u16);
+                        if self.trace_enabled {
+                            crate::GB::trace::trace_mbc_rtc_latch(
+                                self.rtc_h, self.rtc_m, self.rtc_s, self.rtc_dh, self.rtc_dl
+                            );
+                        }
                     }
                     self.rtc_latch_state = byte;
                     return;
@@ -212,9 +214,10 @@ impl RAM {
                 self.joypad_select_buttons = (byte & 0x20) == 0;
                 self.joypad_select_dpad = (byte & 0x10) == 0;
 
-                if old_sel_buttons != self.joypad_select_buttons || old_sel_dpad != self.joypad_select_dpad {
-                    println!("[JOYPAD] Seleção: dpad={} buttons={}",
-                             self.joypad_select_dpad as u8, self.joypad_select_buttons as u8);
+                if self.trace_enabled && (old_sel_buttons != self.joypad_select_buttons || old_sel_dpad != self.joypad_select_dpad) {
+                    crate::GB::trace::trace_joypad_selection(
+                        self.joypad_select_dpad, self.joypad_select_buttons
+                    );
                 }
 
                 // Bits 3-0 são apenas leitura (estado dos botões), ignoramos escrita neles
@@ -224,22 +227,26 @@ impl RAM {
                 self.memory[address as usize] = 0;
                 // Recalcula o último sinal do timer após o reset para evitar bordas espúrias
                 self.timer_last_signal = self.current_timer_signal();
-                println!("[TIMER] DIV<=00 (reset)");
+                if self.trace_enabled {
+                    crate::GB::trace::trace_timer_div_reset();
+                }
             }
             0xFF07 => { // TAC
                 self.memory[address as usize] = byte & 0x07; // apenas os 3 bits menos significativos são usados
                 // Atualiza o último sinal conforme a nova configuração do TAC
                 self.timer_last_signal = self.current_timer_signal();
-                let en = (byte & 0x04) != 0;
-                let freq = match byte & 0x03 { 0b00 => 4096, 0b01 => 262144, 0b10 => 65536, _ => 16384 };
-                println!("[TIMER] TAC<={:02X} (enable={}, freq={}Hz)", byte & 0x07, en as u8, freq);
+                if self.trace_enabled {
+                    crate::GB::trace::trace_timer_tac(byte);
+                }
             }
             0xFF05 | 0xFF06 => { // TIMA, TMA
                 self.memory[address as usize] = byte;
-                if address == 0xFF05 {
-                    println!("[TIMER] TIMA<={:02X}", byte);
-                } else {
-                    println!("[TIMER] TMA<={:02X}", byte);
+                if self.trace_enabled {
+                    if address == 0xFF05 {
+                        crate::GB::trace::trace_timer_tima(byte);
+                    } else {
+                        crate::GB::trace::trace_timer_tma(byte);
+                    }
                 }
             }
             0xA000..=0xBFFF => {
@@ -320,7 +327,9 @@ impl RAM {
                     let tma = self.memory[0xFF06];
                     self.memory[0xFF05] = tma;
                     self.memory[0xFF0F] |= 0x04; // IF Timer
-                    println!("[TIMER] IF(TIMER)=1; TIMA<=TMA({:02X})", tma);
+                    if self.trace_enabled {
+                        crate::GB::trace::trace_timer_interrupt(tma);
+                    }
                 }
             }
 

@@ -158,12 +158,11 @@ impl CPU {
             "B"      => self.ram.press_joypad_button(1, false),
             "SELECT" => self.ram.press_joypad_button(2, false),
             "START"  => self.ram.press_joypad_button(3, false),
-            _ => {
-                println!("[JOYPAD] Botão desconhecido: {}", button);
-                return;
-            }
+            _ => return,
         }
-        println!("[JOYPAD] {} pressionado", btn);
+        if self.ram.trace_enabled {
+            crate::GB::trace::trace_joypad_press(&btn);
+        }
 
         // Opcional: requisitar interrupção de joypad (bit 4 de IF)
         // let mut iflags = self.ram.read(0xFF0F);
@@ -186,6 +185,8 @@ impl CPU {
             "START"  => self.ram.release_joypad_button(3, false),
             _ => return,
         }
-        println!("[JOYPAD] {} solto", btn);
+        if self.ram.trace_enabled {
+            crate::GB::trace::trace_joypad_release(&btn);
+        }
     }
 }
