@@ -216,10 +216,11 @@ impl RAM {
                     let new_reg1 = byte & 0x1F; // 5 bits
                     if self.mbc1_bank_reg1 != new_reg1 {
                         if self.trace_enabled {
+                            let old_reg1 = self.mbc1_bank_reg1;
                             let old_rom = self.mbc1_effective_rom_bank();
                             self.mbc1_bank_reg1 = new_reg1;
                             let new_rom = self.mbc1_effective_rom_bank();
-                            crate::GB::trace::trace_mbc_rom_bank(old_rom, new_rom);
+                            crate::GB::trace::trace_mbc1_reg1_write(old_reg1, new_reg1, old_rom, new_rom);
                         } else {
                             self.mbc1_bank_reg1 = new_reg1;
                         }
@@ -231,13 +232,12 @@ impl RAM {
                     let new_reg2 = byte & 0x03; // 2 bits
                     if self.mbc1_bank_reg2 != new_reg2 {
                         if self.trace_enabled {
-                            // Trace ROM bank change
+                            let old_reg2 = self.mbc1_bank_reg2;
                             let old_rom = self.mbc1_effective_rom_bank();
                             self.mbc1_bank_reg2 = new_reg2;
                             let new_rom = self.mbc1_effective_rom_bank();
                             let new_ram = self.mbc1_effective_ram_bank();
-                            crate::GB::trace::trace_mbc_rom_bank(old_rom, new_rom);
-                            crate::GB::trace::trace_mbc_ram_rtc_select(new_ram);
+                            crate::GB::trace::trace_mbc1_reg2_write(old_reg2, new_reg2, old_rom, new_rom, new_ram);
                         } else {
                             self.mbc1_bank_reg2 = new_reg2;
                         }
@@ -249,12 +249,12 @@ impl RAM {
                     let new_mode = byte & 0x01;
                     if self.mbc1_mode != new_mode {
                         if self.trace_enabled {
-                            // Trace mudança de modo
-                            println!("MBC1 Mode switch: {} -> {} ({})",
-                                self.mbc1_mode, new_mode,
-                                if new_mode == 0 { "ROM banking" } else { "RAM banking" });
+                            let old_mode = self.mbc1_mode;
+                            self.mbc1_mode = new_mode;
+                            crate::GB::trace::trace_mbc1_mode_switch(old_mode, new_mode);
+                        } else {
+                            self.mbc1_mode = new_mode;
                         }
-                        self.mbc1_mode = new_mode;
                     }
                     return;
                 }

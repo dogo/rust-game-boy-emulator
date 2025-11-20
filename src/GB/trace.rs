@@ -4,11 +4,11 @@ use crate::GB::instructions;
 // === Funções de trace para operações da RAM ===
 
 pub fn trace_mbc_ram_enable(enabled: bool) {
-    println!("[MBC3] RAM/RTC {}", if enabled { "habilitado" } else { "desabilitado" });
+    println!("[MBC] RAM {}", if enabled { "habilitado" } else { "desabilitado" });
 }
 
 pub fn trace_mbc_rom_bank(old_bank: u8, new_bank: u8) {
-    println!("[MBC3] Banco ROM: {:02X} -> {:02X}", old_bank, new_bank);
+    println!("[MBC] Banco ROM: {:02X} -> {:02X}", old_bank, new_bank);
 }
 
 pub fn trace_mbc_ram_rtc_select(byte: u8) {
@@ -19,7 +19,25 @@ pub fn trace_mbc_ram_rtc_select(byte: u8) {
     } else {
         format!("valor {:02X}", byte)
     };
-    println!("[MBC3] Seleção RAM/RTC: {}", desc);
+    println!("[MBC] Seleção: {}", desc);
+}
+
+// === Funções específicas do MBC1 ===
+
+pub fn trace_mbc1_reg1_write(old_reg: u8, new_reg: u8, old_rom: u8, new_rom: u8) {
+    println!("[MBC1] Reg1: {:02X} -> {:02X} (ROM bank {:02X} -> {:02X})",
+             old_reg, new_reg, old_rom, new_rom);
+}
+
+pub fn trace_mbc1_reg2_write(old_reg: u8, new_reg: u8, old_rom: u8, new_rom: u8, ram_bank: u8) {
+    println!("[MBC1] Reg2: {:02X} -> {:02X} (ROM {:02X} -> {:02X}, RAM bank {})",
+             old_reg, new_reg, old_rom, new_rom, ram_bank);
+}
+
+pub fn trace_mbc1_mode_switch(old_mode: u8, new_mode: u8) {
+    println!("[MBC1] Mode: {} -> {} ({})",
+             old_mode, new_mode,
+             if new_mode == 0 { "ROM banking" } else { "RAM banking" });
 }
 
 pub fn trace_mbc_rtc_latch(h: u8, m: u8, s: u8, dh: u8, dl: u8) {
