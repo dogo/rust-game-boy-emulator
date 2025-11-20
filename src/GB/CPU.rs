@@ -76,7 +76,56 @@ impl CPU {
             let pc = self.registers.get_pc();
             let opcode = self.ram.read(pc); // peek
             let instr = instructions::decode(opcode);
-            println!("{:05} PC={:04X} OP={:02X} {}", step, pc, opcode, instr.name);
+            // Detalhes extras para diagnosticar polling em IO
+            let mut extra = String::new();
+            match opcode {
+                // LDH A,(n)
+                0xF0 => {
+                    let n = self.ram.read(pc.wrapping_add(1));
+                    let val = self.ram.read(0xFF00u16.wrapping_add(n as u16));
+                    extra = format!(" n={:02X} [FF{:02X}]=>{:02X}", n, n, val);
+                }
+                // LDH (n),A
+                0xE0 => {
+                    let n = self.ram.read(pc.wrapping_add(1));
+                    let a = self.registers.get_a();
+                    extra = format!(" n={:02X} [FF{:02X}]<=A({:02X})", n, n, a);
+                }
+                // LD A,(C)
+                0xF2 => {
+                    let c = self.registers.get_c();
+                    let val = self.ram.read(0xFF00u16.wrapping_add(c as u16));
+                    extra = format!(" C={:02X} [FF{:02X}]=>{:02X}", c, c, val);
+                }
+                // LD (C),A
+                0xE2 => {
+                    let c = self.registers.get_c();
+                    let a = self.registers.get_a();
+                    extra = format!(" C={:02X} [FF{:02X}]<=A({:02X})", c, c, a);
+                }
+                // LD A,(a16)
+                0xFA => {
+                    let lo = self.ram.read(pc.wrapping_add(1)) as u16;
+                    let hi = self.ram.read(pc.wrapping_add(2)) as u16;
+                    let addr = (hi << 8) | lo;
+                    let val = self.ram.read(addr);
+                    extra = format!(" a16={:04X}=>{:02X}", addr, val);
+                }
+                // LD (a16),A
+                0xEA => {
+                    let lo = self.ram.read(pc.wrapping_add(1)) as u16;
+                    let hi = self.ram.read(pc.wrapping_add(2)) as u16;
+                    let addr = (hi << 8) | lo;
+                    let a = self.registers.get_a();
+                    extra = format!(" a16={:04X}<=A({:02X})", addr, a);
+                }
+                _ => {}
+            }
+            if extra.is_empty() {
+                println!("{:05} PC={:04X} OP={:02X} {}", step, pc, opcode, instr.name);
+            } else {
+                println!("{:05} PC={:04X} OP={:02X} {}{}", step, pc, opcode, instr.name, extra);
+            }
             let (_cycles, unknown) = self.execute_next();
             if unknown { println!("Parando: opcode desconhecido {:02X} em {:04X}", opcode, pc); break; }
         }
