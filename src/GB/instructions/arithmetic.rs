@@ -152,3 +152,33 @@ pub fn add_hl_rr(opcode: u8) -> Instruction {
     }
     Instruction { opcode, name: "ADD HL,rr", cycles: 8, size: 1, flags: &[], execute: exec }
 }
+
+// INC r (r = B,C,D,E,H,L,(HL),A)
+pub fn inc_r(opcode: u8) -> Instruction {
+    fn exec(instr: &Instruction, cpu: &mut CPU) -> u64 {
+        let r = (instr.opcode >> 3) & 0x07;
+        let val = read_r(cpu, r);
+        let res = val.wrapping_add(1);
+        write_r(cpu, r, res);
+        cpu.registers.set_flag_z(res == 0);
+        cpu.registers.set_flag_n(false);
+        cpu.registers.set_flag_h((val & 0x0F) + 1 > 0x0F);
+        if r == 6 { 12 } else { 4 }
+    }
+    Instruction { opcode, name: "INC r", cycles: 4, size: 1, flags: &[FlagBits::Z, FlagBits::N, FlagBits::H], execute: exec }
+}
+
+// DEC r (r = B, C, D, E, H, L, (HL), A)
+pub fn dec_r(opcode: u8) -> Instruction {
+    fn exec(instr: &Instruction, cpu: &mut CPU) -> u64 {
+        let r = (instr.opcode >> 3) & 0x07;
+        let val = read_r(cpu, r);
+        let res = val.wrapping_sub(1);
+        write_r(cpu, r, res);
+        cpu.registers.set_flag_z(res == 0);
+        cpu.registers.set_flag_n(true);
+        cpu.registers.set_flag_h((val & 0x0F) == 0);
+        if r == 6 { 12 } else { 4 }
+    }
+    Instruction { opcode, name: "DEC r", cycles: 4, size: 1, flags: &[FlagBits::Z, FlagBits::N, FlagBits::H], execute: exec }
+}
