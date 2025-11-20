@@ -124,6 +124,7 @@ pub fn decode(opcode: u8) -> Instruction {
         // CB prefix
         0xCB => cb_prefix::cb(opcode),
 
-        _ => Instruction::unknown(opcode),
+        // Opcodes ilegais/não documentados - tratados como NOP
+        0xD3 | 0xDB | 0xDD | 0xE3 | 0xE4 | 0xEB | 0xEC | 0xED | 0xF4 | 0xFC | 0xFD => Instruction::nop(),
     }
 }

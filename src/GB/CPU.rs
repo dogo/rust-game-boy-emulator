@@ -85,7 +85,15 @@ impl CPU {
             if self.ppu_line_cycles >= 456 {
                 self.ppu_line_cycles = 0;
                 // próxima linha
+                let old_ly = self.ppu_ly;
                 self.ppu_ly = self.ppu_ly.wrapping_add(1);
+
+                // Renderiza scanline se estiver na região visível (0-143)
+                if old_ly < 144 {
+                    self.ram.ppu.ly = old_ly;
+                    self.ram.ppu.render_bg_scanline();
+                }
+
                 if self.ppu_ly == 144 {
                     // Início de VBlank: seta IF bit 0 (VBlank)
                     let mut iflags = self.ram.read(0xFF0F);
@@ -93,7 +101,8 @@ impl CPU {
                     self.ram.write(0xFF0F, iflags);
                 }
                 if self.ppu_ly > 153 { self.ppu_ly = 0; }
-                // Espelha LY em 0xFF44
+                // Espelha LY em 0xFF44 e no PPU
+                self.ram.ppu.ly = self.ppu_ly;
                 self.ram.write(0xFF44, self.ppu_ly);
             }
         }

@@ -1,3 +1,5 @@
+use crate::GB::PPU;
+
 pub struct RAM {
     // todas as 65.536 posições endereçáveis
     memory: [u8; 65536],
@@ -31,6 +33,8 @@ pub struct RAM {
     joypad_select_buttons: bool, // true = selecionou leitura de botões de ação
     joypad_dpad: u8,            // estado do D-pad: bit0=Right, bit1=Left, bit2=Up, bit3=Down (0=pressed, 1=released)
     joypad_buttons: u8,         // estado de ação: bit0=A, bit1=B, bit2=Select, bit3=Start (0=pressed, 1=released)
+    // PPU (Picture Processing Unit)
+    pub ppu: PPU::PPU,
     // Controle de trace
     pub trace_enabled: bool,    // se true, emite logs de operações (MBC, timer, joypad)
 }
@@ -63,6 +67,7 @@ impl RAM {
             joypad_select_buttons: false,
             joypad_dpad: 0x0F,      // todos soltos (1111)
             joypad_buttons: 0x0F,   // todos soltos (1111)
+            ppu: PPU::PPU::new(),
             trace_enabled: false,
         }
     }
@@ -84,6 +89,10 @@ impl RAM {
                 // ROM ONLY / sem MBC: banco 0 fixo
                 return self.rom_get(addr);
             }
+        }
+        // VRAM (0x8000-0x9FFF)
+        if address >= 0x8000 && address < 0xA000 {
+            return self.ppu.read_vram(address);
         }
         // Joypad (0xFF00 - P1/JOYP)
         if addr == 0xFF00 {
@@ -142,6 +151,14 @@ impl RAM {
                 }
             }
             return 0xFF; // RAM desabilitada ou endereço inválido
+        }
+        // OAM (Object Attribute Memory) 0xFE00-0xFE9F
+        if address >= 0xFE00 && address <= 0xFE9F {
+            return self.ppu.read_oam(address);
+        }
+        // Registradores PPU (0xFF40-0xFF4B)
+        if address >= 0xFF40 && address <= 0xFF4B {
+            return self.ppu.read_register(address);
         }
         self.memory[addr]
     }
@@ -205,6 +222,25 @@ impl RAM {
                 _ => {}
             }
         }
+
+        // VRAM (0x8000-0x9FFF)
+        if address >= 0x8000 && address < 0xA000 {
+            self.ppu.write_vram(address, byte);
+            return;
+        }
+
+        // OAM (0xFE00-0xFE9F)
+        if address >= 0xFE00 && address <= 0xFE9F {
+            self.ppu.write_oam(address, byte);
+            return;
+        }
+
+        // Registradores PPU (0xFF40-0xFF4B)
+        if address >= 0xFF40 && address <= 0xFF4B {
+            self.ppu.write_register(address, byte);
+            return;
+        }
+
         match address {
             0xFF00 => { // Joypad (P1/JOYP)
                 // Bits 5-4 controlam qual grupo de botões é lido (0=selecionado)
