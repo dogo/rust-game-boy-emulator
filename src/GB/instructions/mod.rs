@@ -54,6 +54,7 @@ pub fn decode(opcode: u8) -> Instruction {
         0x01 | 0x11 | 0x21 | 0x31 => load::ld_rr_d16(opcode),
         0x08 => load::ld_a16_sp(opcode),
         0xF9 => load::ld_sp_hl(opcode),
+        0xF8 => load::ld_hl_sp_r8(opcode),
 
         // Arithmetic 8-bit
         // INC r (registradores) e (HL)
@@ -92,6 +93,7 @@ pub fn decode(opcode: u8) -> Instruction {
         0x03 | 0x13 | 0x23 | 0x33 => arithmetic::inc_rr(opcode),
         0x0B | 0x1B | 0x2B | 0x3B => arithmetic::dec_rr(opcode),
         0x09 | 0x19 | 0x29 | 0x39 => arithmetic::add_hl_rr(opcode),
+        0xE8 => arithmetic::add_sp_r8(opcode),
 
         // DAA (ajuste decimal)
         0x27 => arithmetic::daa(opcode),

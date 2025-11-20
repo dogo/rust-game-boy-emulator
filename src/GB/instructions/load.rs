@@ -339,3 +339,29 @@ pub fn ld_sp_hl(opcode: u8) -> Instruction {
         execute: exec,
     }
 }
+
+// LD HL,SP+r8 (0xF8) - carrega HL com SP + signed byte
+pub fn ld_hl_sp_r8(opcode: u8) -> Instruction {
+    fn exec(_instr: &Instruction, cpu: &mut CPU) -> u64 {
+        let offset = cpu.fetch_next() as i8;
+        let sp = cpu.registers.get_sp();
+        let result = sp.wrapping_add(offset as i16 as u16);
+
+        // Flags: Z=0, N=0, H e C baseados nos 8 bits inferiores
+        cpu.registers.set_flag_z(false);
+        cpu.registers.set_flag_n(false);
+        cpu.registers.set_flag_h(((sp & 0x0F) + ((offset as u8 as u16) & 0x0F)) > 0x0F);
+        cpu.registers.set_flag_c(((sp & 0xFF) + (offset as u8 as u16)) > 0xFF);
+
+        cpu.registers.set_hl(result);
+        12
+    }
+    Instruction {
+        opcode,
+        name: "LD HL,SP+r8",
+        cycles: 12,
+        size: 2,
+        flags: &[],
+        execute: exec,
+    }
+}

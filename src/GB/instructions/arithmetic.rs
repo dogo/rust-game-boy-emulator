@@ -217,3 +217,22 @@ pub fn daa(opcode: u8) -> Instruction {
     }
     Instruction { opcode, name: "DAA", cycles: 4, size: 1, flags: &[], execute: exec }
 }
+
+// ADD SP,r8 (0xE8) - adiciona signed byte a SP
+pub fn add_sp_r8(opcode: u8) -> Instruction {
+    fn exec(_instr: &Instruction, cpu: &mut CPU) -> u64 {
+        let offset = cpu.fetch_next() as i8;
+        let sp = cpu.registers.get_sp();
+        let result = sp.wrapping_add(offset as i16 as u16);
+
+        // Flags: Z=0, N=0, H e C baseados nos 8 bits inferiores
+        cpu.registers.set_flag_z(false);
+        cpu.registers.set_flag_n(false);
+        cpu.registers.set_flag_h(((sp & 0x0F) + ((offset as u8 as u16) & 0x0F)) > 0x0F);
+        cpu.registers.set_flag_c(((sp & 0xFF) + (offset as u8 as u16)) > 0xFF);
+
+        cpu.registers.set_sp(result);
+        16
+    }
+    Instruction { opcode, name: "ADD SP,r8", cycles: 16, size: 2, flags: &[], execute: exec }
+}
