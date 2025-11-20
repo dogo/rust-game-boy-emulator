@@ -26,7 +26,7 @@ fn main() {
     println!("Título detectado: {}", title);
 
     println!("PC inicial: {:04X}", cpu.registers.get_pc());
-    println!("Iniciando trace (200 instruções máx)...");
-    cpu.run_with_trace(200);
+    println!("Iniciando trace ...");
+    cpu.run_with_trace(usize::MAX);
     println!("Trace encerrado.");
 }
