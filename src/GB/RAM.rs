@@ -6,10 +6,14 @@ pub struct RAM {
     // ROM completa do cartucho (para mapeamento por banco)
     rom: Vec<u8>,
     cart_type: u8,
-    // Estado MBC (mínimo para MBC3)
-    rom_bank: u8,       // banco ROM selecionado para 0x4000..=0x7FFF (em MBC3, 1..=0x7F)
+    // Estado MBC (MBC1 e MBC3)
+    rom_bank: u8,       // banco ROM selecionado para 0x4000..=0x7FFF
     ram_enabled: bool,  // enable RAM/RTC (0x0000..=0x1FFF)
-    ram_bank: u8,       // seleção de banco de RAM ou registrador RTC (0x4000..=0x5FFF)
+    ram_bank: u8,       // seleção de banco de RAM (MBC1: 0-3, MBC3: 0-3 ou RTC 8-C)
+    // MBC1 específico
+    mbc1_bank_reg1: u8, // registrador de banco 1 (bits 0-4 do ROM bank)
+    mbc1_bank_reg2: u8, // registrador de banco 2 (bits 5-6 do ROM bank ou RAM bank)
+    mbc1_mode: u8,      // 0=ROM banking mode, 1=RAM banking mode
     // RAM externa do cartucho (MBC3: até 4 bancos de 8KB = 32KB)
     cart_ram: Vec<u8>,
     // RTC (Real Time Clock) do MBC3
@@ -48,6 +52,9 @@ impl RAM {
             rom_bank: 1,
             ram_enabled: false,
             ram_bank: 0,
+            mbc1_bank_reg1: 1,  // banco 1 por padrão (0 é mapeado para 1)
+            mbc1_bank_reg2: 0,  // banco alto/RAM 0 por padrão
+            mbc1_mode: 0,       // ROM banking mode por padrão
             cart_ram: vec![0; 32 * 1024], // 32KB = 4 bancos de 8KB
             rtc_s: 0,
             rtc_m: 0,
@@ -76,7 +83,25 @@ impl RAM {
         let addr = address as usize;
         // Mapeamento de ROM (0x0000..=0x7FFF)
         if addr < 0x8000 {
-            if self.is_mbc3() {
+            if self.is_mbc1() {
+                if addr < 0x4000 {
+                    // Banco 0 fixo (ou banco alto em modo RAM banking)
+                    let bank = if self.mbc1_mode == 1 {
+                        // Modo RAM banking: pode mapear bancos altos para 0x0000-0x3FFF
+                        ((self.mbc1_bank_reg2 & 0x03) << 5) as usize
+                    } else {
+                        0 // Modo ROM banking: sempre banco 0
+                    };
+                    let idx = bank * 0x4000 + addr;
+                    return self.rom_get(idx);
+                } else {
+                    // Banco switchable (0x4000-0x7FFF)
+                    let off = addr - 0x4000;
+                    let bank = self.mbc1_effective_rom_bank() as usize;
+                    let idx = bank * 0x4000 + off;
+                    return self.rom_get(idx);
+                }
+            } else if self.is_mbc3() {
                 if addr < 0x4000 {
                     return self.rom_get(addr);
                 } else {
@@ -131,23 +156,32 @@ impl RAM {
             return val;
         }        // Mapeamento de RAM externa do cartucho (0xA000..=0xBFFF)
         if addr >= 0xA000 && addr < 0xC000 {
-            if self.is_mbc3() && self.ram_enabled {
-                if self.ram_bank <= 0x03 {
-                    // RAM banco 0..3
-                    let ram_addr = (self.ram_bank as usize) * 0x2000 + (addr - 0xA000);
+            if (self.is_mbc1() || self.is_mbc3()) && self.ram_enabled {
+                if self.is_mbc1() {
+                    // MBC1: usa banco efetivo baseado no modo
+                    let bank = self.mbc1_effective_ram_bank();
+                    let ram_addr = (bank as usize) * 0x2000 + (addr - 0xA000);
                     if ram_addr < self.cart_ram.len() {
                         return self.cart_ram[ram_addr];
                     }
-                } else if self.ram_bank >= 0x08 && self.ram_bank <= 0x0C {
-                    // RTC register latch read
-                    return match self.ram_bank {
-                        0x08 => self.rtc_latched_s,
-                        0x09 => self.rtc_latched_m,
-                        0x0A => self.rtc_latched_h,
-                        0x0B => self.rtc_latched_dl,
-                        0x0C => self.rtc_latched_dh,
-                        _ => 0xFF,
-                    };
+                } else if self.is_mbc3() {
+                    if self.ram_bank <= 0x03 {
+                        // RAM banco 0..3
+                        let ram_addr = (self.ram_bank as usize) * 0x2000 + (addr - 0xA000);
+                        if ram_addr < self.cart_ram.len() {
+                            return self.cart_ram[ram_addr];
+                        }
+                    } else if self.ram_bank >= 0x08 && self.ram_bank <= 0x0C {
+                        // RTC register latch read
+                        return match self.ram_bank {
+                            0x08 => self.rtc_latched_s,
+                            0x09 => self.rtc_latched_m,
+                            0x0A => self.rtc_latched_h,
+                            0x0B => self.rtc_latched_dl,
+                            0x0C => self.rtc_latched_dh,
+                            _ => 0xFF,
+                        };
+                    }
                 }
             }
             return 0xFF; // RAM desabilitada ou endereço inválido
@@ -165,6 +199,68 @@ impl RAM {
 
     pub fn write(&mut self, address: u16, byte: u8) {
 
+        // Tratamento de registradores MBC1
+        if self.is_mbc1() {
+            match address {
+                0x0000..=0x1FFF => {
+                    // Enable/disable RAM (0x0A habilita, outros desabilitam)
+                    let old = self.ram_enabled;
+                    self.ram_enabled = (byte & 0x0F) == 0x0A;
+                    if self.trace_enabled && old != self.ram_enabled {
+                        crate::GB::trace::trace_mbc_ram_enable(self.ram_enabled);
+                    }
+                    return;
+                }
+                0x2000..=0x3FFF => {
+                    // Registrador de banco 1 (bits 0-4 do ROM bank)
+                    let new_reg1 = byte & 0x1F; // 5 bits
+                    if self.mbc1_bank_reg1 != new_reg1 {
+                        if self.trace_enabled {
+                            let old_rom = self.mbc1_effective_rom_bank();
+                            self.mbc1_bank_reg1 = new_reg1;
+                            let new_rom = self.mbc1_effective_rom_bank();
+                            crate::GB::trace::trace_mbc_rom_bank(old_rom, new_rom);
+                        } else {
+                            self.mbc1_bank_reg1 = new_reg1;
+                        }
+                    }
+                    return;
+                }
+                0x4000..=0x5FFF => {
+                    // Registrador de banco 2 (bits 5-6 do ROM ou RAM bank)
+                    let new_reg2 = byte & 0x03; // 2 bits
+                    if self.mbc1_bank_reg2 != new_reg2 {
+                        if self.trace_enabled {
+                            // Trace ROM bank change
+                            let old_rom = self.mbc1_effective_rom_bank();
+                            self.mbc1_bank_reg2 = new_reg2;
+                            let new_rom = self.mbc1_effective_rom_bank();
+                            let new_ram = self.mbc1_effective_ram_bank();
+                            crate::GB::trace::trace_mbc_rom_bank(old_rom, new_rom);
+                            crate::GB::trace::trace_mbc_ram_rtc_select(new_ram);
+                        } else {
+                            self.mbc1_bank_reg2 = new_reg2;
+                        }
+                    }
+                    return;
+                }
+                0x6000..=0x7FFF => {
+                    // Mode select (0=ROM banking, 1=RAM banking)
+                    let new_mode = byte & 0x01;
+                    if self.mbc1_mode != new_mode {
+                        if self.trace_enabled {
+                            // Trace mudança de modo
+                            println!("MBC1 Mode switch: {} -> {} ({})",
+                                self.mbc1_mode, new_mode,
+                                if new_mode == 0 { "ROM banking" } else { "RAM banking" });
+                        }
+                        self.mbc1_mode = new_mode;
+                    }
+                    return;
+                }
+                _ => {}
+            }
+        }
 
         // Tratamento de registradores MBC3 (mínimo)
         if self.is_mbc3() {
@@ -324,22 +420,31 @@ impl RAM {
 
             0xA000..=0xBFFF => {
                 // Escrita em RAM externa ou RTC
-                if self.is_mbc3() && self.ram_enabled {
-                    if self.ram_bank <= 0x03 {
-                        // RAM banco 0..3
-                        let ram_addr = (self.ram_bank as usize) * 0x2000 + (address as usize - 0xA000);
+                if (self.is_mbc1() || self.is_mbc3()) && self.ram_enabled {
+                    if self.is_mbc1() {
+                        // MBC1: usa banco efetivo baseado no modo
+                        let bank = self.mbc1_effective_ram_bank();
+                        let ram_addr = (bank as usize) * 0x2000 + (address as usize - 0xA000);
                         if ram_addr < self.cart_ram.len() {
                             self.cart_ram[ram_addr] = byte;
                         }
-                    } else if self.ram_bank >= 0x08 && self.ram_bank <= 0x0C {
-                        // Escrita nos registradores RTC
-                        match self.ram_bank {
-                            0x08 => self.rtc_s = byte & 0x3F,   // 0..59
-                            0x09 => self.rtc_m = byte & 0x3F,   // 0..59
-                            0x0A => self.rtc_h = byte & 0x1F,   // 0..23
-                            0x0B => self.rtc_dl = byte,
-                            0x0C => self.rtc_dh = byte,
-                            _ => {}
+                    } else if self.is_mbc3() {
+                        if self.ram_bank <= 0x03 {
+                            // RAM banco 0..3
+                            let ram_addr = (self.ram_bank as usize) * 0x2000 + (address as usize - 0xA000);
+                            if ram_addr < self.cart_ram.len() {
+                                self.cart_ram[ram_addr] = byte;
+                            }
+                        } else if self.ram_bank >= 0x08 && self.ram_bank <= 0x0C {
+                            // Escrita nos registradores RTC
+                            match self.ram_bank {
+                                0x08 => self.rtc_s = byte & 0x3F,   // 0..59
+                                0x09 => self.rtc_m = byte & 0x3F,   // 0..59
+                                0x0A => self.rtc_h = byte & 0x1F,   // 0..23
+                                0x0B => self.rtc_dl = byte,
+                                0x0C => self.rtc_dh = byte,
+                                _ => {}
+                            }
                         }
                     }
                 }
@@ -425,12 +530,43 @@ impl RAM {
     }
 
     // Utilidades MBC/ROM
+    fn is_mbc1(&self) -> bool {
+        matches!(self.cart_type, 0x01..=0x03)
+    }
+
     fn is_mbc3(&self) -> bool {
         matches!(self.cart_type, 0x0F..=0x13)
     }
 
     fn rom_get(&self, idx: usize) -> u8 {
         if idx < self.rom.len() { self.rom[idx] } else { 0xFF }
+    }
+
+    /// Calcula o banco ROM efetivo para MBC1 baseado nos registradores e modo atual
+    fn mbc1_effective_rom_bank(&self) -> u8 {
+        if !self.is_mbc1() { return self.rom_bank; }
+
+        let mut bank = self.mbc1_bank_reg1;
+        if bank == 0 { bank = 1; } // banco 0 é mapeado para 1
+
+        // No modo ROM banking, reg2 afeta os bits altos do ROM bank
+        if self.mbc1_mode == 0 {
+            bank |= (self.mbc1_bank_reg2 & 0x03) << 5;
+        }
+
+        bank
+    }
+
+    /// Calcula o banco RAM efetivo para MBC1 baseado no modo atual
+    fn mbc1_effective_ram_bank(&self) -> u8 {
+        if !self.is_mbc1() { return self.ram_bank; }
+
+        // No modo RAM banking, reg2 seleciona o banco RAM
+        if self.mbc1_mode == 1 {
+            self.mbc1_bank_reg2 & 0x03
+        } else {
+            0 // modo ROM banking usa sempre RAM banco 0
+        }
     }
 
     // === API pública para manipular joypad ===
@@ -457,8 +593,8 @@ impl RAM {
     pub fn save_cart_ram(&self, sav_path: &str) -> Result<(), std::io::Error> {
         use std::fs;
 
-        // Só salva se há RAM e está habilitada
-        if !self.is_mbc3() || !self.has_cart_ram() || self.cart_ram.is_empty() {
+        // Só salva se há RAM e é MBC com suporte a saves
+        if !(self.is_mbc1() || self.is_mbc3()) || !self.has_cart_ram() || self.cart_ram.is_empty() {
             return Ok(()); // Nada para salvar
         }
 
@@ -477,8 +613,8 @@ impl RAM {
     pub fn load_cart_ram(&mut self, sav_path: &str) -> Result<(), std::io::Error> {
         use std::fs;
 
-        // Só tenta carregar se há RAM no cartucho
-        if !self.is_mbc3() || !self.has_cart_ram() {
+        // Só tenta carregar se há RAM no cartucho e é MBC com suporte
+        if !(self.is_mbc1() || self.is_mbc3()) || !self.has_cart_ram() {
             return Ok(());
         }
 
