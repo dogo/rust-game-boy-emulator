@@ -119,6 +119,38 @@ impl CPU {
                     let a = self.registers.get_a();
                     extra = format!(" a16={:04X}<=A({:02X})", addr, a);
                 }
+                // CP A,d8 (FE) — mostra comparacao e flags resultantes
+                0xFE => {
+                    let n = self.ram.read(pc.wrapping_add(1));
+                    let a = self.registers.get_a();
+                    let z = a == n; // Z set if equal
+                    let c = a < n;  // C set if borrow (a < n)
+                    let h = (a & 0x0F) < (n & 0x0F); // half-borrow
+                    extra = format!(" A={:02X} n={:02X} => Z={} N=1 H={} C={}", a, n, z as u8, h as u8, c as u8);
+                }
+                // JR cc,r8 — 20,28,30,38: mostra offset, condicao e alvo
+                0x20 | 0x28 | 0x30 | 0x38 => {
+                    let off = self.ram.read(pc.wrapping_add(1)) as i8;
+                    let base = self.registers.get_pc().wrapping_add(2) as i32;
+                    let target = (base + off as i32) as u16;
+                    let z = self.registers.get_flag_z();
+                    let c = self.registers.get_flag_c();
+                    let cond = match opcode {
+                        0x20 => !z, // NZ
+                        0x28 => z,  // Z
+                        0x30 => !c, // NC
+                        0x38 => c,  // C
+                        _ => false,
+                    };
+                    extra = format!(" r8={:+#04X} cond={} target={:04X}", off, cond as u8, target);
+                }
+                // JR r8 incondicional — 18
+                0x18 => {
+                    let off = self.ram.read(pc.wrapping_add(1)) as i8;
+                    let base = self.registers.get_pc().wrapping_add(2) as i32;
+                    let target = (base + off as i32) as u16;
+                    extra = format!(" r8={:+#04X} target={:04X}", off, target);
+                }
                 _ => {}
             }
             if extra.is_empty() {
