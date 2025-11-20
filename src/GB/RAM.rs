@@ -56,23 +56,47 @@ impl RAM {
             match address {
                 0x0000..=0x1FFF => {
                     // Enable/disable RAM/RTC (0x0A habilita, outros desabilitam)
+                    let old = self.ram_enabled;
                     self.ram_enabled = (byte & 0x0F) == 0x0A;
+                    if old != self.ram_enabled {
+                        println!("[MBC3] RAM/RTC {}", if self.ram_enabled { "habilitado" } else { "desabilitado" });
+                    }
                     return;
                 }
                 0x2000..=0x3FFF => {
                     // Seleção de banco ROM (7 bits, 0 => 1)
                     let mut bank = byte & 0x7F;
                     if bank == 0 { bank = 1; }
-                    self.rom_bank = bank;
+                    if self.rom_bank != bank {
+                        println!("[MBC3] Banco ROM: {:02X} -> {:02X}", self.rom_bank, bank);
+                        self.rom_bank = bank;
+                    } else {
+                        self.rom_bank = bank;
+                    }
                     return;
                 }
                 0x4000..=0x5FFF => {
                     // Seleção de banco RAM (00-03) ou registrador RTC (08-0C)
-                    self.ram_bank = byte;
+                    if self.ram_bank != byte {
+                        let desc = if byte <= 0x03 {
+                            format!("RAM banco {:02X}", byte)
+                        } else if byte >= 0x08 && byte <= 0x0C {
+                            format!("RTC reg {:02X}", byte)
+                        } else {
+                            format!("valor {:02X}", byte)
+                        };
+                        println!("[MBC3] Seleção RAM/RTC: {}", desc);
+                        self.ram_bank = byte;
+                    } else {
+                        self.ram_bank = byte;
+                    }
                     return;
                 }
                 0x6000..=0x7FFF => {
                     // Latch clock (ignoramos por enquanto)
+                    if byte == 0x01 {
+                        println!("[MBC3] Latch RTC (ignorado)");
+                    }
                     return;
                 }
                 _ => {}

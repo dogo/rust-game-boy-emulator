@@ -72,15 +72,24 @@ fn main() {
         cart_type, cart_str, rom_size_code, rom_kb / 1024, ram_size_code, ram_kb / 1024
     );
 
-    if matches!(cart_type, 0x01..=0x03 | 0x05 | 0x06 | 0x0F..=0x13 | 0x19..=0x1E) {
-        println!(
-            "Aviso: cartucho usa {} — mapeamento MBC ainda não implementado; ROMs maiores e bancos não funcionarão corretamente.",
-            cart_str
-        );
+    match cart_type {
+        0x0F..=0x13 => {
+            println!("Info: MBC3 ROM banking implementado (básico); RAM e RTC não suportados ainda.");
+        }
+        0x01..=0x03 => {
+            println!("Aviso: {} não implementado — ROMs com múltiplos bancos não funcionarão.", cart_str);
+        }
+        0x05 | 0x06 => {
+            println!("Aviso: {} não implementado — ROMs com múltiplos bancos não funcionarão.", cart_str);
+        }
+        0x19..=0x1E => {
+            println!("Aviso: {} não implementado — ROMs com múltiplos bancos não funcionarão.", cart_str);
+        }
+        _ => {}
     }
 
     println!("PC inicial: {:04X}", cpu.registers.get_pc());
-    println!("Iniciando trace ...");
-    GB::trace::run_with_trace(&mut cpu, usize::MAX);
-    println!("Trace encerrado.");
+    //println!("Iniciando trace ...");
+    // GB::trace::run_with_trace(&mut cpu, usize::MAX);
+    //println!("Trace encerrado.");
 }
