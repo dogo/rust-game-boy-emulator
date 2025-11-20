@@ -45,89 +45,77 @@ fn run_trace(cpu: &mut GB::CPU::CPU) {
     println!("Trace encerrado");
 }
 
-fn try_init_sdl() -> Result<sdl2::Sdl, String> {
-    sdl2::hint::set("SDL_VIDEO_X11_NET_WM_BYPASS_COMPOSITOR", "0");
-    sdl2::hint::set("SDL_HINT_RENDER_SCALE_QUALITY", "nearest");
-    sdl2::init()
+fn try_init_sdl() -> Result<sdl3::Sdl, String> {
+    sdl3::hint::set("SDL_VIDEO_X11_NET_WM_BYPASS_COMPOSITOR", "0");
+    sdl3::hint::set("SDL_HINT_RENDER_SCALE_QUALITY", "nearest");
+    sdl3::init().map_err(|e| format!("{:?}", e))
 }
 
 fn run_sdl(cpu: &mut GB::CPU::CPU) {
     print_cart_info(&cpu);
-    println!("Iniciando modo gráfico SDL2 (ESC para sair)");
+    println!("Iniciando modo gráfico SDL3 (ESC para sair)");
 
-    // Tenta inicializar SDL2, forçando X11 se Wayland falhar
-    let sdl_ctx = match try_init_sdl() {
-        Ok(ctx) => ctx,
-        Err(e) => {
-            eprintln!("Falha SDL2 no Wayland: {}", e);
-            println!("Tentando fallback para X11...");
-            unsafe { std::env::set_var("SDL_VIDEODRIVER", "x11"); }
-            try_init_sdl().expect("Falha SDL2 init com X11 também")
-        }
-    };
+    let sdl_ctx = try_init_sdl().expect("Falha ao inicializar SDL3");
     let video = sdl_ctx.video().expect("Falha subsistema de vídeo");
 
-    // Configurar áudio SDL2
+    // ==== ÁUDIO ====
     let audio_subsystem = sdl_ctx.audio().expect("Falha subsistema de áudio");
-    let desired_spec = sdl2::audio::AudioSpecDesired {
+    let desired_spec = sdl3::audio::AudioSpec {
         freq: Some(44100),
         channels: Some(2), // Stereo
-        samples: Some(1024),
+        format: Some(sdl3::audio::AudioFormat::f32_sys()),
     };
 
-    use std::sync::{Arc, Mutex};
     use std::collections::VecDeque;
+    use std::sync::{Arc, Mutex};
 
-    // Buffer de áudio compartilhado
     let audio_buffer: Arc<Mutex<VecDeque<(f32, f32)>>> = Arc::new(Mutex::new(VecDeque::new()));
-    let audio_buffer_producer = audio_buffer.clone();
 
-    // Struct para implementar AudioCallback
     struct AudioCallbackData {
         buffer: Arc<Mutex<VecDeque<(f32, f32)>>>,
     }
 
-    impl sdl2::audio::AudioCallback for AudioCallbackData {
-        type Channel = f32;
-
-        fn callback(&mut self, out: &mut [f32]) {
+    impl sdl3::audio::AudioCallback<f32> for AudioCallbackData {
+        fn callback(&mut self, stream: &mut sdl3::audio::AudioStream, requested: i32) {
             let mut audio_buffer = self.buffer.lock().unwrap();
-            for chunk in out.chunks_mut(2) {
-                if let Some((left, right)) = audio_buffer.pop_front() {
-                    chunk[0] = left;
-                    if chunk.len() > 1 {
-                        chunk[1] = right;
-                    }
+            let mut out = Vec::<f32>::with_capacity((requested * 2) as usize); // Stereo
+
+            for _ in 0..requested {
+                if let Some((l, r)) = audio_buffer.pop_front() {
+                    out.push(l);
+                    out.push(r);
                 } else {
-                    chunk[0] = 0.0;
-                    if chunk.len() > 1 {
-                        chunk[1] = 0.0;
-                    }
+                    out.push(0.0);
+                    out.push(0.0);
                 }
             }
+            let _ = stream.put_data_f32(&out);
         }
     }
 
-    let audio_callback = AudioCallbackData {
-        buffer: audio_buffer.clone(),
-    };
+    let audio_device = audio_subsystem
+        .open_playback_stream(
+            &desired_spec,
+            AudioCallbackData {
+                buffer: audio_buffer.clone(),
+            },
+        )
+        .expect("Falha ao abrir dispositivo de áudio");
 
-    let audio_device = audio_subsystem.open_playback(None, &desired_spec, |_spec| {
-        audio_callback
-    }).expect("Falha ao abrir dispositivo de áudio");
+    audio_device.resume().expect("Failed to start audio playback");
 
-    // Iniciar reprodução de áudio
-    audio_device.resume();
-    let scale = 3u32; // escala 3x (160x144 → 480x432)
+    // ==== VÍDEO ====
+    let scale = 3u32;
     let window = video
         .window("GB Emulator", 160 * scale, 144 * scale)
         .position_centered()
         .build()
         .expect("Falha ao criar janela");
-    let mut canvas = window.into_canvas().present_vsync().build().expect("Falha canvas");
+    let mut canvas = window.into_canvas();
+
     let texture_creator = canvas.texture_creator();
     let mut texture = texture_creator
-        .create_texture_streaming(sdl2::pixels::PixelFormatEnum::RGB24, 160, 144)
+        .create_texture_streaming(sdl3::pixels::PixelFormat::RGB24, 160, 144)
         .expect("Falha texture");
 
     let mut event_pump = sdl_ctx.event_pump().expect("Falha event pump");
@@ -135,72 +123,81 @@ fn run_sdl(cpu: &mut GB::CPU::CPU) {
     let frame_duration = Duration::from_micros(16_667); // ~60 FPS
     let mut frame_counter: u64 = 0;
 
+    use sdl3::event::Event;
+    use sdl3::keyboard::Keycode;
+    use sdl3::rect::Rect;
+
     loop {
         let mut exit = false;
-        // Processa eventos SDL com robustez contra eventos inválidos
-        use sdl2::event::Event;
-        use sdl2::keyboard::Keycode;
 
-        // Tenta processar eventos; se der panic (valor enum inválido), pula para próximo frame
-        let events_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            event_pump.poll_iter().collect::<Vec<_>>()
-        }));
-
-        match events_result {
-            Ok(events) => {
-                for event in events {
-                    match event {
-                        Event::Quit { .. } => { exit = true; break; }
-                        Event::KeyDown { keycode: Some(Keycode::Escape), .. } => { exit = true; break; }
-                        Event::KeyDown { keycode: Some(k), repeat: false, .. } => match k {
-                            Keycode::Right => cpu.press_button("RIGHT"),
-                            Keycode::Left => cpu.press_button("LEFT"),
-                            Keycode::Up => cpu.press_button("UP"),
-                            Keycode::Down => cpu.press_button("DOWN"),
-                            Keycode::Z => cpu.press_button("A"),
-                            Keycode::X => cpu.press_button("B"),
-                            Keycode::Return => cpu.press_button("START"),
-                            Keycode::Backspace => cpu.press_button("SELECT"),
-                            _ => {}
-                        },
-                        Event::KeyUp { keycode: Some(k), repeat: false, .. } => match k {
-                            Keycode::Right => cpu.release_button("RIGHT"),
-                            Keycode::Left => cpu.release_button("LEFT"),
-                            Keycode::Up => cpu.release_button("UP"),
-                            Keycode::Down => cpu.release_button("DOWN"),
-                            Keycode::Z => cpu.release_button("A"),
-                            Keycode::X => cpu.release_button("B"),
-                            Keycode::Return => cpu.release_button("START"),
-                            Keycode::Backspace => cpu.release_button("SELECT"),
-                            _ => {}
-                        },
-                        _ => {}
-                    }
+        // Loop de eventos SDL3
+        for event in event_pump.poll_iter() {
+            match event {
+                Event::Quit { .. } => {
+                    exit = true;
+                    break;
                 }
-            },
-            Err(_) => {
-                eprintln!("Aviso: evento SDL com valor inválido (0x207) ignorado");
+                Event::KeyDown {
+                    keycode: Some(Keycode::Escape),
+                    ..
+                } => {
+                    exit = true;
+                    break;
+                }
+                Event::KeyDown {
+                    keycode: Some(k),
+                    repeat: false,
+                    ..
+                } => match k {
+                    Keycode::Right => cpu.press_button("RIGHT"),
+                    Keycode::Left => cpu.press_button("LEFT"),
+                    Keycode::Up => cpu.press_button("UP"),
+                    Keycode::Down => cpu.press_button("DOWN"),
+                    Keycode::Z => cpu.press_button("A"),
+                    Keycode::X => cpu.press_button("B"),
+                    Keycode::Return => cpu.press_button("START"),
+                    Keycode::Backspace => cpu.press_button("SELECT"),
+                    _ => {}
+                },
+                Event::KeyUp {
+                    keycode: Some(k),
+                    repeat: false,
+                    ..
+                } => match k {
+                    Keycode::Right => cpu.release_button("RIGHT"),
+                    Keycode::Left => cpu.release_button("LEFT"),
+                    Keycode::Up => cpu.release_button("UP"),
+                    Keycode::Down => cpu.release_button("DOWN"),
+                    Keycode::Z => cpu.release_button("A"),
+                    Keycode::X => cpu.release_button("B"),
+                    Keycode::Return => cpu.release_button("START"),
+                    Keycode::Backspace => cpu.release_button("SELECT"),
+                    _ => {}
+                },
+                // qualquer outra coisa a gente só ignora
+                _ => {}
             }
         }
-        if exit { break; }
 
-        // Executa instruções aproximando um frame (70224 ciclos ≈ 154 linhas * 456 ciclos)
-        let target_cycles = cpu.cycles + 70224;
+        if exit {
+            break;
+        }
+
+        // ==== CPU / PPU ====
+        let target_cycles = cpu.cycles + 70_224;
         while cpu.cycles < target_cycles {
             let _ = cpu.execute_next();
         }
 
-        // Gera samples de áudio para este frame
-        // 44.1kHz por ~16.67ms = ~735 samples por frame
-        let samples_per_frame = 735;
+        // ==== APU → buffer de áudio ====
+        let samples_per_frame = 735; // 44.1kHz * ~16.67ms
         {
-            let mut buffer = audio_buffer_producer.lock().unwrap();
+            let mut buffer = audio_buffer.lock().unwrap();
             for _ in 0..samples_per_frame {
-                let (left, right) = cpu.ram.apu.generate_sample();
-                buffer.push_back((left, right));
+                let (l, r) = cpu.ram.apu.generate_sample();
+                buffer.push_back((l, r));
 
-                // Limita buffer para evitar overflow
-                if buffer.len() > 4410 { // ~100ms de buffer
+                if buffer.len() > 4410 {
                     buffer.pop_front();
                 }
             }
@@ -208,33 +205,44 @@ fn run_sdl(cpu: &mut GB::CPU::CPU) {
 
         frame_counter += 1;
 
-        // Renderiza apenas quando um frame está completo (VBlank) para evitar tearing
+        // ==== Render ====
         if cpu.ram.ppu.frame_ready {
-            cpu.ram.ppu.frame_ready = false; // Reset flag
+            cpu.ram.ppu.frame_ready = false;
 
-            // Atualiza textura
             let fb = &cpu.ram.ppu.framebuffer;
-            texture.with_lock(None, |buffer: &mut [u8], _pitch| {
-                for y in 0..144 {
-                    for x in 0..160 {
-                        let idx = y * 160 + x;
-                        let color = fb[idx];
-                        // Mapear 0..3 → tons de cinza (0=branco, 3=preto)
-                        let shade = match color { 0 => 0xFF, 1 => 0xAA, 2 => 0x55, _ => 0x00 };
-                        let off = idx * 3;
-                        buffer[off] = shade;      // R
-                        buffer[off + 1] = shade;  // G
-                        buffer[off + 2] = shade;  // B
+            texture
+                .with_lock(None, |buf: &mut [u8], _pitch| {
+                    for y in 0..144 {
+                        for x in 0..160 {
+                            let idx = y * 160 + x;
+                            let color = fb[idx];
+                            let shade = match color {
+                                0 => 0xFF,
+                                1 => 0xAA,
+                                2 => 0x55,
+                                _ => 0x00,
+                            };
+                            let off = idx * 3;
+                            buf[off] = shade;
+                            buf[off + 1] = shade;
+                            buf[off + 2] = shade;
+                        }
                     }
-                }
-            }).unwrap();
+                })
+                .unwrap();
+
             canvas.clear();
-            use sdl2::rect::Rect;
-            canvas.copy(&texture, None, Some(Rect::new(0, 0, 160 * scale, 144 * scale))).unwrap();
+            canvas
+                .copy(
+                    &texture,
+                    None,
+                    Some(Rect::new(0, 0, 160 * scale, 144 * scale).into()),
+                )
+                .unwrap();
             canvas.present();
         }
 
-        // Sincroniza FPS
+        // ==== FPS cap ====
         let elapsed = last_frame.elapsed();
         if elapsed < frame_duration {
             std::thread::sleep(frame_duration - elapsed);
@@ -242,42 +250,16 @@ fn run_sdl(cpu: &mut GB::CPU::CPU) {
         last_frame = Instant::now();
 
         if frame_counter % 60 == 0 {
-            println!("Frames: {} | PC: {:04X} | LY: {}", frame_counter, cpu.registers.get_pc(), cpu.ram.ppu.ly);
-
-            // Debug PPU state
-            let lcdc = cpu.ram.read(0xFF40);
-            let scx = cpu.ram.read(0xFF43);
-            let scy = cpu.ram.read(0xFF42);
-            let wx = cpu.ram.read(0xFF4B);
-            let wy = cpu.ram.read(0xFF4A);
-
-            println!("  LCDC: {:02X} | BG: {} | WIN: {} | SPRITES: {} | 8x16: {}",
-                lcdc,
-                (lcdc & 0x01) != 0,
-                (lcdc & 0x20) != 0,
-                (lcdc & 0x02) != 0,
-                (lcdc & 0x04) != 0
+            println!(
+                "Frames: {} | PC: {:04X} | LY: {}",
+                frame_counter,
+                cpu.registers.get_pc(),
+                cpu.ram.ppu.ly
             );
-            println!("  Scroll: SCX={} SCY={} | Window: WX={} WY={}", scx, scy, wx, wy);
-
-            // Check OAM for sprites
-            let mut sprite_count = 0;
-            for i in 0..40 {
-                let y = cpu.ram.read(0xFE00 + i * 4);
-                if y > 0 && y < 160 {
-                    sprite_count += 1;
-                    if sprite_count <= 3 {  // Show first 3 sprites
-                        let x = cpu.ram.read(0xFE00 + i * 4 + 1);
-                        let tile = cpu.ram.read(0xFE00 + i * 4 + 2);
-                        let attr = cpu.ram.read(0xFE00 + i * 4 + 3);
-                        println!("  Sprite {}: Y={} X={} Tile={:02X} Attr={:02X}", i, y, x, tile, attr);
-                    }
-                }
-            }
-            println!("  Total sprites in OAM: {}", sprite_count);
         }
     }
-    println!("Encerrando SDL2 após {} frames", frame_counter);
+
+    println!("Encerrando SDL3 após {} frames", frame_counter);
 }
 
 /// Gera o nome do arquivo .sav baseado no nome da ROM
