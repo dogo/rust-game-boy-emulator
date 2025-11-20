@@ -103,6 +103,83 @@ impl PPU {
         (palette >> shift) & 0x03
     }
 
+    // Renderiza window layer para uma scanline específica
+    pub fn render_window_scanline(&mut self) {
+        // LCDC bit 5: Window enable
+        if (self.lcdc & 0x20) == 0 {
+            return; // Window desabilitada
+        }
+
+        // LCDC bit 0: BG/Window enable (ambos precisam estar on)
+        if (self.lcdc & 0x01) == 0 {
+            return;
+        }
+
+        // Window só aparece se WY <= LY (janela começou)
+        if self.wy > self.ly {
+            return;
+        }
+
+        // LCDC bit 6: Window tile map select
+        // 0 = 0x9800-0x9BFF, 1 = 0x9C00-0x9FFF
+        let tile_map_base = if (self.lcdc & 0x40) != 0 {
+            0x1C00  // Offset em VRAM (0x9C00 - 0x8000)
+        } else {
+            0x1800  // Offset em VRAM (0x9800 - 0x8000)
+        };
+
+        // LCDC bit 4: BG/Window tile data select (mesmo que BG)
+        let tile_data_mode = (self.lcdc & 0x10) != 0;
+
+        // Calcular linha da window (sem scroll)
+        let window_y = self.ly - self.wy;
+        let tile_y = (window_y / 8) as usize;
+        let pixel_y = (window_y % 8) as usize;
+
+        let line_start = self.ly as usize * 160;
+
+        // WX é offset por 7, então WX=7 significa coluna 0
+        let window_start_x = if self.wx >= 7 { self.wx - 7 } else { 0 };
+
+        for screen_x in window_start_x..160 {
+            // Posição dentro da window (sem offset WX)
+            let window_x = screen_x - window_start_x;
+            let tile_x = (window_x / 8) as usize;
+            let pixel_x = (window_x % 8) as usize;
+
+            // Obter tile index do tile map
+            let tile_map_addr = tile_map_base + tile_y * 32 + tile_x;
+            if tile_map_addr >= 0x2000 { continue; }
+            let tile_index = self.vram[tile_map_addr];
+
+            // Calcular endereço do tile
+            let tile_addr = if tile_data_mode {
+                // Modo unsigned: 0x8000 + index * 16
+                (tile_index as u16) * 16
+            } else {
+                // Modo signed: 0x9000 + (signed_index * 16)
+                let signed = tile_index as i8;
+                (0x1000u16 as i16 + (signed as i16) * 16) as u16
+            };
+
+            if tile_addr + (pixel_y as u16) * 2 + 1 >= 0x2000 { continue; }
+
+            // Ler linha do tile
+            let byte1 = self.vram[(tile_addr + (pixel_y as u16) * 2) as usize];
+            let byte2 = self.vram[(tile_addr + (pixel_y as u16) * 2 + 1) as usize];
+
+            // Extrair cor do pixel
+            let bit_pos = 7 - pixel_x;
+            let bit1 = (byte1 >> bit_pos) & 1;
+            let bit2 = (byte2 >> bit_pos) & 1;
+            let color = (bit2 << 1) | bit1;
+
+            // Aplicar paleta BGP (window usa mesma paleta que BG)
+            let final_color = self.apply_palette(color);
+            self.framebuffer[line_start + screen_x as usize] = final_color;
+        }
+    }
+
     // Renderiza sprites para uma scanline específica
     pub fn render_sprites_scanline(&mut self, line: u8) {
         // Verificar se sprites estão habilitados (bit 1 do LCDC)

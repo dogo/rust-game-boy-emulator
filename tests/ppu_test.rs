@@ -417,4 +417,80 @@ mod ppu_tests {
         // Framebuffer deve permanecer 0 (sprites desabilitados)
         assert_eq!(ppu.framebuffer[0], 0, "Sprites desabilitados não deveriam renderizar");
     }
+
+    #[test]
+    fn test_window_basic_rendering() {
+        let mut ppu = PPU::new();
+
+        // Habilitar BG e Window no LCDC (bits 0, 4 e 5)
+        // Bit 4 = 1 para usar modo unsigned (0x8000-0x8FFF)
+        ppu.lcdc = 0xB1 | 0x10; // LCD on, BG on, Window on, unsigned mode
+        ppu.ly = 5;      // Linha atual
+        ppu.wy = 5;      // Window começa na linha 5 (window_y = 0)
+        ppu.wx = 10;     // Window começa na coluna 3 (10-7)
+
+        // Criar tile para window (tile index 1, endereço 0x10 em VRAM)
+        ppu.vram[16] = 0xFF;  // Linha 0: todos pixels cor 1
+        ppu.vram[17] = 0x00;
+
+        // Configurar window tile map (usar 0x9800, bit 6 do LCDC = 0)
+        // Window linha 5 (ly=10, wy=5, então window_y=5, tile_y=0)
+        ppu.vram[0x1800] = 1; // Tile index 1 na posição (0,0) da window
+
+        // Configurar paleta
+        ppu.bgp = 0xE4; // 11 10 01 00
+
+        ppu.render_window_scanline();
+
+        // Verificar pixels da window (começam na coluna 3, tile tem pixels cor 1→paleta→1)
+        for x in 3..11 { // 8 pixels do tile
+            assert_eq!(ppu.framebuffer[5 * 160 + x], 1, "Pixel window [{}, 5] deveria ser cor 1", x);
+        }
+    }
+
+    #[test]
+    fn test_window_disabled() {
+        let mut ppu = PPU::new();
+
+        // Desabilitar window no LCDC (bit 5 = 0)
+        ppu.lcdc = 0x91; // LCD on, BG on, Window OFF
+        ppu.ly = 10;
+        ppu.wy = 5;
+        ppu.wx = 10;
+
+        // Configurar tile e tile map
+        ppu.vram[32] = 0xFF;
+        ppu.vram[33] = 0x00;
+        ppu.vram[0x1800] = 2;
+
+        ppu.render_window_scanline();
+
+        // Framebuffer deve permanecer 0 (window desabilitada)
+        for x in 3..11 {
+            assert_eq!(ppu.framebuffer[10 * 160 + x], 0, "Window desabilitada não deveria renderizar");
+        }
+    }
+
+    #[test]
+    fn test_window_wy_condition() {
+        let mut ppu = PPU::new();
+
+        // Window habilitada mas WY > LY
+        ppu.lcdc = 0xB1;
+        ppu.ly = 5;      // Linha atual
+        ppu.wy = 10;     // Window só começa na linha 10
+        ppu.wx = 10;
+
+        // Configurar tile
+        ppu.vram[32] = 0xFF;
+        ppu.vram[33] = 0x00;
+        ppu.vram[0x1800] = 2;
+
+        ppu.render_window_scanline();
+
+        // Window não deve renderizar (WY > LY)
+        for x in 3..11 {
+            assert_eq!(ppu.framebuffer[5 * 160 + x], 0, "Window não deveria renderizar quando WY > LY");
+        }
+    }
 }
