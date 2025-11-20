@@ -268,4 +268,153 @@ mod ppu_tests {
         // Verificar que STAT interrupt NÃO deve ser gerado
         assert!(!ppu.check_stat_interrupt(), "STAT interrupt não deveria ser gerado quando desabilitado");
     }
+
+    #[test]
+    fn test_sprite_basic_rendering() {
+        let mut ppu = PPU::new();
+
+        // Habilitar sprites no LCDC (bit 1)
+        ppu.lcdc = 0x93; // LCD on, BG on, Sprites on
+
+        // Criar tile para sprite no VRAM (tile 1)
+        // Linha 0: 11110000 (0xF0 em bits)
+        ppu.vram[16] = 0xF0;  // LSB
+        ppu.vram[17] = 0x00;  // MSB
+        // Linha 1: 00001111 (0x0F em bits)
+        ppu.vram[18] = 0x0F;  // LSB
+        ppu.vram[19] = 0x00;  // MSB
+
+        // Configurar sprite 0 no OAM
+        ppu.oam[0] = 16 + 2;  // Y = linha 2 (16 + 2)
+        ppu.oam[1] = 8 + 10;  // X = coluna 10 (8 + 10)
+        ppu.oam[2] = 1;       // Tile index 1
+        ppu.oam[3] = 0x00;    // Atributos: paleta OBP0, normal
+
+        // Configurar paleta OBP0 (cores diferentes do BG)
+        ppu.obp0 = 0xE4; // 11 10 01 00 = cores 3,2,1,0
+
+        // Renderizar linha 2 (onde está o sprite)
+        ppu.render_sprites_scanline(2);
+
+        // Verificar pixels do sprite na linha 2 (linha 0 do tile)
+        // Pixels 10-13: cor 1 do tile com paleta 0xE4 → cor 1
+        for x in 10..14 {
+            assert_eq!(ppu.framebuffer[2 * 160 + x], 1, "Pixel [{}, 2] deveria ser cor 1", x);
+        }
+        // Pixels 14-17 devem ter cor 0 (transparente, não altera framebuffer)
+        for x in 14..18 {
+            assert_eq!(ppu.framebuffer[2 * 160 + x], 0, "Pixel [{}, 2] deveria ser cor 0", x);
+        }
+    }
+
+    #[test]
+    fn test_sprite_palette_obp1() {
+        let mut ppu = PPU::new();
+
+        // Habilitar sprites
+        ppu.lcdc = 0x93;
+
+        // Criar tile simples
+        ppu.vram[16] = 0xFF;  // Todos os pixels cor 1
+        ppu.vram[17] = 0x00;
+
+        // Sprite usando paleta OBP1 (bit 4 = 1)
+        ppu.oam[0] = 16;      // Y = linha 0
+        ppu.oam[1] = 8;       // X = coluna 0
+        ppu.oam[2] = 1;       // Tile 1
+        ppu.oam[3] = 0x10;    // Bit 4 = paleta OBP1
+
+        // Configurar paletas diferentes
+        ppu.obp0 = 0xE4; // OBP0: cor 1 → 1
+        ppu.obp1 = 0x1B; // OBP1: cor 1 → 2
+
+        ppu.render_sprites_scanline(0);
+
+        // Pixel deve usar OBP1, então cor 1 → 2
+        assert_eq!(ppu.framebuffer[0], 2, "Sprite deveria usar paleta OBP1");
+    }
+
+    #[test]
+    fn test_sprite_flip_horizontal() {
+        let mut ppu = PPU::new();
+        ppu.lcdc = 0x93;
+
+        // Tile assimétrico: 11110000
+        ppu.vram[16] = 0xF0;
+        ppu.vram[17] = 0x00;
+
+        // Sprite com flip horizontal (bit 5 = 1)
+        ppu.oam[0] = 16;      // Y = linha 0
+        ppu.oam[1] = 8;       // X = coluna 0
+        ppu.oam[2] = 1;       // Tile 1
+        ppu.oam[3] = 0x20;    // Bit 5 = flip horizontal
+
+        ppu.obp0 = 0xE4;
+        ppu.render_sprites_scanline(0);
+
+        // Com flip, 11110000 vira 00001111
+        // Primeiros 4 pixels devem ser cor 0 (transparente)
+        for x in 0..4 {
+            assert_eq!(ppu.framebuffer[x], 0, "Pixel {} deveria ser transparente", x);
+        }
+        // Últimos 4 pixels: cor 1 do tile com paleta 0xE4 → cor 1
+        for x in 4..8 {
+            assert_eq!(ppu.framebuffer[x], 1, "Pixel {} deveria ser cor 1", x);
+        }
+    }
+
+    #[test]
+    fn test_sprite_priority() {
+        let mut ppu = PPU::new();
+        ppu.lcdc = 0x93;
+
+        // Preencher background com cor 2
+        for i in 0..160 {
+            ppu.framebuffer[i] = 2;
+        }
+
+        // Tile do sprite (cor 1)
+        ppu.vram[16] = 0xFF;
+        ppu.vram[17] = 0x00;
+
+        // Sprite com prioridade baixa (bit 7 = 1)
+        ppu.oam[0] = 16;      // Y = linha 0
+        ppu.oam[1] = 8;       // X = coluna 0
+        ppu.oam[2] = 1;       // Tile 1
+        ppu.oam[3] = 0x80;    // Bit 7 = prioridade baixa
+
+        ppu.obp0 = 0xE4;
+        ppu.render_sprites_scanline(0);
+
+        // Sprite com prioridade baixa não deve sobrescrever BG cor != 0
+        assert_eq!(ppu.framebuffer[0], 2, "Sprite com prioridade baixa não deveria sobrescrever BG");
+
+        // Testar sprite com prioridade alta
+        ppu.oam[3] = 0x00;    // Bit 7 = 0 = prioridade alta
+        ppu.render_sprites_scanline(0);
+
+        // Agora deve sobrescrever
+        assert_eq!(ppu.framebuffer[0], 1, "Sprite com prioridade alta deveria sobrescrever BG");
+    }
+
+    #[test]
+    fn test_sprite_disabled() {
+        let mut ppu = PPU::new();
+
+        // Desabilitar sprites no LCDC (bit 1 = 0)
+        ppu.lcdc = 0x91; // LCD on, BG on, Sprites OFF
+
+        // Configurar sprite
+        ppu.vram[16] = 0xFF;
+        ppu.vram[17] = 0x00;
+        ppu.oam[0] = 16;
+        ppu.oam[1] = 8;
+        ppu.oam[2] = 1;
+        ppu.oam[3] = 0x00;
+
+        ppu.render_sprites_scanline(0);
+
+        // Framebuffer deve permanecer 0 (sprites desabilitados)
+        assert_eq!(ppu.framebuffer[0], 0, "Sprites desabilitados não deveriam renderizar");
+    }
 }

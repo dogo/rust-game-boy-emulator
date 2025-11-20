@@ -3,6 +3,15 @@
 // PPU (Picture Processing Unit) - Renderização de gráficos do Game Boy
 // Responsável por: Background, Window, Sprites, Paletas
 
+// Estrutura para representar um sprite do OAM
+#[derive(Debug, Clone, Copy)]
+struct Sprite {
+    y: u8,          // Posição Y (linha + 16)
+    x: u8,          // Posição X (coluna + 8)
+    tile_index: u8, // Índice do tile (0-255)
+    attributes: u8, // Bit 7=prioridade, 6=flip Y, 5=flip X, 4=paleta, 3-0=unused
+}
+
 pub struct PPU {
     // VRAM (Video RAM) - 8KB (0x8000-0x9FFF)
     // 0x8000-0x97FF: Tile data (384 tiles × 16 bytes = 6KB)
@@ -73,6 +82,125 @@ impl PPU {
             self.stat |= 0x04;  // Seta bit 2
         } else {
             self.stat &= !0x04; // Limpa bit 2
+        }
+    }
+
+    // Lê sprite do OAM (índice 0-39)
+    fn get_sprite(&self, sprite_index: u8) -> Sprite {
+        let base = (sprite_index as usize) * 4;
+        Sprite {
+            y: self.oam[base],
+            x: self.oam[base + 1],
+            tile_index: self.oam[base + 2],
+            attributes: self.oam[base + 3],
+        }
+    }
+
+    // Aplica paleta OBP0 ou OBP1 (similar ao BGP)
+    fn apply_sprite_palette(&self, color: u8, use_obp1: bool) -> u8 {
+        let palette = if use_obp1 { self.obp1 } else { self.obp0 };
+        let shift = color * 2;
+        (palette >> shift) & 0x03
+    }
+
+    // Renderiza sprites para uma scanline específica
+    pub fn render_sprites_scanline(&mut self, line: u8) {
+        // Verificar se sprites estão habilitados (bit 1 do LCDC)
+        if (self.lcdc & 0x02) == 0 {
+            return;
+        }
+
+        // Coletar sprites visíveis nesta linha (máximo 10 por linha no hardware)
+        let mut visible_sprites = Vec::new();
+        let sprite_height = if (self.lcdc & 0x04) != 0 { 16 } else { 8 }; // 8x8 ou 8x16
+
+        for sprite_index in 0..40 {
+            let sprite = self.get_sprite(sprite_index);
+
+            // Sprite Y é offset por 16, então Y=16 significa linha 0
+            let sprite_y = sprite.y.wrapping_sub(16);
+
+            // Verificar se sprite está visível nesta linha
+            if line >= sprite_y && (line as i16) < (sprite_y as i16 + sprite_height as i16) {
+                visible_sprites.push((sprite, sprite_index));
+
+                // Hardware GB limita a 10 sprites por linha
+                if visible_sprites.len() >= 10 {
+                    break;
+                }
+            }
+        }
+
+        // Renderizar sprites em ordem reversa (últimos tem prioridade)
+        for &(sprite, _sprite_index) in visible_sprites.iter().rev() {
+            self.render_single_sprite(sprite, line, sprite_height);
+        }
+    }
+
+    // Renderiza um único sprite na scanline
+    fn render_single_sprite(&mut self, sprite: Sprite, line: u8, sprite_height: u8) {
+        let sprite_y = sprite.y.wrapping_sub(16);
+        let sprite_x = sprite.x.wrapping_sub(8);
+
+        // Calcular linha do tile (0-7 para 8x8, 0-15 para 8x16)
+        let mut tile_line = line - sprite_y;
+
+        // Flip vertical (bit 6)
+        if (sprite.attributes & 0x40) != 0 {
+            tile_line = (sprite_height - 1) - tile_line;
+        }
+
+        // Obter tile index (para 8x16, bit 0 é ignorado)
+        let tile_index = if sprite_height == 16 {
+            sprite.tile_index & 0xFE
+        } else {
+            sprite.tile_index
+        };
+
+        // Calcular endereço do tile (sprites sempre usam 0x8000-0x8FFF)
+        let tile_addr = (tile_index as u16) * 16 + (tile_line as u16) * 2;
+
+        if tile_addr + 1 >= 0x2000 { return; } // Bounds check
+
+        let byte1 = self.vram[tile_addr as usize];
+        let byte2 = self.vram[(tile_addr + 1) as usize];
+
+        // Renderizar 8 pixels da linha do sprite
+        for pixel_x in 0..8 {
+            let screen_x = sprite_x.wrapping_add(pixel_x);
+
+            // Verificar bounds horizontais
+            if screen_x >= 160 { continue; }
+
+            // Calcular bit position (flip horizontal se bit 5 setado)
+            let bit_pos = if (sprite.attributes & 0x20) != 0 {
+                pixel_x // Flip horizontal
+            } else {
+                7 - pixel_x // Normal
+            };
+
+            // Extrair cor do pixel (2 bits por pixel)
+            let bit1 = (byte1 >> bit_pos) & 1;
+            let bit2 = (byte2 >> bit_pos) & 1;
+            let color = (bit2 << 1) | bit1;
+
+            // Cor 0 é transparente para sprites
+            if color == 0 { continue; }
+
+            // Verificar prioridade (bit 7 do atributo)
+            let bg_priority = (sprite.attributes & 0x80) != 0;
+            let framebuffer_pos = (line as usize) * 160 + (screen_x as usize);
+
+            // Se sprite tem prioridade baixa, só desenha sobre cor 0 do BG
+            if bg_priority && self.framebuffer[framebuffer_pos] != 0 {
+                continue;
+            }
+
+            // Aplicar paleta (bit 4 escolhe OBP0 ou OBP1)
+            let use_obp1 = (sprite.attributes & 0x10) != 0;
+            let final_color = self.apply_sprite_palette(color, use_obp1);
+
+            self.framebuffer[framebuffer_pos] = final_color;
         }
     }
 

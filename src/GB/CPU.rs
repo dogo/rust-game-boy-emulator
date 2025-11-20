@@ -94,6 +94,7 @@ impl CPU {
                     // Mode 3: Pixel Transfer (durante renderização)
                     self.ram.ppu.update_stat_mode(3);
                     self.ram.ppu.render_bg_scanline();
+                    self.ram.ppu.render_sprites_scanline(old_ly);
                     // Mode 0: HBlank (após renderização)
                     self.ram.ppu.update_stat_mode(0);
                 } else if old_ly >= 144 && old_ly <= 153 {
