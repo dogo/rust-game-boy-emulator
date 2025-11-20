@@ -11,7 +11,6 @@ pub struct CPU {
     // Estado mínimo de temporizador/PPU para avançar loops de polling
     ppu_line_cycles: u16, // ciclos acumulados na linha atual (456 ciclos por linha)
     ppu_ly: u8,           // linha atual (0..=153), espelhada em 0xFF44
-    timer_div_counter: u32, // acumula ciclos para incrementar DIV (a cada 256 ciclos)
 }
 
 impl CPU {
@@ -24,7 +23,6 @@ impl CPU {
             cycles: 0,
             ppu_line_cycles: 0,
             ppu_ly: 0,
-            timer_div_counter: 0,
         }
     }
 
@@ -226,13 +224,8 @@ impl CPU {
     // Avança temporizadores e PPU com base nos ciclos consumidos pela instrução
     // PPU = Picture Processing Unit (Unidade de Processamento de Imagem)
     fn tick(&mut self, cycles: u32) {
-        // Timer DIV (0xFF04) incrementa a cada 256 ciclos de CPU
-        self.timer_div_counter += cycles;
-        while self.timer_div_counter >= 256 {
-            self.timer_div_counter -= 256;
-            let div = self.ram.read(0xFF04).wrapping_add(1);
-            self.ram.write(0xFF04, div);
-        }
+        // Timers (DIV/TIMA/TMA/TAC)
+        self.ram.tick_timers(cycles);
 
         // PPU: 456 ciclos por linha, 154 linhas por frame (0..=153)
         let mut add = cycles as u16;
