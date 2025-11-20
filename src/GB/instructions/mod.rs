@@ -69,6 +69,11 @@ pub fn decode(opcode: u8) -> Instruction {
         0xDE => arithmetic::sbc_a_d8(opcode),
 
         // Logic
+        // Rotates simples sem CB
+        0x07 => logic::rlca(opcode),
+        0x0F => logic::rrca(opcode),
+        0x17 => logic::rla(opcode),
+        0x1F => logic::rra(opcode),
         0xA0..=0xA7 => logic::and_a_r(opcode),
         0xE6 => logic::and_a_d8(opcode),
         0xB0..=0xB7 => logic::or_a_r(opcode),

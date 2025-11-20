@@ -125,3 +125,66 @@ pub fn cp_a_d8(opcode: u8) -> Instruction {
     }
     Instruction { opcode, name: "CP A,d8", cycles: 8, size: 2, flags: &[], execute: exec }
 }
+
+// Rotations (sem prefixo CB) — 1 byte, 4 ciclos, Z sempre 0, N=0, H=0
+pub fn rlca(opcode: u8) -> Instruction {
+    fn exec(_instr: &Instruction, cpu: &mut CPU) -> u64 {
+        let a = cpu.registers.get_a();
+        let carry = (a & 0x80) != 0;
+        let res = (a << 1) | (if carry { 1 } else { 0 });
+        cpu.registers.set_a(res);
+        cpu.registers.set_flag_z(false);
+        cpu.registers.set_flag_n(false);
+        cpu.registers.set_flag_h(false);
+        cpu.registers.set_flag_c(carry);
+        4
+    }
+    Instruction { opcode, name: "RLCA", cycles: 4, size: 1, flags: &[], execute: exec }
+}
+
+pub fn rrca(opcode: u8) -> Instruction {
+    fn exec(_instr: &Instruction, cpu: &mut CPU) -> u64 {
+        let a = cpu.registers.get_a();
+        let carry = (a & 0x01) != 0;
+        let res = (a >> 1) | (if carry { 0x80 } else { 0 });
+        cpu.registers.set_a(res);
+        cpu.registers.set_flag_z(false);
+        cpu.registers.set_flag_n(false);
+        cpu.registers.set_flag_h(false);
+        cpu.registers.set_flag_c(carry);
+        4
+    }
+    Instruction { opcode, name: "RRCA", cycles: 4, size: 1, flags: &[], execute: exec }
+}
+
+pub fn rla(opcode: u8) -> Instruction {
+    fn exec(_instr: &Instruction, cpu: &mut CPU) -> u64 {
+        let a = cpu.registers.get_a();
+        let old_c = cpu.registers.get_flag_c();
+        let carry = (a & 0x80) != 0;
+        let res = (a << 1) | (if old_c { 1 } else { 0 });
+        cpu.registers.set_a(res);
+        cpu.registers.set_flag_z(false);
+        cpu.registers.set_flag_n(false);
+        cpu.registers.set_flag_h(false);
+        cpu.registers.set_flag_c(carry);
+        4
+    }
+    Instruction { opcode, name: "RLA", cycles: 4, size: 1, flags: &[], execute: exec }
+}
+
+pub fn rra(opcode: u8) -> Instruction {
+    fn exec(_instr: &Instruction, cpu: &mut CPU) -> u64 {
+        let a = cpu.registers.get_a();
+        let old_c = cpu.registers.get_flag_c();
+        let carry = (a & 0x01) != 0;
+        let res = ((if old_c { 1 } else { 0 }) << 7) | (a >> 1);
+        cpu.registers.set_a(res);
+        cpu.registers.set_flag_z(false);
+        cpu.registers.set_flag_n(false);
+        cpu.registers.set_flag_h(false);
+        cpu.registers.set_flag_c(carry);
+        4
+    }
+    Instruction { opcode, name: "RRA", cycles: 4, size: 1, flags: &[], execute: exec }
+}
