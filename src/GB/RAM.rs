@@ -8,6 +8,20 @@ pub struct RAM {
     rom_bank: u8,       // banco ROM selecionado para 0x4000..=0x7FFF (em MBC3, 1..=0x7F)
     ram_enabled: bool,  // enable RAM/RTC (0x0000..=0x1FFF)
     ram_bank: u8,       // seleção de banco de RAM ou registrador RTC (0x4000..=0x5FFF)
+    // RAM externa do cartucho (MBC3: até 4 bancos de 8KB = 32KB)
+    cart_ram: Vec<u8>,
+    // RTC (Real Time Clock) do MBC3
+    rtc_s: u8,          // segundos (0..59)
+    rtc_m: u8,          // minutos (0..59)
+    rtc_h: u8,          // horas (0..23)
+    rtc_dl: u8,         // dia baixo (bits 0..7 de day counter)
+    rtc_dh: u8,         // dia alto + flags (bit 0 = bit 8 de day, bit 6 = halt, bit 7 = carry)
+    rtc_latched_s: u8,
+    rtc_latched_m: u8,
+    rtc_latched_h: u8,
+    rtc_latched_dl: u8,
+    rtc_latched_dh: u8,
+    rtc_latch_state: u8, // estado do latch (0x00 ou 0x01 para detectar transição 0->1)
     // Estado interno do temporizador
     div_counter: u16,        // contador divisor interno de 16 bits (incrementa a cada ciclo da CPU)
     timer_last_signal: bool, // último nível do sinal do timer (enable && bit selecionado de div_counter)
@@ -23,6 +37,18 @@ impl RAM {
             rom_bank: 1,
             ram_enabled: false,
             ram_bank: 0,
+            cart_ram: vec![0; 32 * 1024], // 32KB = 4 bancos de 8KB
+            rtc_s: 0,
+            rtc_m: 0,
+            rtc_h: 0,
+            rtc_dl: 0,
+            rtc_dh: 0,
+            rtc_latched_s: 0,
+            rtc_latched_m: 0,
+            rtc_latched_h: 0,
+            rtc_latched_dl: 0,
+            rtc_latched_dh: 0,
+            rtc_latch_state: 0,
             div_counter: 0,
             timer_last_signal: false,
             tima_reload_delay: 0,
@@ -46,6 +72,29 @@ impl RAM {
                 // ROM ONLY / sem MBC: banco 0 fixo
                 return self.rom_get(addr);
             }
+        }
+        // Mapeamento de RAM externa do cartucho (0xA000..=0xBFFF)
+        if addr >= 0xA000 && addr < 0xC000 {
+            if self.is_mbc3() && self.ram_enabled {
+                if self.ram_bank <= 0x03 {
+                    // RAM banco 0..3
+                    let ram_addr = (self.ram_bank as usize) * 0x2000 + (addr - 0xA000);
+                    if ram_addr < self.cart_ram.len() {
+                        return self.cart_ram[ram_addr];
+                    }
+                } else if self.ram_bank >= 0x08 && self.ram_bank <= 0x0C {
+                    // RTC register latch read
+                    return match self.ram_bank {
+                        0x08 => self.rtc_latched_s,
+                        0x09 => self.rtc_latched_m,
+                        0x0A => self.rtc_latched_h,
+                        0x0B => self.rtc_latched_dl,
+                        0x0C => self.rtc_latched_dh,
+                        _ => 0xFF,
+                    };
+                }
+            }
+            return 0xFF; // RAM desabilitada ou endereço inválido
         }
         self.memory[addr]
     }
@@ -93,10 +142,18 @@ impl RAM {
                     return;
                 }
                 0x6000..=0x7FFF => {
-                    // Latch clock (ignoramos por enquanto)
-                    if byte == 0x01 {
-                        println!("[MBC3] Latch RTC (ignorado)");
+                    // Latch clock: transição 0x00 -> 0x01 captura RTC atual
+                    if self.rtc_latch_state == 0x00 && byte == 0x01 {
+                        self.rtc_latched_s = self.rtc_s;
+                        self.rtc_latched_m = self.rtc_m;
+                        self.rtc_latched_h = self.rtc_h;
+                        self.rtc_latched_dl = self.rtc_dl;
+                        self.rtc_latched_dh = self.rtc_dh;
+                        println!("[MBC3] RTC latched: {:02}:{:02}:{:02} dia={}",
+                                 self.rtc_h, self.rtc_m, self.rtc_s,
+                                 ((self.rtc_dh as u16 & 1) << 8) | self.rtc_dl as u16);
                     }
+                    self.rtc_latch_state = byte;
                     return;
                 }
                 _ => {}
@@ -125,6 +182,29 @@ impl RAM {
                 } else {
                     println!("[TIMER] TMA<={:02X}", byte);
                 }
+            }
+            0xA000..=0xBFFF => {
+                // Escrita em RAM externa ou RTC
+                if self.is_mbc3() && self.ram_enabled {
+                    if self.ram_bank <= 0x03 {
+                        // RAM banco 0..3
+                        let ram_addr = (self.ram_bank as usize) * 0x2000 + (address as usize - 0xA000);
+                        if ram_addr < self.cart_ram.len() {
+                            self.cart_ram[ram_addr] = byte;
+                        }
+                    } else if self.ram_bank >= 0x08 && self.ram_bank <= 0x0C {
+                        // Escrita nos registradores RTC
+                        match self.ram_bank {
+                            0x08 => self.rtc_s = byte & 0x3F,   // 0..59
+                            0x09 => self.rtc_m = byte & 0x3F,   // 0..59
+                            0x0A => self.rtc_h = byte & 0x1F,   // 0..23
+                            0x0B => self.rtc_dl = byte,
+                            0x0C => self.rtc_dh = byte,
+                            _ => {}
+                        }
+                    }
+                }
+                return;
             }
             _ => {
                 // Evita escrita em ROM (0x0000..=0x7FFF)
