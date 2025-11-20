@@ -450,4 +450,83 @@ impl RAM {
             self.joypad_buttons |= 1 << button;
         }
     }
+
+    // === Save/Load persistence para arquivos .sav ===
+
+    /// Salva a RAM do cartucho para arquivo .sav
+    pub fn save_cart_ram(&self, sav_path: &str) -> Result<(), std::io::Error> {
+        use std::fs;
+
+        // Só salva se há RAM e está habilitada
+        if !self.is_mbc3() || !self.has_cart_ram() || self.cart_ram.is_empty() {
+            return Ok(()); // Nada para salvar
+        }
+
+        // Salva apenas a RAM usada (não os 32KB completos se o jogo usa menos)
+        let ram_size = self.get_cart_ram_size();
+        if ram_size > 0 {
+            let data_to_save = &self.cart_ram[..ram_size.min(self.cart_ram.len())];
+            fs::write(sav_path, data_to_save)?;
+            println!("💾 Save criado: {} ({} bytes)", sav_path, data_to_save.len());
+        }
+
+        Ok(())
+    }
+
+    /// Carrega a RAM do cartucho de arquivo .sav
+    pub fn load_cart_ram(&mut self, sav_path: &str) -> Result<(), std::io::Error> {
+        use std::fs;
+
+        // Só tenta carregar se há RAM no cartucho
+        if !self.is_mbc3() || !self.has_cart_ram() {
+            return Ok(());
+        }
+
+        // Verifica se arquivo existe
+        if !std::path::Path::new(sav_path).exists() {
+            println!("📁 Nenhum save encontrado: {}", sav_path);
+            return Ok(());
+        }
+
+        // Carrega dados do arquivo
+        let save_data = fs::read(sav_path)?;
+        if save_data.is_empty() {
+            return Ok(());
+        }
+
+        // Copia dados para cart_ram (limitado ao tamanho disponível)
+        let copy_size = save_data.len().min(self.cart_ram.len());
+        self.cart_ram[..copy_size].copy_from_slice(&save_data[..copy_size]);
+
+        println!("💾 Save carregado: {} ({} bytes)", sav_path, copy_size);
+        Ok(())
+    }
+
+    /// Verifica se o cartucho tem RAM baseado no header
+    fn has_cart_ram(&self) -> bool {
+        // Lê o código de RAM size do header (0x0149)
+        if self.rom.len() > 0x0149 {
+            let ram_code = self.rom[0x0149];
+            ram_code != 0x00 // 0x00 = sem RAM
+        } else {
+            false
+        }
+    }
+
+    /// Retorna o tamanho da RAM do cartucho baseado no header
+    fn get_cart_ram_size(&self) -> usize {
+        if self.rom.len() <= 0x0149 {
+            return 0;
+        }
+
+        match self.rom[0x0149] {
+            0x00 => 0,          // Sem RAM
+            0x01 => 2 * 1024,   // 2KB
+            0x02 => 8 * 1024,   // 8KB
+            0x03 => 32 * 1024,  // 32KB (4 bancos × 8KB)
+            0x04 => 128 * 1024, // 128KB (16 bancos × 8KB)
+            0x05 => 64 * 1024,  // 64KB (8 bancos × 8KB)
+            _ => 0,
+        }
+    }
 }

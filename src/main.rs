@@ -38,10 +38,10 @@ fn print_cart_info(cpu: &GB::CPU::CPU) {
     );
 }
 
-fn run_trace(mut cpu: GB::CPU::CPU) {
+fn run_trace(cpu: &mut GB::CPU::CPU) {
     print_cart_info(&cpu);
     println!("Trace iniciado (CTRL+C para interromper)");
-    GB::trace::run_with_trace(&mut cpu, usize::MAX);
+    GB::trace::run_with_trace(cpu, usize::MAX);
     println!("Trace encerrado");
 }
 
@@ -51,7 +51,7 @@ fn try_init_sdl() -> Result<sdl2::Sdl, String> {
     sdl2::init()
 }
 
-fn run_sdl(mut cpu: GB::CPU::CPU) {
+fn run_sdl(cpu: &mut GB::CPU::CPU) {
     print_cart_info(&cpu);
     println!("Iniciando modo gráfico SDL2 (ESC para sair)");
 
@@ -211,6 +211,15 @@ fn run_sdl(mut cpu: GB::CPU::CPU) {
     println!("Encerrando SDL2 após {} frames", frame_counter);
 }
 
+/// Gera o nome do arquivo .sav baseado no nome da ROM
+fn get_sav_path(rom_path: &str) -> String {
+    let path = std::path::Path::new(rom_path);
+    match path.with_extension("sav").to_str() {
+        Some(sav_path) => sav_path.to_string(),
+        None => format!("{}.sav", rom_path), // fallback
+    }
+}
+
 fn main() {
     let args: Vec<String> = env::args().collect();
     if args.len() < 2 {
@@ -218,15 +227,28 @@ fn main() {
         return;
     }
     let rom_path = &args[1];
+    let sav_path = get_sav_path(rom_path);
+
     let data = fs::read(rom_path).expect("Falha ao ler ROM");
     let mut cpu = GB::CPU::CPU::new();
     cpu.load_rom(&data);
     cpu.init_post_boot();
+
+    // Carrega save se existir
+    if let Err(e) = cpu.ram.load_cart_ram(&sav_path) {
+        eprintln!("⚠️ Erro ao carregar save: {}", e);
+    }
+
     println!("ROM carregada: {} ({} bytes)", rom_path, data.len());
 
     if args.iter().any(|a| a == "--trace") {
-        run_trace(cpu);
+        run_trace(&mut cpu);
     } else {
-        run_sdl(cpu);
+        run_sdl(&mut cpu);
+    }
+
+    // Salva RAM ao sair
+    if let Err(e) = cpu.ram.save_cart_ram(&sav_path) {
+        eprintln!("⚠️ Erro ao salvar: {}", e);
     }
 }
