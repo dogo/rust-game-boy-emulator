@@ -66,6 +66,58 @@ fn run_sdl(cpu: &mut GB::CPU::CPU) {
         }
     };
     let video = sdl_ctx.video().expect("Falha subsistema de vídeo");
+
+    // Configurar áudio SDL2
+    let audio_subsystem = sdl_ctx.audio().expect("Falha subsistema de áudio");
+    let desired_spec = sdl2::audio::AudioSpecDesired {
+        freq: Some(44100),
+        channels: Some(2), // Stereo
+        samples: Some(1024),
+    };
+
+    use std::sync::{Arc, Mutex};
+    use std::collections::VecDeque;
+
+    // Buffer de áudio compartilhado
+    let audio_buffer: Arc<Mutex<VecDeque<(f32, f32)>>> = Arc::new(Mutex::new(VecDeque::new()));
+    let audio_buffer_producer = audio_buffer.clone();
+
+    // Struct para implementar AudioCallback
+    struct AudioCallbackData {
+        buffer: Arc<Mutex<VecDeque<(f32, f32)>>>,
+    }
+
+    impl sdl2::audio::AudioCallback for AudioCallbackData {
+        type Channel = f32;
+
+        fn callback(&mut self, out: &mut [f32]) {
+            let mut audio_buffer = self.buffer.lock().unwrap();
+            for chunk in out.chunks_mut(2) {
+                if let Some((left, right)) = audio_buffer.pop_front() {
+                    chunk[0] = left;
+                    if chunk.len() > 1 {
+                        chunk[1] = right;
+                    }
+                } else {
+                    chunk[0] = 0.0;
+                    if chunk.len() > 1 {
+                        chunk[1] = 0.0;
+                    }
+                }
+            }
+        }
+    }
+
+    let audio_callback = AudioCallbackData {
+        buffer: audio_buffer.clone(),
+    };
+
+    let audio_device = audio_subsystem.open_playback(None, &desired_spec, |_spec| {
+        audio_callback
+    }).expect("Falha ao abrir dispositivo de áudio");
+
+    // Iniciar reprodução de áudio
+    audio_device.resume();
     let scale = 3u32; // escala 3x (160x144 → 480x432)
     let window = video
         .window("GB Emulator", 160 * scale, 144 * scale)
@@ -137,6 +189,23 @@ fn run_sdl(cpu: &mut GB::CPU::CPU) {
         while cpu.cycles < target_cycles {
             let _ = cpu.execute_next();
         }
+
+        // Gera samples de áudio para este frame
+        // 44.1kHz por ~16.67ms = ~735 samples por frame
+        let samples_per_frame = 735;
+        {
+            let mut buffer = audio_buffer_producer.lock().unwrap();
+            for _ in 0..samples_per_frame {
+                let (left, right) = cpu.ram.apu.generate_sample();
+                buffer.push_back((left, right));
+
+                // Limita buffer para evitar overflow
+                if buffer.len() > 4410 { // ~100ms de buffer
+                    buffer.pop_front();
+                }
+            }
+        }
+
         frame_counter += 1;
 
         // Renderiza apenas quando um frame está completo (VBlank) para evitar tearing

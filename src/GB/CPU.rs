@@ -121,7 +121,9 @@ impl CPU {
         self.ram.tick_timers(cycles);
 
         // APU (Audio Processing Unit)
-        self.ram.apu.tick(cycles);
+        for _ in 0..cycles {
+            self.ram.apu.tick();
+        }
 
         // PPU: 456 ciclos por linha, 154 linhas por frame (0..=153)
         let mut add = cycles as u16;

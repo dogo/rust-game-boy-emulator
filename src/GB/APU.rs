@@ -175,6 +175,98 @@ impl APU {
         }
     }
 
+    /// Clock APU - chamado a cada ciclo de CPU (4MHz)
+    pub fn tick(&mut self) {
+        if !self.sound_enable {
+            return;
+        }
+
+        // Frame sequencer roda a 512Hz (4194304 / 8192 = 512)
+        self.sample_timer += 1;
+        if self.sample_timer >= 8192 {
+            self.sample_timer = 0;
+            self.step_frame_sequencer();
+        }
+
+        // Atualiza timers dos canais
+        self.update_channel_timers();
+    }
+
+    /// Frame sequencer (512Hz)
+    fn step_frame_sequencer(&mut self) {
+        self.frame_sequencer = (self.frame_sequencer + 1) % 8;
+
+        match self.frame_sequencer {
+            0 => {
+                // Step 0: Length
+                self.step_length_counters();
+            },
+            1 => {
+                // Step 1: Nada
+            },
+            2 => {
+                // Step 2: Length e Sweep
+                self.step_length_counters();
+                self.step_sweep();
+            },
+            3 => {
+                // Step 3: Nada
+            },
+            4 => {
+                // Step 4: Length
+                self.step_length_counters();
+            },
+            5 => {
+                // Step 5: Nada
+            },
+            6 => {
+                // Step 6: Length e Sweep
+                self.step_length_counters();
+                self.step_sweep();
+            },
+            7 => {
+                // Step 7: Envelope
+                self.step_envelopes();
+            },
+            _ => {}
+        }
+    }
+
+    /// Gera sample de áudio (chamado a 44.1kHz)
+    pub fn generate_sample(&mut self) -> (f32, f32) {
+        if !self.sound_enable {
+            return (0.0, 0.0);
+        }
+
+        let ch1_output = if self.ch1_enabled { self.get_channel1_output() } else { 0.0 };
+        let ch2_output = if self.ch2_enabled { self.get_channel2_output() } else { 0.0 };
+        let ch3_output = if self.ch3_enabled { self.get_channel3_output() } else { 0.0 };
+        let ch4_output = if self.ch4_enabled { self.get_channel4_output() } else { 0.0 };
+
+        // Mix canais de acordo com roteamento
+        let mut left_sample = 0.0;
+        let mut right_sample = 0.0;
+
+        if self.ch1_left { left_sample += ch1_output; }
+        if self.ch1_right { right_sample += ch1_output; }
+        if self.ch2_left { left_sample += ch2_output; }
+        if self.ch2_right { right_sample += ch2_output; }
+        if self.ch3_left { left_sample += ch3_output; }
+        if self.ch3_right { right_sample += ch3_output; }
+        if self.ch4_left { left_sample += ch4_output; }
+        if self.ch4_right { right_sample += ch4_output; }
+
+        // Aplica volume master
+        left_sample *= (self.left_volume as f32 + 1.0) / 8.0;
+        right_sample *= (self.right_volume as f32 + 1.0) / 8.0;
+
+        // Normaliza para prevenir clipping
+        left_sample = left_sample.clamp(-1.0, 1.0);
+        right_sample = right_sample.clamp(-1.0, 1.0);
+
+        (left_sample, right_sample)
+    }
+
     /// Lê um registrador do APU
     pub fn read_register(&self, address: u16) -> u8 {
         match address {
@@ -555,23 +647,244 @@ impl APU {
         // (Por brevidade, não incluindo todos os resets aqui)
     }
 
-    /// Avança o APU por um número de ciclos da CPU
-    pub fn tick(&mut self, cycles: u32) {
-        // O APU roda a 1MHz (1/4 da velocidade da CPU)
-        for _ in 0..cycles {
-            // Frame sequencer roda a 512Hz (dividido por ~2048 ciclos)
-            // Para simplificar, vamos processar a cada ciclo por agora
+    /// Atualiza timers dos canais
+    fn update_channel_timers(&mut self) {
+        // Implementação placeholder - cada canal tem seu próprio timer
+        // TODO: Implementar timers específicos de cada canal
+    }
 
-            // TODO: Implementar geração de samples de áudio
-            // TODO: Implementar frame sequencer para length/envelope/sweep
-            // TODO: Implementar mixagem dos 4 canais
+    /// Step dos length counters
+    fn step_length_counters(&mut self) {
+        // Canal 1
+        if self.ch1_length_enable && self.ch1_length_counter > 0 {
+            self.ch1_length_counter -= 1;
+            if self.ch1_length_counter == 0 {
+                self.ch1_enabled = false;
+            }
+        }
+
+        // Canal 2
+        if self.ch2_length_enable && self.ch2_length_counter > 0 {
+            self.ch2_length_counter -= 1;
+            if self.ch2_length_counter == 0 {
+                self.ch2_enabled = false;
+            }
+        }
+
+        // Canal 3
+        if self.ch3_length_enable && self.ch3_length_counter > 0 {
+            self.ch3_length_counter -= 1;
+            if self.ch3_length_counter == 0 {
+                self.ch3_enabled = false;
+            }
+        }
+
+        // Canal 4
+        if self.ch4_length_enable && self.ch4_length_counter > 0 {
+            self.ch4_length_counter -= 1;
+            if self.ch4_length_counter == 0 {
+                self.ch4_enabled = false;
+            }
         }
     }
 
-    /// Gera um sample de áudio (placeholder)
-    pub fn get_audio_sample(&self) -> (f32, f32) {
-        // Por enquanto, retorna silêncio
-        // TODO: Implementar geração real de áudio
-        (0.0, 0.0)
+    /// Step do sweep (apenas canal 1)
+    fn step_sweep(&mut self) {
+        if !self.ch1_sweep_enabled {
+            return;
+        }
+
+        if self.ch1_sweep_timer > 0 {
+            self.ch1_sweep_timer -= 1;
+        }
+
+        if self.ch1_sweep_timer == 0 {
+            self.ch1_sweep_timer = if self.ch1_sweep_period > 0 { self.ch1_sweep_period } else { 8 };
+
+            if self.ch1_sweep_enabled && self.ch1_sweep_period > 0 {
+                let new_frequency = self.calculate_sweep_frequency();
+
+                if new_frequency <= 2047 && self.ch1_sweep_shift > 0 {
+                    self.ch1_frequency = new_frequency;
+                    self.ch1_frequency_shadow = new_frequency;
+
+                    // Verificação de overflow novamente
+                    let _ = self.calculate_sweep_frequency();
+                }
+            }
+        }
+    }
+
+    /// Calcula nova frequência para sweep
+    fn calculate_sweep_frequency(&self) -> u16 {
+        let freq_change = self.ch1_frequency_shadow >> self.ch1_sweep_shift;
+        if self.ch1_sweep_direction {
+            self.ch1_frequency_shadow.saturating_sub(freq_change)
+        } else {
+            self.ch1_frequency_shadow.saturating_add(freq_change)
+        }
+    }
+
+    /// Step dos envelopes
+    fn step_envelopes(&mut self) {
+        // Canal 1
+        if self.ch1_envelope_timer > 0 {
+            self.ch1_envelope_timer -= 1;
+        }
+
+        if self.ch1_envelope_timer == 0 {
+            self.ch1_envelope_timer = if self.ch1_envelope_period > 0 { self.ch1_envelope_period } else { 8 };
+
+            if self.ch1_envelope_period > 0 {
+                if self.ch1_envelope_direction && self.ch1_volume < 15 {
+                    self.ch1_volume += 1;
+                } else if !self.ch1_envelope_direction && self.ch1_volume > 0 {
+                    self.ch1_volume -= 1;
+                }
+            }
+        }
+
+        // Canal 2 (similar ao canal 1)
+        if self.ch2_envelope_timer > 0 {
+            self.ch2_envelope_timer -= 1;
+        }
+
+        if self.ch2_envelope_timer == 0 {
+            self.ch2_envelope_timer = if self.ch2_envelope_period > 0 { self.ch2_envelope_period } else { 8 };
+
+            if self.ch2_envelope_period > 0 {
+                if self.ch2_envelope_direction && self.ch2_volume < 15 {
+                    self.ch2_volume += 1;
+                } else if !self.ch2_envelope_direction && self.ch2_volume > 0 {
+                    self.ch2_volume -= 1;
+                }
+            }
+        }
+
+        // Canal 4 (similar aos outros)
+        if self.ch4_envelope_timer > 0 {
+            self.ch4_envelope_timer -= 1;
+        }
+
+        if self.ch4_envelope_timer == 0 {
+            self.ch4_envelope_timer = if self.ch4_envelope_period > 0 { self.ch4_envelope_period } else { 8 };
+
+            if self.ch4_envelope_period > 0 {
+                if self.ch4_envelope_direction && self.ch4_volume < 15 {
+                    self.ch4_volume += 1;
+                } else if !self.ch4_envelope_direction && self.ch4_volume > 0 {
+                    self.ch4_volume -= 1;
+                }
+            }
+        }
+    }
+
+    /// Gera output do canal 1 (square wave)
+    fn get_channel1_output(&mut self) -> f32 {
+        if !self.ch1_enabled {
+            return 0.0;
+        }
+
+        // Duty cycle patterns
+        let duty_patterns = [
+            0b00000001, // 12.5%
+            0b10000001, // 25%
+            0b10000111, // 50%
+            0b01111110, // 75%
+        ];
+
+        let pattern = duty_patterns[self.ch1_wave_duty as usize];
+        let bit = (pattern >> self.ch1_wave_position) & 1;
+
+        // Avança posição da wave
+        self.ch1_wave_position = (self.ch1_wave_position + 1) % 8;
+
+        if bit == 1 {
+            (self.ch1_volume as f32) / 15.0
+        } else {
+            0.0
+        }
+    }
+
+    /// Gera output do canal 2 (square wave)
+    fn get_channel2_output(&mut self) -> f32 {
+        if !self.ch2_enabled {
+            return 0.0;
+        }
+
+        // Duty cycle patterns (igual ao canal 1)
+        let duty_patterns = [
+            0b00000001, // 12.5%
+            0b10000001, // 25%
+            0b10000111, // 50%
+            0b01111110, // 75%
+        ];
+
+        let pattern = duty_patterns[self.ch2_wave_duty as usize];
+        let bit = (pattern >> self.ch2_wave_position) & 1;
+
+        // Avança posição da wave
+        self.ch2_wave_position = (self.ch2_wave_position + 1) % 8;
+
+        if bit == 1 {
+            (self.ch2_volume as f32) / 15.0
+        } else {
+            0.0
+        }
+    }
+
+    /// Gera output do canal 3 (wave pattern)
+    fn get_channel3_output(&mut self) -> f32 {
+        if !self.ch3_enabled || !self.ch3_dac_enable {
+            return 0.0;
+        }
+
+        // Lê sample do wave RAM
+        let byte_index = (self.ch3_wave_position / 2) as usize;
+        let nibble = if self.ch3_wave_position % 2 == 0 {
+            (self.ch3_wave_ram[byte_index] >> 4) & 0x0F
+        } else {
+            self.ch3_wave_ram[byte_index] & 0x0F
+        };
+
+        // Avança posição
+        self.ch3_wave_position = (self.ch3_wave_position + 1) % 32;
+
+        // Aplica volume
+        let volume_shift = match self.ch3_output_level {
+            0 => 4, // Mute
+            1 => 0, // 100%
+            2 => 1, // 50%
+            3 => 2, // 25%
+            _ => 4,
+        };
+
+        let sample = nibble >> volume_shift;
+        (sample as f32) / 15.0
+    }
+
+    /// Gera output do canal 4 (noise)
+    fn get_channel4_output(&mut self) -> f32 {
+        if !self.ch4_enabled {
+            return 0.0;
+        }
+
+        // LFSR para geração de ruído
+        let bit = (self.ch4_lfsr ^ (self.ch4_lfsr >> 1)) & 1;
+        self.ch4_lfsr >>= 1;
+        self.ch4_lfsr |= bit << 14;
+
+        // Para 7-bit mode
+        if self.ch4_width_mode {
+            self.ch4_lfsr |= bit << 6;
+        }
+
+        let output = if (self.ch4_lfsr & 1) == 0 { 1 } else { 0 };
+
+        if output == 1 {
+            (self.ch4_volume as f32) / 15.0
+        } else {
+            0.0
+        }
     }
 }
