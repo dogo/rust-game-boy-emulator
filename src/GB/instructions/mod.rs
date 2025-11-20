@@ -55,10 +55,10 @@ pub fn decode(opcode: u8) -> Instruction {
         0x08 => load::ld_a16_sp(opcode),
 
         // Arithmetic 8-bit
-        // INC r (registradores)
-        0x04 | 0x0C | 0x14 | 0x1C | 0x24 | 0x2C | 0x3C => arithmetic::inc_r(opcode),
-        // DEC r (registradores)
-        0x05 | 0x0D | 0x15 | 0x1D | 0x25 | 0x2D | 0x3D => arithmetic::dec_r(opcode),
+        // INC r (registradores) e (HL)
+        0x04 | 0x0C | 0x14 | 0x1C | 0x24 | 0x2C | 0x34 | 0x3C => arithmetic::inc_r(opcode),
+        // DEC r (registradores) e (HL)
+        0x05 | 0x0D | 0x15 | 0x1D | 0x25 | 0x2D | 0x35 | 0x3D => arithmetic::dec_r(opcode),
         0x80..=0x87 => arithmetic::add_a_r(opcode),
         0xC6 => arithmetic::add_a_d8(opcode),
         0x88..=0x8F => arithmetic::adc_a_r(opcode),
