@@ -79,6 +79,65 @@ impl CPU {
             // Detalhes extras para diagnosticar polling em IO
             let mut extra = String::new();
             match opcode {
+                // CB prefix — mostra operação, registrador/bit e valores relevantes
+                0xCB => {
+                    let cb = self.ram.read(pc.wrapping_add(1));
+                    let r_idx = cb & 0x07;
+                    let bit_idx = (cb >> 3) & 0x07;
+                    let r_name = match r_idx { 0 => "B", 1 => "C", 2 => "D", 3 => "E", 4 => "H", 5 => "L", 6 => "(HL)", _ => "A" };
+                    let val: u8 = if r_idx == 6 { self.ram.read(self.registers.get_hl()) } else { match r_idx { 0 => self.registers.get_b(), 1 => self.registers.get_c(), 2 => self.registers.get_d(), 3 => self.registers.get_e(), 4 => self.registers.get_h(), 5 => self.registers.get_l(), _ => self.registers.get_a(), } };
+
+                    let desc = if cb <= 0x07 {
+                        "RLC"
+                    } else if cb <= 0x0F {
+                        "RRC"
+                    } else if cb <= 0x17 {
+                        "RL"
+                    } else if cb <= 0x1F {
+                        "RR"
+                    } else if cb <= 0x27 {
+                        "SLA"
+                    } else if cb <= 0x2F {
+                        "SRA"
+                    } else if cb <= 0x37 {
+                        "SWAP"
+                    } else if cb <= 0x3F {
+                        "SRL"
+                    } else if cb <= 0x7F {
+                        "BIT"
+                    } else if cb <= 0xBF {
+                        "RES"
+                    } else {
+                        "SET"
+                    };
+
+                    extra = match desc {
+                        "BIT" => {
+                            let bit_set = (val & (1u8 << bit_idx)) != 0;
+                            format!(" CB={:02X} {} {},{} val={:02X} => Z={}", cb, desc, bit_idx, r_name, val, (!bit_set) as u8)
+                        }
+                        "RES" | "SET" => {
+                            format!(" CB={:02X} {} {},{} before={:02X}", cb, desc, bit_idx, r_name, val)
+                        }
+                        _ => {
+                            // Predict carry flag outcome for shifts/rotates
+                            let c_in = if self.registers.get_flag_c() { 1 } else { 0 };
+                            let bit7 = (val >> 7) & 1;
+                            let bit0 = val & 1;
+                            let c_out = match desc {
+                                "RLC" | "RL" | "SLA" => bit7,
+                                "RRC" | "RR" | "SRA" | "SRL" => bit0,
+                                "SWAP" => 0,
+                                _ => c_in,
+                            };
+                            if desc == "SWAP" {
+                                format!(" CB={:02X} {} {} val={:02X} C_in={} => C_out=0", cb, desc, r_name, val, c_in)
+                            } else {
+                                format!(" CB={:02X} {} {} val={:02X} C_in={} => C_out={}", cb, desc, r_name, val, c_in, c_out)
+                            }
+                        }
+                    };
+                }
                 // LDH A,(n)
                 0xF0 => {
                     let n = self.ram.read(pc.wrapping_add(1));
