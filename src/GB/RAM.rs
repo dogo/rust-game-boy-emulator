@@ -1,6 +1,13 @@
 pub struct RAM {
     // todas as 65.536 posições endereçáveis
     memory: [u8; 65536],
+    // ROM completa do cartucho (para mapeamento por banco)
+    rom: Vec<u8>,
+    cart_type: u8,
+    // Estado MBC (mínimo para MBC3)
+    rom_bank: u8,       // banco ROM selecionado para 0x4000..=0x7FFF (em MBC3, 1..=0x7F)
+    ram_enabled: bool,  // enable RAM/RTC (0x0000..=0x1FFF)
+    ram_bank: u8,       // seleção de banco de RAM ou registrador RTC (0x4000..=0x5FFF)
     // Estado interno do temporizador
     div_counter: u16,        // contador divisor interno de 16 bits (incrementa a cada ciclo da CPU)
     timer_last_signal: bool, // último nível do sinal do timer (enable && bit selecionado de div_counter)
@@ -9,14 +16,68 @@ pub struct RAM {
 
 impl RAM {
     pub fn new() -> Self {
-        RAM { memory: [0; 65536], div_counter: 0, timer_last_signal: false, tima_reload_delay: 0 }
+        RAM {
+            memory: [0; 65536],
+            rom: Vec::new(),
+            cart_type: 0x00,
+            rom_bank: 1,
+            ram_enabled: false,
+            ram_bank: 0,
+            div_counter: 0,
+            timer_last_signal: false,
+            tima_reload_delay: 0,
+        }
     }
 
     pub fn read(&self, address: u16) -> u8 {
-        self.memory[address as usize]
+        let addr = address as usize;
+        // Mapeamento de ROM (0x0000..=0x7FFF)
+        if addr < 0x8000 {
+            if self.is_mbc3() {
+                if addr < 0x4000 {
+                    return self.rom_get(addr);
+                } else {
+                    let off = addr - 0x4000;
+                    let bank = (self.rom_bank as usize).max(1);
+                    let idx = bank * 0x4000 + off;
+                    return self.rom_get(idx);
+                }
+            } else {
+                // ROM ONLY / sem MBC: banco 0 fixo
+                return self.rom_get(addr);
+            }
+        }
+        self.memory[addr]
     }
 
     pub fn write(&mut self, address: u16, byte: u8) {
+        // Tratamento de registradores MBC3 (mínimo)
+        if self.is_mbc3() {
+            match address {
+                0x0000..=0x1FFF => {
+                    // Enable/disable RAM/RTC (0x0A habilita, outros desabilitam)
+                    self.ram_enabled = (byte & 0x0F) == 0x0A;
+                    return;
+                }
+                0x2000..=0x3FFF => {
+                    // Seleção de banco ROM (7 bits, 0 => 1)
+                    let mut bank = byte & 0x7F;
+                    if bank == 0 { bank = 1; }
+                    self.rom_bank = bank;
+                    return;
+                }
+                0x4000..=0x5FFF => {
+                    // Seleção de banco RAM (00-03) ou registrador RTC (08-0C)
+                    self.ram_bank = byte;
+                    return;
+                }
+                0x6000..=0x7FFF => {
+                    // Latch clock (ignoramos por enquanto)
+                    return;
+                }
+                _ => {}
+            }
+        }
         match address {
             0xFF04 => { // escrita em DIV: zera o divisor interno e o registrador DIV
                 self.div_counter = 0;
@@ -42,14 +103,20 @@ impl RAM {
                 }
             }
             _ => {
+                // Evita escrita em ROM (0x0000..=0x7FFF)
+                if address < 0x8000 { return; }
                 self.memory[address as usize] = byte;
             }
         }
     }
 
     pub fn load_bytes(&mut self, data: &[u8]) {
-        let len = data.len().min(self.memory.len());
-        self.memory[..len].copy_from_slice(&data[..len]);
+        // Armazena ROM completa e define tipo de cartucho
+        self.rom = data.to_vec();
+        self.cart_type = if self.rom.len() > 0x0147 { self.rom[0x0147] } else { 0x00 };
+        self.rom_bank = 1;
+        // Limpa a RAM interna (áreas não-ROM)
+        self.memory = [0; 65536];
     }
 
     // Auxiliares do temporizador
@@ -110,5 +177,14 @@ impl RAM {
             }
             self.timer_last_signal = signal;
         }
+    }
+
+    // Utilidades MBC/ROM
+    fn is_mbc3(&self) -> bool {
+        matches!(self.cart_type, 0x0F..=0x13)
+    }
+
+    fn rom_get(&self, idx: usize) -> u8 {
+        if idx < self.rom.len() { self.rom[idx] } else { 0xFF }
     }
 }
