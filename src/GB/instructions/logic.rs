@@ -188,3 +188,38 @@ pub fn rra(opcode: u8) -> Instruction {
     }
     Instruction { opcode, name: "RRA", cycles: 4, size: 1, flags: &[], execute: exec }
 }
+
+// CPL - Complement A (0x2F)
+pub fn cpl(opcode: u8) -> Instruction {
+    fn exec(_instr: &Instruction, cpu: &mut CPU) -> u64 {
+        let a = cpu.registers.get_a();
+        cpu.registers.set_a(!a);
+        cpu.registers.set_flag_n(true);
+        cpu.registers.set_flag_h(true);
+        4
+    }
+    Instruction { opcode, name: "CPL", cycles: 4, size: 1, flags: &[], execute: exec }
+}
+
+// SCF - Set Carry Flag (0x37)
+pub fn scf(opcode: u8) -> Instruction {
+    fn exec(_instr: &Instruction, cpu: &mut CPU) -> u64 {
+        cpu.registers.set_flag_n(false);
+        cpu.registers.set_flag_h(false);
+        cpu.registers.set_flag_c(true);
+        4
+    }
+    Instruction { opcode, name: "SCF", cycles: 4, size: 1, flags: &[], execute: exec }
+}
+
+// CCF - Complement Carry Flag (0x3F)
+pub fn ccf(opcode: u8) -> Instruction {
+    fn exec(_instr: &Instruction, cpu: &mut CPU) -> u64 {
+        let c = cpu.registers.get_flag_c();
+        cpu.registers.set_flag_n(false);
+        cpu.registers.set_flag_h(false);
+        cpu.registers.set_flag_c(!c);
+        4
+    }
+    Instruction { opcode, name: "CCF", cycles: 4, size: 1, flags: &[], execute: exec }
+}

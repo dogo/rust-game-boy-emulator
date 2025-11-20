@@ -75,6 +75,10 @@ pub fn decode(opcode: u8) -> Instruction {
         0x0F => logic::rrca(opcode),
         0x17 => logic::rla(opcode),
         0x1F => logic::rra(opcode),
+        // CPL, SCF, CCF
+        0x2F => logic::cpl(opcode),
+        0x37 => logic::scf(opcode),
+        0x3F => logic::ccf(opcode),
         0xA0..=0xA7 => logic::and_a_r(opcode),
         0xE6 => logic::and_a_d8(opcode),
         0xB0..=0xB7 => logic::or_a_r(opcode),
