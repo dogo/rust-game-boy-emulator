@@ -1,4 +1,5 @@
 use crate::GB::PPU;
+use crate::GB::APU;
 
 pub struct RAM {
     // todas as 65.536 posições endereçáveis
@@ -39,6 +40,8 @@ pub struct RAM {
     joypad_buttons: u8,         // estado de ação: bit0=A, bit1=B, bit2=Select, bit3=Start (0=pressed, 1=released)
     // PPU (Picture Processing Unit)
     pub ppu: PPU::PPU,
+    // APU (Audio Processing Unit)
+    pub apu: APU::APU,
     // Controle de trace
     pub trace_enabled: bool,    // se true, emite logs de operações (MBC, timer, joypad)
 }
@@ -75,6 +78,7 @@ impl RAM {
             joypad_dpad: 0x0F,      // todos soltos (1111)
             joypad_buttons: 0x0F,   // todos soltos (1111)
             ppu: PPU::PPU::new(),
+            apu: APU::APU::new(),
             trace_enabled: false,
         }
     }
@@ -193,6 +197,10 @@ impl RAM {
         // Registradores PPU (0xFF40-0xFF4B)
         if address >= 0xFF40 && address <= 0xFF4B {
             return self.ppu.read_register(address);
+        }
+        // Registradores APU (0xFF10-0xFF3F)
+        if address >= 0xFF10 && address <= 0xFF3F {
+            return self.apu.read_register(address);
         }
         self.memory[addr]
     }
@@ -357,6 +365,12 @@ impl RAM {
                 let attr = self.ppu.read_oam(i*4 + 3);
                 eprintln!("#{i:02} Y={y:03} X={x:03} tile={tile:02X} attr={attr:02X}");
             }
+            return;
+        }
+
+        // Registradores APU (0xFF10-0xFF3F)
+        if address >= 0xFF10 && address <= 0xFF3F {
+            self.apu.write_register(address, byte);
             return;
         }
 

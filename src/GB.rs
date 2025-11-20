@@ -3,6 +3,7 @@
 pub mod RAM;
 pub mod CPU;
 pub mod PPU;
+pub mod APU;
 pub mod instructions;
 pub mod registers;
 pub mod trace;

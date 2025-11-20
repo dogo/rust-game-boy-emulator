@@ -113,11 +113,15 @@ impl CPU {
         (cycles, unknown)
     }
 
-    // Avança temporizadores e PPU com base nos ciclos consumidos pela instrução
+    // Avança temporizadores, APU e PPU com base nos ciclos consumidos pela instrução
     // PPU = Picture Processing Unit (Unidade de Processamento de Imagem)
+    // APU = Audio Processing Unit (Unidade de Processamento de Áudio)
     fn tick(&mut self, cycles: u32) {
         // Timers (DIV/TIMA/TMA/TAC)
         self.ram.tick_timers(cycles);
+
+        // APU (Audio Processing Unit)
+        self.ram.apu.tick(cycles);
 
         // PPU: 456 ciclos por linha, 154 linhas por frame (0..=153)
         let mut add = cycles as u16;
