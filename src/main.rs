@@ -139,26 +139,31 @@ fn run_sdl(mut cpu: GB::CPU::CPU) {
         }
         frame_counter += 1;
 
-        // Atualiza textura
-        let fb = &cpu.ram.ppu.framebuffer;
-        texture.with_lock(None, |buffer: &mut [u8], _pitch| {
-            for y in 0..144 {
-                for x in 0..160 {
-                    let idx = y * 160 + x;
-                    let color = fb[idx];
-                    // Mapear 0..3 → tons de cinza (0=branco, 3=preto)
-                    let shade = match color { 0 => 0xFF, 1 => 0xAA, 2 => 0x55, _ => 0x00 };
-                    let off = idx * 3;
-                    buffer[off] = shade;      // R
-                    buffer[off + 1] = shade;  // G
-                    buffer[off + 2] = shade;  // B
+        // Renderiza apenas quando um frame está completo (VBlank) para evitar tearing
+        if cpu.ram.ppu.frame_ready {
+            cpu.ram.ppu.frame_ready = false; // Reset flag
+
+            // Atualiza textura
+            let fb = &cpu.ram.ppu.framebuffer;
+            texture.with_lock(None, |buffer: &mut [u8], _pitch| {
+                for y in 0..144 {
+                    for x in 0..160 {
+                        let idx = y * 160 + x;
+                        let color = fb[idx];
+                        // Mapear 0..3 → tons de cinza (0=branco, 3=preto)
+                        let shade = match color { 0 => 0xFF, 1 => 0xAA, 2 => 0x55, _ => 0x00 };
+                        let off = idx * 3;
+                        buffer[off] = shade;      // R
+                        buffer[off + 1] = shade;  // G
+                        buffer[off + 2] = shade;  // B
+                    }
                 }
-            }
-        }).unwrap();
-        canvas.clear();
-        use sdl2::rect::Rect;
-        canvas.copy(&texture, None, Some(Rect::new(0, 0, 160 * scale, 144 * scale))).unwrap();
-        canvas.present();
+            }).unwrap();
+            canvas.clear();
+            use sdl2::rect::Rect;
+            canvas.copy(&texture, None, Some(Rect::new(0, 0, 160 * scale, 144 * scale))).unwrap();
+            canvas.present();
+        }
 
         // Sincroniza FPS
         let elapsed = last_frame.elapsed();
@@ -167,8 +172,40 @@ fn run_sdl(mut cpu: GB::CPU::CPU) {
         }
         last_frame = Instant::now();
 
-        if frame_counter % 120 == 0 {
+        if frame_counter % 60 == 0 {
             println!("Frames: {} | PC: {:04X} | LY: {}", frame_counter, cpu.registers.get_pc(), cpu.ram.ppu.ly);
+
+            // Debug PPU state
+            let lcdc = cpu.ram.read(0xFF40);
+            let scx = cpu.ram.read(0xFF43);
+            let scy = cpu.ram.read(0xFF42);
+            let wx = cpu.ram.read(0xFF4B);
+            let wy = cpu.ram.read(0xFF4A);
+
+            println!("  LCDC: {:02X} | BG: {} | WIN: {} | SPRITES: {} | 8x16: {}",
+                lcdc,
+                (lcdc & 0x01) != 0,
+                (lcdc & 0x20) != 0,
+                (lcdc & 0x02) != 0,
+                (lcdc & 0x04) != 0
+            );
+            println!("  Scroll: SCX={} SCY={} | Window: WX={} WY={}", scx, scy, wx, wy);
+
+            // Check OAM for sprites
+            let mut sprite_count = 0;
+            for i in 0..40 {
+                let y = cpu.ram.read(0xFE00 + i * 4);
+                if y > 0 && y < 160 {
+                    sprite_count += 1;
+                    if sprite_count <= 3 {  // Show first 3 sprites
+                        let x = cpu.ram.read(0xFE00 + i * 4 + 1);
+                        let tile = cpu.ram.read(0xFE00 + i * 4 + 2);
+                        let attr = cpu.ram.read(0xFE00 + i * 4 + 3);
+                        println!("  Sprite {}: Y={} X={} Tile={:02X} Attr={:02X}", i, y, x, tile, attr);
+                    }
+                }
+            }
+            println!("  Total sprites in OAM: {}", sprite_count);
         }
     }
     println!("Encerrando SDL2 após {} frames", frame_counter);

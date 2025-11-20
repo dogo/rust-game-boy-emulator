@@ -37,6 +37,9 @@ pub struct PPU {
 
     // OAM (Object Attribute Memory) - 160 bytes (40 sprites × 4 bytes)
     pub oam: [u8; 160],
+
+    // Flag para indicar quando um frame foi completado (VBlank)
+    pub frame_ready: bool,
 }
 
 impl PPU {
@@ -56,6 +59,7 @@ impl PPU {
             wy: 0,
             wx: 0,
             oam: [0; 160],
+            frame_ready: false,
         }
     }
 
@@ -187,6 +191,11 @@ impl PPU {
             return;
         }
 
+        // Verificar se sprites estão habilitados (bit 1 do LCDC)
+        if (self.lcdc & 0x02) == 0 {
+            return;
+        }
+
         // Coletar sprites visíveis nesta linha (máximo 10 por linha no hardware)
         let mut visible_sprites = Vec::new();
         let sprite_height = if (self.lcdc & 0x04) != 0 { 16 } else { 8 }; // 8x8 ou 8x16
@@ -194,11 +203,11 @@ impl PPU {
         for sprite_index in 0..40 {
             let sprite = self.get_sprite(sprite_index);
 
-            // Sprite Y é offset por 16, então Y=16 significa linha 0
-            let sprite_y = sprite.y.wrapping_sub(16);
+            let sprite_y = (sprite.y as i16) - 16;
+            let sprite_x = (sprite.x as i16) - 8;
 
             // Verificar se sprite está visível nesta linha
-            if line >= sprite_y && (line as i16) < (sprite_y as i16 + sprite_height as i16) {
+            if (line as i16) >= sprite_y && (line as i16) < sprite_y + sprite_height as i16 {
                 visible_sprites.push((sprite, sprite_index));
 
                 // Hardware GB limita a 10 sprites por linha

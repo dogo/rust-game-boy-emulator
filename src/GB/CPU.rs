@@ -6,6 +6,8 @@ pub struct CPU {
     pub registers: registers::Registers,
     pub ram: RAM::RAM,
     pub ime: bool,  // Interrupt Master Enable - Quando true habilita e intercepta interrupções
+    pub ime_enable_next: bool, // EI habilita IME após a próxima instrução
+    pub halted: bool, // CPU está em estado HALT
     pub opcode: u8,  // Opcode da instrução em execução
     pub cycles: u64,  // Contagem total de ciclos
     // Estado mínimo de temporizador/PPU para avançar loops de polling
@@ -19,6 +21,8 @@ impl CPU {
             registers: registers::Registers::new(),
             ram: RAM::RAM::new(),
             ime: false,
+            ime_enable_next: false,
+            halted: false,
             opcode: 0,
             cycles: 0,
             ppu_line_cycles: 0,
@@ -34,12 +38,30 @@ impl CPU {
         self.registers.set_hl(0x014D);
         self.registers.set_sp(0xFFFE);
         self.registers.set_pc(0x0100); // Entrada no cartucho
+
+        // IO registers pós-boot (valores típicos DMG)
+        self.ram.write(0xFF40, 0x91); // LCDC - LCD ligado, BG habilitado (sprites o jogo habilita depois)
+        self.ram.write(0xFF42, 0x00); // SCY
+        self.ram.write(0xFF43, 0x00); // SCX
+        self.ram.write(0xFF44, 0x00); // LY
+        self.ram.write(0xFF45, 0x00); // LYC
+        self.ram.write(0xFF47, 0xFC); // BGP - paleta background
+        self.ram.write(0xFF48, 0xFF); // OBP0 - paleta sprites 0
+        self.ram.write(0xFF49, 0xFF); // OBP1 - paleta sprites 1
+        self.ram.write(0xFF4A, 0x00); // WY - window Y
+        self.ram.write(0xFF4B, 0x00); // WX - window X
+
+        eprintln!("🚀 POST-BOOT STATE 🚀");
+        eprintln!("Registers: AF={:04X} BC={:04X} DE={:04X} HL={:04X} SP={:04X} PC={:04X}",
+                 self.registers.get_af(), self.registers.get_bc(), self.registers.get_de(),
+                 self.registers.get_hl(), self.registers.get_sp(), self.registers.get_pc());
+        eprintln!("IO: LCDC={:02X} BGP={:02X} OBP0={:02X} OBP1={:02X}",
+                 self.ram.read(0xFF40), self.ram.read(0xFF47), self.ram.read(0xFF48), self.ram.read(0xFF49));
     }
 
     pub fn load_rom(&mut self, data: &[u8]) {
         self.ram.load_bytes(data);
         // Inicializa alguns registradores de IO comuns
-        self.ram.write(0xFF44, 0); // LY
         self.ram.write(0xFF04, 0); // DIV
         self.ram.write(0xFF0F, 0); // IF
         self.ram.write(0xFFFF, 0); // IE
@@ -58,12 +80,34 @@ impl CPU {
     }
 
     pub fn execute_next(&mut self) -> (u64, bool) {
+        // Se CPU está em HALT, não executa instruções até uma interrupção acordar
+        if self.halted {
+            let if_reg = self.ram.read(0xFF0F);
+            let ie_reg = self.ram.read(0xFFFF);
+            if (if_reg & ie_reg) != 0 {
+                self.halted = false;
+                eprintln!("💤 HALT wake up! IF={:02X} IE={:02X}", if_reg, ie_reg);
+            } else {
+                // CPU ainda halted, simula 4 ciclos de espera
+                self.tick(4);
+                return (4, false);
+            }
+        }
+
         let opcode = self.fetch_next();
         self.opcode = opcode;
         let instr = CPU::decode(opcode, false);
         let unknown = instr.name == "UNKNOWN";
         let cycles = (instr.execute)(&instr, self);
         self.cycles += cycles as u64;
+
+        // EI habilita IME após a próxima instrução
+        if self.ime_enable_next {
+            self.ime = true;
+            self.ime_enable_next = false;
+            eprintln!("✅ IME enabled after EI delay");
+        }
+
         self.tick(cycles as u32);
         self.service_interrupts();
         (cycles, unknown)
@@ -115,6 +159,9 @@ impl CPU {
                     }
 
                     self.ram.write(0xFF0F, iflags);
+
+                    // Marca que o frame está pronto para renderização
+                    self.ram.ppu.frame_ready = true;
                 }
                 if self.ppu_ly > 153 {
                     self.ppu_ly = 0;
