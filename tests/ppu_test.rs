@@ -1,6 +1,9 @@
+// Integration tests para PPU
+// cargo test ppu_test
+
 #[cfg(test)]
 mod ppu_tests {
-    use crate::GB::PPU::PPU;
+    use gb_emu::GB::PPU::PPU;
 
     #[test]
     fn test_decode_tile_simple() {

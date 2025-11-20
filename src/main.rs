@@ -1,7 +1,6 @@
 #![allow(non_snake_case)]
 
-mod GB;
-
+use gb_emu::GB;
 use std::env;
 use std::fs;
 

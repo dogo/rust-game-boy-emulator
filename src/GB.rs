@@ -6,9 +6,3 @@ pub mod PPU;
 pub mod instructions;
 pub mod registers;
 pub mod trace;
-
-#[cfg(test)]
-mod joypad_test;
-
-#[cfg(test)]
-mod ppu_test;

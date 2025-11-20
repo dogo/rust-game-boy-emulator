@@ -1,8 +1,9 @@
-// cargo test --lib joypad_test
+// Integration tests para joypad
+// cargo test joypad_test
 
 #[cfg(test)]
 mod joypad_tests {
-    use crate::GB::CPU::CPU;
+    use gb_emu::GB::CPU::CPU;
 
     #[test]
     fn test_joypad_basic_operations() {
