@@ -182,3 +182,38 @@ pub fn dec_r(opcode: u8) -> Instruction {
     }
     Instruction { opcode, name: "DEC r", cycles: 4, size: 1, flags: &[FlagBits::Z, FlagBits::N, FlagBits::H], execute: exec }
 }
+
+// DAA - Decimal Adjust Accumulator (0x27)
+// Ajusta A para BCD após ADD/ADC/SUB/SBC conforme flags N,H,C
+pub fn daa(opcode: u8) -> Instruction {
+    fn exec(_instr: &Instruction, cpu: &mut CPU) -> u64 {
+        let mut a = cpu.registers.get_a();
+        let n = cpu.registers.get_flag_n();
+        let mut c = cpu.registers.get_flag_c();
+        let h = cpu.registers.get_flag_h();
+
+        let mut adjust: u8 = 0;
+        if !n {
+            if c || a > 0x99 {
+                adjust |= 0x60;
+                c = true;
+            }
+            if h || (a & 0x0F) > 0x09 {
+                adjust |= 0x06;
+            }
+            a = a.wrapping_add(adjust);
+        } else {
+            if c { adjust |= 0x60; }
+            if h { adjust |= 0x06; }
+            a = a.wrapping_sub(adjust);
+        }
+
+        cpu.registers.set_a(a);
+        cpu.registers.set_flag_z(a == 0);
+        // N permanece como está
+        cpu.registers.set_flag_h(false);
+        cpu.registers.set_flag_c(c);
+        4
+    }
+    Instruction { opcode, name: "DAA", cycles: 4, size: 1, flags: &[], execute: exec }
+}

@@ -88,6 +88,9 @@ pub fn decode(opcode: u8) -> Instruction {
         0x0B | 0x1B | 0x2B | 0x3B => arithmetic::dec_rr(opcode),
         0x09 | 0x19 | 0x29 | 0x39 => arithmetic::add_hl_rr(opcode),
 
+        // DAA (ajuste decimal)
+        0x27 => arithmetic::daa(opcode),
+
         // Jumps
         0xC3 => jump::jp_a16(opcode),
         0xC2 | 0xCA | 0xD2 | 0xDA => jump::jp_cc_a16(opcode),
