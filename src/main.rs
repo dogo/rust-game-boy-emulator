@@ -81,6 +81,6 @@ fn main() {
 
     println!("PC inicial: {:04X}", cpu.registers.get_pc());
     println!("Iniciando trace ...");
-    cpu.run_with_trace(usize::MAX);
+    GB::trace::run_with_trace(&mut cpu, usize::MAX);
     println!("Trace encerrado.");
 }
