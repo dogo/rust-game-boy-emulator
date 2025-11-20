@@ -74,7 +74,8 @@ fn main() {
 
     match cart_type {
         0x0F..=0x13 => {
-            println!("Info: MBC3 ROM banking implementado (básico); RAM e RTC não suportados ainda.");
+            println!("Info: MBC3 implementado — ROM banking, RAM banking (4x8KB) e RTC com latch funcionais.");
+            println!("      Limitação: RTC não avança automaticamente, RAM não é persistida em disco.");
         }
         0x01..=0x03 => {
             println!("Aviso: {} não implementado — ROMs com múltiplos bancos não funcionarão.", cart_str);

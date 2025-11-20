@@ -140,4 +140,52 @@ impl CPU {
         self.cycles += 20;
         self.tick(20);
     }
+
+    // === API pública de joypad ===
+    // Botões D-pad: Right=0, Left=1, Up=2, Down=3
+    // Botões ação: A=0, B=1, Select=2, Start=3
+
+    pub fn press_button(&mut self, button: &str) {
+        let btn = button.to_uppercase();
+        match btn.as_str() {
+            // D-pad
+            "RIGHT" => self.ram.press_joypad_button(0, true),
+            "LEFT"  => self.ram.press_joypad_button(1, true),
+            "UP"    => self.ram.press_joypad_button(2, true),
+            "DOWN"  => self.ram.press_joypad_button(3, true),
+            // Ação
+            "A"      => self.ram.press_joypad_button(0, false),
+            "B"      => self.ram.press_joypad_button(1, false),
+            "SELECT" => self.ram.press_joypad_button(2, false),
+            "START"  => self.ram.press_joypad_button(3, false),
+            _ => {
+                println!("[JOYPAD] Botão desconhecido: {}", button);
+                return;
+            }
+        }
+        println!("[JOYPAD] {} pressionado", btn);
+
+        // Opcional: requisitar interrupção de joypad (bit 4 de IF)
+        // let mut iflags = self.ram.read(0xFF0F);
+        // iflags |= 0x10;
+        // self.ram.write(0xFF0F, iflags);
+    }
+
+    pub fn release_button(&mut self, button: &str) {
+        let btn = button.to_uppercase();
+        match btn.as_str() {
+            // D-pad
+            "RIGHT" => self.ram.release_joypad_button(0, true),
+            "LEFT"  => self.ram.release_joypad_button(1, true),
+            "UP"    => self.ram.release_joypad_button(2, true),
+            "DOWN"  => self.ram.release_joypad_button(3, true),
+            // Ação
+            "A"      => self.ram.release_joypad_button(0, false),
+            "B"      => self.ram.release_joypad_button(1, false),
+            "SELECT" => self.ram.release_joypad_button(2, false),
+            "START"  => self.ram.release_joypad_button(3, false),
+            _ => return,
+        }
+        println!("[JOYPAD] {} solto", btn);
+    }
 }

@@ -26,6 +26,11 @@ pub struct RAM {
     div_counter: u16,        // contador divisor interno de 16 bits (incrementa a cada ciclo da CPU)
     timer_last_signal: bool, // último nível do sinal do timer (enable && bit selecionado de div_counter)
     tima_reload_delay: u8,   // se >0, contagem regressiva para recarregar TIMA com TMA e solicitar interrupção
+    // Joypad (0xFF00)
+    joypad_select_dpad: bool,   // true = selecionou leitura de direções (D-pad)
+    joypad_select_buttons: bool, // true = selecionou leitura de botões de ação
+    joypad_dpad: u8,            // estado do D-pad: bit0=Right, bit1=Left, bit2=Up, bit3=Down (0=pressed, 1=released)
+    joypad_buttons: u8,         // estado de ação: bit0=A, bit1=B, bit2=Select, bit3=Start (0=pressed, 1=released)
 }
 
 impl RAM {
@@ -52,6 +57,10 @@ impl RAM {
             div_counter: 0,
             timer_last_signal: false,
             tima_reload_delay: 0,
+            joypad_select_dpad: false,
+            joypad_select_buttons: false,
+            joypad_dpad: 0x0F,      // todos soltos (1111)
+            joypad_buttons: 0x0F,   // todos soltos (1111)
         }
     }
 
@@ -73,7 +82,42 @@ impl RAM {
                 return self.rom_get(addr);
             }
         }
-        // Mapeamento de RAM externa do cartucho (0xA000..=0xBFFF)
+        // Joypad (0xFF00 - P1/JOYP)
+        if addr == 0xFF00 {
+            // Bits 7-6: não usados (retornam 1)
+            // Bit 5: seleção de botões de ação (0=selecionado)
+            // Bit 4: seleção de D-pad (0=selecionado)
+            // Bits 3-0: estado dos botões (0=pressed, 1=released)
+            let mut val = 0xC0; // bits 7-6 sempre 1
+
+            // Refletir seleção nos bits 5-4
+            if !self.joypad_select_buttons {
+                val |= 0x20;
+            }
+            if !self.joypad_select_dpad {
+                val |= 0x10;
+            }
+
+            // Retornar estado dos botões conforme seleção
+            // Se ambos selecionados, retorna AND (qualquer botão pressionado em qualquer grupo)
+            // Se nenhum selecionado, retorna 0x0F (todos soltos)
+            let button_bits = if self.joypad_select_dpad && self.joypad_select_buttons {
+                // Ambos selecionados: AND lógico (se qualquer estiver pressed=0, resultado é 0)
+                self.joypad_dpad & self.joypad_buttons
+            } else if self.joypad_select_dpad {
+                // Apenas D-pad selecionado
+                self.joypad_dpad
+            } else if self.joypad_select_buttons {
+                // Apenas botões de ação selecionados
+                self.joypad_buttons
+            } else {
+                // Nenhum selecionado
+                0x0F
+            };
+
+            val |= button_bits & 0x0F;
+            return val;
+        }        // Mapeamento de RAM externa do cartucho (0xA000..=0xBFFF)
         if addr >= 0xA000 && addr < 0xC000 {
             if self.is_mbc3() && self.ram_enabled {
                 if self.ram_bank <= 0x03 {
@@ -160,6 +204,21 @@ impl RAM {
             }
         }
         match address {
+            0xFF00 => { // Joypad (P1/JOYP)
+                // Bits 5-4 controlam qual grupo de botões é lido (0=selecionado)
+                let old_sel_buttons = self.joypad_select_buttons;
+                let old_sel_dpad = self.joypad_select_dpad;
+
+                self.joypad_select_buttons = (byte & 0x20) == 0;
+                self.joypad_select_dpad = (byte & 0x10) == 0;
+
+                if old_sel_buttons != self.joypad_select_buttons || old_sel_dpad != self.joypad_select_dpad {
+                    println!("[JOYPAD] Seleção: dpad={} buttons={}",
+                             self.joypad_select_dpad as u8, self.joypad_select_buttons as u8);
+                }
+
+                // Bits 3-0 são apenas leitura (estado dos botões), ignoramos escrita neles
+            }
             0xFF04 => { // escrita em DIV: zera o divisor interno e o registrador DIV
                 self.div_counter = 0;
                 self.memory[address as usize] = 0;
@@ -290,5 +349,23 @@ impl RAM {
 
     fn rom_get(&self, idx: usize) -> u8 {
         if idx < self.rom.len() { self.rom[idx] } else { 0xFF }
+    }
+
+    // === API pública para manipular joypad ===
+
+    pub fn press_joypad_button(&mut self, button: u8, is_dpad: bool) {
+        if is_dpad {
+            self.joypad_dpad &= !(1 << button);
+        } else {
+            self.joypad_buttons &= !(1 << button);
+        }
+    }
+
+    pub fn release_joypad_button(&mut self, button: u8, is_dpad: bool) {
+        if is_dpad {
+            self.joypad_dpad |= 1 << button;
+        } else {
+            self.joypad_buttons |= 1 << button;
+        }
     }
 }
