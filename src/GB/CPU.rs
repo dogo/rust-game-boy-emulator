@@ -8,6 +8,10 @@ pub struct CPU {
     pub ime: bool,  // Interrupt Master Enable - Quando true habilita e intercepta interrupções
     pub opcode: u8,  // Opcode da instrução em execução
     pub cycles: u64,  // Contagem total de ciclos
+    // Estado mínimo de temporizador/PPU para avançar loops de polling
+    ppu_line_cycles: u16, // ciclos acumulados na linha atual (456 ciclos por linha)
+    ppu_ly: u8,           // linha atual (0..=153), espelhada em 0xFF44
+    timer_div_counter: u32, // acumula ciclos para incrementar DIV (a cada 256 ciclos)
 }
 
 impl CPU {
@@ -18,6 +22,9 @@ impl CPU {
             ime: false,
             opcode: 0,
             cycles: 0,
+            ppu_line_cycles: 0,
+            ppu_ly: 0,
+            timer_div_counter: 0,
         }
     }
 
@@ -33,6 +40,11 @@ impl CPU {
 
     pub fn load_rom(&mut self, data: &[u8]) {
         self.ram.load_bytes(data);
+        // Inicializa alguns registradores de IO comuns
+        self.ram.write(0xFF44, 0); // LY
+        self.ram.write(0xFF04, 0); // DIV
+        self.ram.write(0xFF0F, 0); // IF
+        self.ram.write(0xFFFF, 0); // IE
     }
 
     pub fn fetch_next(&mut self) -> u8 {
@@ -54,6 +66,8 @@ impl CPU {
         let unknown = instr.name == "UNKNOWN";
         let cycles = (instr.execute)(&instr, self);
         self.cycles += cycles as u64;
+        self.tick(cycles as u32);
+        self.service_interrupts();
         (cycles, unknown)
     }
 
@@ -67,5 +81,82 @@ impl CPU {
             if unknown { println!("Parando: opcode desconhecido {:02X} em {:04X}", opcode, pc); break; }
         }
         println!("Total cycles: {}", self.cycles);
+    }
+
+    // Avança temporizadores e PPU com base nos ciclos consumidos pela instrução
+    // PPU = Picture Processing Unit (Unidade de Processamento de Imagem)
+    fn tick(&mut self, cycles: u32) {
+        // Timer DIV (0xFF04) incrementa a cada 256 ciclos de CPU
+        self.timer_div_counter += cycles;
+        while self.timer_div_counter >= 256 {
+            self.timer_div_counter -= 256;
+            let div = self.ram.read(0xFF04).wrapping_add(1);
+            self.ram.write(0xFF04, div);
+        }
+
+        // PPU: 456 ciclos por linha, 154 linhas por frame (0..=153)
+        let mut add = cycles as u16;
+        while add > 0 {
+            let space = 456u16.saturating_sub(self.ppu_line_cycles);
+            let step = add.min(space);
+            self.ppu_line_cycles = self.ppu_line_cycles.saturating_add(step);
+            add -= step;
+            if self.ppu_line_cycles >= 456 {
+                self.ppu_line_cycles = 0;
+                // próxima linha
+                self.ppu_ly = self.ppu_ly.wrapping_add(1);
+                if self.ppu_ly == 144 {
+                    // Início de VBlank: seta IF bit 0 (VBlank)
+                    let mut iflags = self.ram.read(0xFF0F);
+                    iflags |= 0x01;
+                    self.ram.write(0xFF0F, iflags);
+                }
+                if self.ppu_ly > 153 { self.ppu_ly = 0; }
+                // Espelha LY em 0xFF44
+                self.ram.write(0xFF44, self.ppu_ly);
+            }
+        }
+    }
+
+    // Atende interrupções se habilitadas (IME) e pendentes (IF & IE)
+    fn service_interrupts(&mut self) {
+        if !self.ime { return; }
+        let ie = self.ram.read(0xFFFF);
+        let mut iflags = self.ram.read(0xFF0F);
+        let pending = ie & iflags;
+        if pending == 0 { return; }
+
+        // Desabilita IME e atende na ordem de prioridade
+        self.ime = false;
+        let (vector, mask) = if (pending & 0x01) != 0 {
+            (0x0040u16, 0x01u8) // VBlank
+        } else if (pending & 0x02) != 0 {
+            (0x0048u16, 0x02u8) // LCD STAT
+        } else if (pending & 0x04) != 0 {
+            (0x0050u16, 0x04u8) // Timer
+        } else if (pending & 0x08) != 0 {
+            (0x0058u16, 0x08u8) // Serial
+        } else {
+            (0x0060u16, 0x10u8) // Joypad
+        };
+
+        // Limpa o bit atendido em IF
+        iflags &= !mask;
+        self.ram.write(0xFF0F, iflags);
+
+        // Push PC e jump para vetor
+        let pc = self.registers.get_pc();
+        // push u16 na pilha
+        let mut sp = self.registers.get_sp();
+        sp = sp.wrapping_sub(1);
+        self.ram.write(sp, (pc >> 8) as u8);
+        sp = sp.wrapping_sub(1);
+        self.ram.write(sp, (pc & 0xFF) as u8);
+        self.registers.set_sp(sp);
+        self.registers.set_pc(vector);
+
+        // Tempo para atendimento de interrupção (~20 ciclos)
+        self.cycles += 20;
+        self.tick(20);
     }
 }
