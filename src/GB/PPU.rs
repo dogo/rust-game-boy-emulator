@@ -50,6 +50,37 @@ impl PPU {
         }
     }
 
+    // Verifica se deve gerar LCD STAT interrupt
+    // STAT bits: 7=n/a, 6=LYC=LY, 5=Mode2, 4=Mode1, 3=Mode0, 2=LYC flag, 1-0=modo atual
+    pub fn check_stat_interrupt(&self) -> bool {
+        // Bit 4: VBlank interrupt enabled (Mode 1)
+        // Verifica se estamos em VBlank (ly >= 144) e interrupt habilitado
+        if self.ly >= 144 && (self.stat & 0x10) != 0 {
+            return true;
+        }
+
+        // Bit 6: LYC=LY coincidence interrupt
+        if self.ly == self.lyc && (self.stat & 0x40) != 0 {
+            return true;
+        }
+
+        false
+    }
+
+    // Atualiza flag LYC=LY (bit 2 do STAT)
+    pub fn update_lyc_flag(&mut self) {
+        if self.ly == self.lyc {
+            self.stat |= 0x04;  // Seta bit 2
+        } else {
+            self.stat &= !0x04; // Limpa bit 2
+        }
+    }
+
+    // Atualiza modo PPU no registrador STAT (bits 1-0)
+    pub fn update_stat_mode(&mut self, mode: u8) {
+        self.stat = (self.stat & 0xFC) | (mode & 0x03);
+    }
+
     // Decodifica um tile (16 bytes → 8×8 pixels, 2bpp)
     // Cada linha de pixels = 2 bytes:
     //   byte1: bit baixo da cor (LSB)

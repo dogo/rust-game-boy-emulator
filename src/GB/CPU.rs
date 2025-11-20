@@ -91,19 +91,45 @@ impl CPU {
                 // Renderiza scanline se estiver na região visível (0-143)
                 if old_ly < 144 {
                     self.ram.ppu.ly = old_ly;
+                    // Mode 3: Pixel Transfer (durante renderização)
+                    self.ram.ppu.update_stat_mode(3);
                     self.ram.ppu.render_bg_scanline();
+                    // Mode 0: HBlank (após renderização)
+                    self.ram.ppu.update_stat_mode(0);
+                } else if old_ly >= 144 && old_ly <= 153 {
+                    // Mode 1: VBlank (linhas 144-153)
+                    self.ram.ppu.update_stat_mode(1);
                 }
 
                 if self.ppu_ly == 144 {
                     // Início de VBlank: seta IF bit 0 (VBlank)
                     let mut iflags = self.ram.read(0xFF0F);
                     iflags |= 0x01;
+
+                    // Verifica se deve gerar LCD STAT interrupt (bit 1)
+                    self.ram.ppu.update_stat_mode(1); // Mode 1 = VBlank
+                    if self.ram.ppu.check_stat_interrupt() {
+                        iflags |= 0x02; // Seta bit 1 (LCD STAT)
+                    }
+
                     self.ram.write(0xFF0F, iflags);
                 }
-                if self.ppu_ly > 153 { self.ppu_ly = 0; }
+                if self.ppu_ly > 153 {
+                    self.ppu_ly = 0;
+                    // Mode 2: OAM Search (início de frame)
+                    self.ram.ppu.update_stat_mode(2);
+                }
                 // Espelha LY em 0xFF44 e no PPU
                 self.ram.ppu.ly = self.ppu_ly;
                 self.ram.write(0xFF44, self.ppu_ly);
+
+                // Atualiza flag LYC=LY e verifica STAT interrupt
+                self.ram.ppu.update_lyc_flag();
+                if self.ram.ppu.check_stat_interrupt() {
+                    let mut iflags = self.ram.read(0xFF0F);
+                    iflags |= 0x02; // Seta bit 1 (LCD STAT)
+                    self.ram.write(0xFF0F, iflags);
+                }
             }
         }
     }

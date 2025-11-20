@@ -214,4 +214,58 @@ mod ppu_tests {
             }
         }
     }
+
+    #[test]
+    fn test_lcd_stat_interrupt_vblank() {
+        let mut ppu = PPU::new();
+
+        // Habilitar VBlank interrupt no STAT (bit 4)
+        ppu.stat = 0x10;
+        ppu.ly = 144; // VBlank começa na linha 144
+
+        // Atualizar modo para VBlank
+        ppu.update_stat_mode(1);
+
+        // Verificar que STAT interrupt deve ser gerado
+        assert!(ppu.check_stat_interrupt(), "STAT interrupt deveria ser gerado no VBlank");
+
+        // Verificar modo PPU
+        assert_eq!(ppu.stat & 0x03, 1, "Modo PPU deveria ser 1 (VBlank)");
+    }
+
+    #[test]
+    fn test_lcd_stat_interrupt_lyc_equals_ly() {
+        let mut ppu = PPU::new();
+
+        // Configurar LYC=LY coincidence
+        ppu.ly = 100;
+        ppu.lyc = 100;
+
+        // Habilitar LYC=LY interrupt no STAT (bit 6)
+        ppu.stat = 0x40;
+
+        // Atualizar flag LYC=LY
+        ppu.update_lyc_flag();
+
+        // Verificar que flag LYC foi setada (bit 2)
+        assert_eq!(ppu.stat & 0x04, 0x04, "Flag LYC=LY deveria estar setada");
+
+        // Verificar que STAT interrupt deve ser gerado
+        assert!(ppu.check_stat_interrupt(), "STAT interrupt deveria ser gerado quando LYC=LY");
+    }
+
+    #[test]
+    fn test_lcd_stat_interrupt_disabled() {
+        let mut ppu = PPU::new();
+
+        // Desabilitar todos os interrupts STAT
+        ppu.stat = 0x00;
+        ppu.ly = 144; // VBlank
+
+        // Atualizar modo para VBlank
+        ppu.update_stat_mode(1);
+
+        // Verificar que STAT interrupt NÃO deve ser gerado
+        assert!(!ppu.check_stat_interrupt(), "STAT interrupt não deveria ser gerado quando desabilitado");
+    }
 }
