@@ -53,6 +53,7 @@ pub fn decode(opcode: u8) -> Instruction {
         // LD 16-bit
         0x01 | 0x11 | 0x21 | 0x31 => load::ld_rr_d16(opcode),
         0x08 => load::ld_a16_sp(opcode),
+        0xF9 => load::ld_sp_hl(opcode),
 
         // Arithmetic 8-bit
         // INC r (registradores) e (HL)

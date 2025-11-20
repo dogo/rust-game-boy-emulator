@@ -323,3 +323,19 @@ pub fn ld_a16_sp(opcode: u8) -> Instruction {
         execute: exec,
     }
 }
+
+pub fn ld_sp_hl(opcode: u8) -> Instruction {
+    fn exec(_instr: &Instruction, cpu: &mut CPU) -> u64 {
+        let hl = cpu.registers.get_hl();
+        cpu.registers.set_sp(hl);
+        8
+    }
+    Instruction {
+        opcode,
+        name: "LD SP,HL",
+        cycles: 8,
+        size: 1,
+        flags: &[],
+        execute: exec,
+    }
+}
