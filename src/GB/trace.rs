@@ -11,6 +11,10 @@ pub fn trace_mbc_rom_bank(old_bank: u8, new_bank: u8) {
     println!("[MBC] Banco ROM: {:02X} -> {:02X}", old_bank, new_bank);
 }
 
+pub fn trace_mbc5_rom_bank(old_bank: u16, new_bank: u16) {
+    println!("[MBC5] Banco ROM: {:03X} -> {:03X}", old_bank, new_bank);
+}
+
 pub fn trace_mbc_ram_rtc_select(byte: u8) {
     let desc = if byte <= 0x03 {
         format!("RAM banco {:02X}", byte)

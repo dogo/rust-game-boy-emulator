@@ -15,6 +15,10 @@ pub struct RAM {
     mbc1_bank_reg1: u8, // registrador de banco 1 (bits 0-4 do ROM bank)
     mbc1_bank_reg2: u8, // registrador de banco 2 (bits 5-6 do ROM bank ou RAM bank)
     mbc1_mode: u8,      // 0=ROM banking mode, 1=RAM banking mode
+    // MBC5 específico
+    mbc5_rom_bank_low: u8,  // bits 0-7 do ROM bank (0x2000-0x2FFF)
+    mbc5_rom_bank_high: u8, // bit 8 do ROM bank (0x3000-0x3FFF)
+    mbc5_ram_bank: u8,      // bits 0-3 = RAM bank, bit 3 = rumble
     // RAM externa do cartucho (MBC3: até 4 bancos de 8KB = 32KB)
     cart_ram: Vec<u8>,
     // RTC (Real Time Clock) do MBC3
@@ -58,7 +62,10 @@ impl RAM {
             mbc1_bank_reg1: 1,  // banco 1 por padrão (0 é mapeado para 1)
             mbc1_bank_reg2: 0,  // banco alto/RAM 0 por padrão
             mbc1_mode: 0,       // ROM banking mode por padrão
-            cart_ram: vec![0; 32 * 1024], // 32KB = 4 bancos de 8KB
+            mbc5_rom_bank_low: 1,  // banco ROM baixo (1 por padrão)
+            mbc5_rom_bank_high: 0, // banco ROM alto (bit 8)
+            mbc5_ram_bank: 0,      // banco RAM + rumble
+            cart_ram: vec![0; 128 * 1024], // 128KB = 16 bancos de 8KB (MBC5 max)
             rtc_s: 0,
             rtc_m: 0,
             rtc_h: 0,
@@ -114,6 +121,15 @@ impl RAM {
                     let idx = bank * 0x4000 + off;
                     return self.rom_get(idx);
                 }
+            } else if self.is_mbc5() {
+                if addr < 0x4000 {
+                    return self.rom_get(addr); // Banco 0 fixo
+                } else {
+                    let off = addr - 0x4000;
+                    let bank = self.mbc5_effective_rom_bank() as usize;
+                    let idx = bank * 0x4000 + off;
+                    return self.rom_get(idx);
+                }
             } else {
                 // ROM ONLY / sem MBC: banco 0 fixo
                 return self.rom_get(addr);
@@ -160,7 +176,7 @@ impl RAM {
             return val;
         }        // Mapeamento de RAM externa do cartucho (0xA000..=0xBFFF)
         if addr >= 0xA000 && addr < 0xC000 {
-            if (self.is_mbc1() || self.is_mbc3()) && self.ram_enabled {
+            if (self.is_mbc1() || self.is_mbc3() || self.is_mbc5()) && self.ram_enabled {
                 if self.is_mbc1() {
                     // MBC1: usa banco efetivo baseado no modo
                     let bank = self.mbc1_effective_ram_bank();
@@ -185,6 +201,13 @@ impl RAM {
                             0x0C => self.rtc_latched_dh,
                             _ => 0xFF,
                         };
+                    }
+                } else if self.is_mbc5() {
+                    // MBC5: RAM banking simples (bits 0-3 do ram_bank)
+                    let bank = (self.mbc5_ram_bank & 0x0F) as usize; // ignora rumble bit
+                    let ram_addr = bank * 0x2000 + (addr - 0xA000);
+                    if ram_addr < self.cart_ram.len() {
+                        return self.cart_ram[ram_addr];
                     }
                 }
             }
@@ -264,6 +287,68 @@ impl RAM {
                             self.mbc1_mode = new_mode;
                         }
                     }
+                    return;
+                }
+                _ => {}
+            }
+        }
+
+        // Tratamento de registradores MBC5
+        if self.is_mbc5() {
+            match address {
+                0x0000..=0x1FFF => {
+                    // Enable/disable RAM (0x0A habilita, outros desabilitam)
+                    let old = self.ram_enabled;
+                    self.ram_enabled = (byte & 0x0F) == 0x0A;
+                    if self.trace_enabled && old != self.ram_enabled {
+                        crate::GB::trace::trace_mbc_ram_enable(self.ram_enabled);
+                    }
+                    return;
+                }
+                0x2000..=0x2FFF => {
+                    // ROM bank bits 0-7
+                    if self.mbc5_rom_bank_low != byte {
+                        if self.trace_enabled {
+                            let old_bank = self.mbc5_effective_rom_bank();
+                            self.mbc5_rom_bank_low = byte;
+                            let new_bank = self.mbc5_effective_rom_bank();
+                            crate::GB::trace::trace_mbc5_rom_bank(old_bank, new_bank);
+                        } else {
+                            self.mbc5_rom_bank_low = byte;
+                        }
+                    } else {
+                        self.mbc5_rom_bank_low = byte;
+                    }
+                    return;
+                }
+                0x3000..=0x3FFF => {
+                    // ROM bank bit 8 (só bit 0 é usado)
+                    let new_high = byte & 0x01;
+                    if self.mbc5_rom_bank_high != new_high {
+                        if self.trace_enabled {
+                            let old_bank = self.mbc5_effective_rom_bank();
+                            self.mbc5_rom_bank_high = new_high;
+                            let new_bank = self.mbc5_effective_rom_bank();
+                            crate::GB::trace::trace_mbc5_rom_bank(old_bank, new_bank);
+                        } else {
+                            self.mbc5_rom_bank_high = new_high;
+                        }
+                    } else {
+                        self.mbc5_rom_bank_high = new_high;
+                    }
+                    return;
+                }
+                0x4000..=0x5FFF => {
+                    // RAM bank (bits 0-3) + rumble (bit 3)
+                    let new_ram_bank = byte & 0x0F; // 4 bits
+                    if (self.mbc5_ram_bank & 0x0F) != new_ram_bank {
+                        if self.trace_enabled {
+                            let rumble = (new_ram_bank & 0x08) != 0;
+                            let bank = new_ram_bank & 0x07;
+                            println!("[MBC5] RAM banco: {} | Rumble: {}", bank, if rumble { "ON" } else { "OFF" });
+                        }
+                    }
+                    self.mbc5_ram_bank = new_ram_bank;
                     return;
                 }
                 _ => {}
@@ -422,7 +507,7 @@ impl RAM {
 
             0xA000..=0xBFFF => {
                 // Escrita em RAM externa ou RTC
-                if (self.is_mbc1() || self.is_mbc3()) && self.ram_enabled {
+                if (self.is_mbc1() || self.is_mbc3() || self.is_mbc5()) && self.ram_enabled {
                     if self.is_mbc1() {
                         // MBC1: usa banco efetivo baseado no modo
                         let bank = self.mbc1_effective_ram_bank();
@@ -447,6 +532,13 @@ impl RAM {
                                 0x0C => self.rtc_dh = byte,
                                 _ => {}
                             }
+                        }
+                    } else if self.is_mbc5() {
+                        // MBC5: RAM banking simples (bits 0-3 do ram_bank)
+                        let bank = (self.mbc5_ram_bank & 0x0F) as usize; // ignora rumble bit
+                        let ram_addr = bank * 0x2000 + (address as usize - 0xA000);
+                        if ram_addr < self.cart_ram.len() {
+                            self.cart_ram[ram_addr] = byte;
                         }
                     }
                 }
@@ -540,6 +632,10 @@ impl RAM {
         matches!(self.cart_type, 0x0F..=0x13)
     }
 
+    fn is_mbc5(&self) -> bool {
+        matches!(self.cart_type, 0x19..=0x1E)
+    }
+
     fn rom_get(&self, idx: usize) -> u8 {
         if idx < self.rom.len() { self.rom[idx] } else { 0xFF }
     }
@@ -571,6 +667,15 @@ impl RAM {
         }
     }
 
+    /// Calcula o banco ROM efetivo para MBC5 (9 bits)
+    fn mbc5_effective_rom_bank(&self) -> u16 {
+        if !self.is_mbc5() { return self.rom_bank as u16; }
+
+        // MBC5: 9-bit ROM bank (0-511)
+        let bank = (self.mbc5_rom_bank_low as u16) | ((self.mbc5_rom_bank_high as u16) << 8);
+        if bank == 0 { 1 } else { bank } // banco 0 mapeado para 1
+    }
+
     // === API pública para manipular joypad ===
 
     pub fn press_joypad_button(&mut self, button: u8, is_dpad: bool) {
@@ -596,7 +701,7 @@ impl RAM {
         use std::fs;
 
         // Só salva se há RAM e é MBC com suporte a saves
-        if !(self.is_mbc1() || self.is_mbc3()) || !self.has_cart_ram() || self.cart_ram.is_empty() {
+        if !(self.is_mbc1() || self.is_mbc3() || self.is_mbc5()) || !self.has_cart_ram() || self.cart_ram.is_empty() {
             return Ok(()); // Nada para salvar
         }
 
@@ -616,7 +721,7 @@ impl RAM {
         use std::fs;
 
         // Só tenta carregar se há RAM no cartucho e é MBC com suporte
-        if !(self.is_mbc1() || self.is_mbc3()) || !self.has_cart_ram() {
+        if !(self.is_mbc1() || self.is_mbc3() || self.is_mbc5()) || !self.has_cart_ram() {
             return Ok(());
         }
 
