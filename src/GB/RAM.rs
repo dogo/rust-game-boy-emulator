@@ -772,4 +772,11 @@ impl RAM {
             _ => 0,
         }
     }
+
+    /// Avança PPU e aplica as mudanças de IF (0xFF0F)
+    pub fn step_ppu(&mut self, cycles: u32) {
+        let mut iflags = self.read(0xFF0F);
+        self.ppu.step(cycles, &mut iflags);
+        self.write(0xFF0F, iflags);
+    }
 }

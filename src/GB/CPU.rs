@@ -147,9 +147,7 @@ impl CPU {
         }
 
         // PPU (Picture Processing Unit)
-        let mut iflags = self.ram.read(0xFF0F);
-        self.ram.ppu.step(cycles, &mut iflags);
-        self.ram.write(0xFF0F, iflags);
+        self.ram.step_ppu(cycles);
     }
 
     // Atende interrupções se habilitadas (IME) e pendentes (IF & IE)

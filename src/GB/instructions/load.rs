@@ -1,6 +1,6 @@
 // Instruções de LOAD
 use crate::GB::CPU::CPU;
-use super::helpers::{Instruction, FlagBits, read_r, write_r, read_rr, write_rr};
+use super::helpers::{Instruction, read_r, write_r, write_rr};
 
 pub fn ld_r_r(opcode: u8) -> Instruction {
     fn exec(instr: &Instruction, cpu: &mut CPU) -> u64 {
