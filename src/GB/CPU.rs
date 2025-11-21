@@ -90,6 +90,8 @@ impl CPU {
             let ie_reg = self.ram.read(0xFFFF);
             if (if_reg & ie_reg) != 0 {
                 self.halted = false;
+                // TODO: Implementar HALT bug (IME=0 com interrupção pendente)
+                // No hardware real, se IME=0 e há interrupção pendente, PC não incrementa corretamente
             } else {
                 // CPU ainda halted, simula 4 ciclos de espera
                 self.tick(4);
@@ -225,6 +227,7 @@ impl CPU {
         self.registers.set_pc(vector);
 
         // Tempo para atendimento de interrupção (~20 ciclos)
+        // NOTE: Custo fixo approximation, independente do vetor
         self.cycles += 20;
         self.tick(20);
     }

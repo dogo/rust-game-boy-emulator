@@ -191,11 +191,6 @@ impl PPU {
             return;
         }
 
-        // Verificar se sprites estão habilitados (bit 1 do LCDC)
-        if (self.lcdc & 0x02) == 0 {
-            return;
-        }
-
         // Coletar sprites visíveis nesta linha (máximo 10 por linha no hardware)
         let mut visible_sprites = Vec::new();
         let sprite_height = if (self.lcdc & 0x04) != 0 { 16 } else { 8 }; // 8x8 ou 8x16

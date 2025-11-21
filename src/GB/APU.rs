@@ -500,7 +500,8 @@ impl APU {
 
     /// Escreve em um registrador do APU
     pub fn write_register(&mut self, address: u16, value: u8) {
-        // Se o som está desabilitado, só aceita writes em NR52
+        // NOTE: Só aceitamos writes em NR10–NR51 quando sound_enable está ON.
+        // Difere levemente do hardware, mas simplifica a implementação.
         if !self.sound_enable && address != 0xFF26 {
             return;
         }
@@ -747,8 +748,9 @@ impl APU {
         self.ch4_volume = self.ch4_envelope_initial;
         self.ch4_lfsr = 0x7FFF;
 
-        // Inicializar timer de frequência
-        let divisor = if self.ch4_divisor_code == 0 { 8 } else { self.ch4_divisor_code as u32 * 16 };
+        // Inicializar timer de frequência usando tabela oficial DMG
+        const NOISE_DIVISORS: [u16; 8] = [8, 16, 32, 48, 64, 80, 96, 112];
+        let divisor = NOISE_DIVISORS[self.ch4_divisor_code as usize] as u32;
         self.ch4_frequency_timer = divisor << self.ch4_clock_shift;
 
         // Desabilitar se DAC está off
@@ -857,7 +859,8 @@ impl APU {
                 self.ch4_frequency_timer -= 1;
             } else {
                 // Timer baseado no divisor e clock shift
-                let divisor = if self.ch4_divisor_code == 0 { 8 } else { self.ch4_divisor_code as u32 * 16 };
+                const NOISE_DIVISORS: [u16; 8] = [8, 16, 32, 48, 64, 80, 96, 112];
+                let divisor = NOISE_DIVISORS[self.ch4_divisor_code as usize] as u32;
                 self.ch4_frequency_timer = divisor << self.ch4_clock_shift;
 
                 // Atualiza LFSR
