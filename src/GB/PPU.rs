@@ -40,6 +40,9 @@ pub struct PPU {
 
     // Flag para indicar quando um frame foi completado (VBlank)
     pub frame_ready: bool,
+
+    // Ciclos acumulados na linha atual (456 ciclos por linha)
+    line_cycles: u16,
 }
 
 impl PPU {
@@ -60,6 +63,7 @@ impl PPU {
             wx: 0,
             oam: [0; 160],
             frame_ready: false,
+            line_cycles: 0,
         }
     }
 
@@ -470,6 +474,75 @@ impl PPU {
             0xFF4A => self.wy = val,
             0xFF4B => self.wx = val,
             _ => {},
+        }
+    }
+
+    /// Avança PPU em `cycles` ciclos de CPU (4MHz → 456 ciclos por linha, 154 linhas)
+    pub fn step(&mut self, cycles: u32, iflags: &mut u8) {
+        let mut add = cycles as u16;
+
+        while add > 0 {
+            let space = 456u16.saturating_sub(self.line_cycles);
+            let step = add.min(space);
+            self.line_cycles = self.line_cycles.saturating_add(step);
+            add -= step;
+
+            if self.line_cycles >= 456 {
+                self.line_cycles = 0;
+
+                // Guarda linha atual antes de avançar
+                let old_ly = self.ly;
+                let mut new_ly = old_ly.wrapping_add(1);
+
+                // Região visível: 0–143
+                if old_ly < 144 {
+                    // Garante que a renderização usa a linha correta
+                    self.ly = old_ly;
+
+                    // Mode 3: Pixel Transfer
+                    self.update_stat_mode(3);
+                    self.render_bg_scanline();
+                    self.render_window_scanline();
+                    self.render_sprites_scanline(old_ly);
+
+                    // Mode 0: HBlank
+                    self.update_stat_mode(0);
+                } else if old_ly >= 144 && old_ly <= 153 {
+                    // Mode 1: VBlank
+                    self.update_stat_mode(1);
+                }
+
+                // Início de VBlank (linha 144)
+                if new_ly == 144 {
+                    // Bit 0: VBlank interrupt
+                    *iflags |= 0x01;
+
+                    // STAT interrupt por entrar em Mode 1
+                    self.update_stat_mode(1);
+                    if self.check_stat_interrupt() {
+                        *iflags |= 0x02;
+                    }
+
+                    // Marca frame pronto
+                    self.frame_ready = true;
+                }
+
+                // Fim do frame (153 → 0)
+                if new_ly > 153 {
+                    new_ly = 0;
+                    // Mode 2: OAM Search (início de frame)
+                    self.update_stat_mode(2);
+                }
+
+                // Atualiza LY interno
+                self.ly = new_ly;
+
+                // Atualiza flag LYC=LY + possível STAT interrupt
+                self.update_lyc_flag();
+                if self.check_stat_interrupt() {
+                    *iflags |= 0x02; // Bit 1: LCD STAT
+                }
+            }
         }
     }
 }

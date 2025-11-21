@@ -10,8 +10,6 @@ pub struct CPU {
     pub halted: bool, // CPU está em estado HALT
     pub opcode: u8,  // Opcode da instrução em execução
     pub cycles: u64,  // Contagem total de ciclos
-    // Estado mínimo de temporizador/PPU para avançar loops de polling
-    ppu_line_cycles: u16, // ciclos acumulados na linha atual (456 ciclos por linha)
 }
 
 impl CPU {
@@ -24,7 +22,6 @@ impl CPU {
             halted: false,
             opcode: 0,
             cycles: 0,
-            ppu_line_cycles: 0,
         }
     }
 
@@ -149,73 +146,10 @@ impl CPU {
             self.ram.apu.tick();
         }
 
-        // PPU: 456 ciclos por linha, 154 linhas por frame (0..=153)
-        let mut add = cycles as u16;
-        while add > 0 {
-            let space = 456u16.saturating_sub(self.ppu_line_cycles);
-            let step = add.min(space);
-            self.ppu_line_cycles = self.ppu_line_cycles.saturating_add(step);
-            add -= step;
-
-            if self.ppu_line_cycles >= 456 {
-                self.ppu_line_cycles = 0;
-
-                // Avança para a próxima linha a partir do LY atual do PPU
-                let old_ly = self.ram.ppu.ly;
-                let mut new_ly = old_ly.wrapping_add(1);
-
-                // Região visível: 0–143
-                if old_ly < 144 {
-                    // Garante que o PPU sabe em que linha está renderizando
-                    self.ram.ppu.ly = old_ly;
-
-                    // Mode 3: Pixel Transfer (durante renderização)
-                    self.ram.ppu.update_stat_mode(3);
-                    self.ram.ppu.render_bg_scanline();
-                    self.ram.ppu.render_window_scanline();
-                    self.ram.ppu.render_sprites_scanline(old_ly);
-                    // Mode 0: HBlank (após renderização)
-                    self.ram.ppu.update_stat_mode(0);
-                } else if old_ly >= 144 && old_ly <= 153 {
-                    // VBlank lines (144-153)
-                    self.ram.ppu.update_stat_mode(1);
-                }
-
-                // Início de VBlank
-                if new_ly == 144 {
-                    let mut iflags = self.ram.read(0xFF0F);
-                    iflags |= 0x01; // VBlank
-
-                    // STAT interrupt (Mode 1 + condições STAT)
-                    self.ram.ppu.update_stat_mode(1);
-                    if self.ram.ppu.check_stat_interrupt() {
-                        iflags |= 0x02; // LCD STAT
-                    }
-
-                    self.ram.write(0xFF0F, iflags);
-                    self.ram.ppu.frame_ready = true;
-                }
-
-                // Fim do frame (153 -> 0)
-                if new_ly > 153 {
-                    new_ly = 0;
-                    // Mode 2: OAM Search (início de frame)
-                    self.ram.ppu.update_stat_mode(2);
-                }
-
-                // Atualiza LY no PPU e no registrador 0xFF44
-                self.ram.ppu.ly = new_ly;
-                self.ram.write(0xFF44, new_ly);
-
-                // Atualiza flag LYC=LY e possível STAT interrupt
-                self.ram.ppu.update_lyc_flag();
-                if self.ram.ppu.check_stat_interrupt() {
-                    let mut iflags = self.ram.read(0xFF0F);
-                    iflags |= 0x02; // LCD STAT
-                    self.ram.write(0xFF0F, iflags);
-                }
-            }
-        }
+        // PPU (Picture Processing Unit)
+        let mut iflags = self.ram.read(0xFF0F);
+        self.ram.ppu.step(cycles, &mut iflags);
+        self.ram.write(0xFF0F, iflags);
     }
 
     // Atende interrupções se habilitadas (IME) e pendentes (IF & IE)
