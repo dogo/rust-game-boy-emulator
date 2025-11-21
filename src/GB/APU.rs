@@ -93,13 +93,22 @@ pub struct APU {
     ch4_frequency_timer: u32,   // Timer de frequência do canal 4
 
     // Divisor de frequência para timers (4MHz -> 1MHz)
-    frequency_divider: u8,
-
-    // Phase tracking para geração de samples
-    ch1_phase: f32,
-    ch2_phase: f32,
-    sample_rate: f32,
+    frequency_divider: u8
 }
+
+const DUTY_TABLE: [[u8; 8]; 4] = [
+    // 12.5%
+    [0, 1, 0, 0, 0, 0, 0, 0],
+    // 25%
+    [0, 1, 1, 0, 0, 0, 0, 0],
+    // 50%
+    [0, 1, 1, 1, 1, 0, 0, 0],
+    // 75%
+    [1, 0, 0, 1, 1, 1, 1, 1],
+];
+
+// Sample rate padrão usado no frame sequencer
+const SAMPLE_RATE: u32 = 44100;
 
 impl APU {
     pub fn new() -> Self {
@@ -186,12 +195,7 @@ impl APU {
             ch4_frequency_timer: 0,
 
             // Divisor de frequência
-            frequency_divider: 0,
-
-            // Phase tracking
-            ch1_phase: 0.0,
-            ch2_phase: 0.0,
-            sample_rate: 44100.0,
+            frequency_divider: 0
         }
     }
 
@@ -252,11 +256,11 @@ impl APU {
 
     /// Gera sample de áudio (chamado a 44.1kHz) com frame sequencer de 512Hz
     pub fn generate_sample(&mut self) -> (f32, f32) {
-        // Frame sequencer: 512Hz = 44100Hz / 86.132...
+        // Frame sequencer: 512Hz = SAMPLE_RATE / 86.132...
         self.frame_sequencer_timer += 512;  // Acumula 512 por sample
-        while self.frame_sequencer_timer >= 44100 {
-            self.frame_sequencer_timer -= 44100;  // Remove 44100 quando overflow
-            self.step_frame_sequencer();           // Executa frame sequencer a 512Hz
+        while self.frame_sequencer_timer >= SAMPLE_RATE {
+            self.frame_sequencer_timer -= SAMPLE_RATE;  // Remove quando overflow
+            self.step_frame_sequencer();                // Executa frame sequencer a 512Hz
         }
 
         if !self.sound_enable {
@@ -266,45 +270,29 @@ impl APU {
         let mut left_sample = 0.0;
         let mut right_sample = 0.0;
 
-        // Canal 1: Square Wave
-        if self.ch1_enabled && self.ch1_frequency > 0 && self.ch1_volume > 0 {
-            let real_hz = 131072.0 / (2048.0 - self.ch1_frequency as f32).max(1.0);
+        // Canal 1: Square Wave (usando wave_position de hardware)
+        if self.ch1_enabled && self.ch1_volume > 0 {
+            let duty = (self.ch1_wave_duty & 0x03) as usize;
+            let step = (self.ch1_wave_position & 0x07) as usize;
+            let bit = DUTY_TABLE[duty][step];
 
-            let phase_inc = real_hz / self.sample_rate;
-            self.ch1_phase += phase_inc;
-            if self.ch1_phase >= 1.0 {
-                self.ch1_phase -= 1.0;
-            }
-
-            let duty_ratio = match self.ch1_wave_duty {
-                0 => 0.125, 1 => 0.25, 2 => 0.5, 3 => 0.75, _ => 0.5,
-            };
-
-            let ch1_output = if self.ch1_phase < duty_ratio { 1.0 } else { -1.0 };
+            let wave_out = if bit != 0 { 1.0 } else { -1.0 };
             let volume = self.ch1_volume as f32 / 15.0;
-            let final_output = ch1_output * volume * 0.6;
+            let final_output = wave_out * volume * 0.6;
 
             if self.ch1_left { left_sample += final_output; }
             if self.ch1_right { right_sample += final_output; }
         }
 
-        // Canal 2: Square Wave
-        if self.ch2_enabled && self.ch2_frequency > 0 && self.ch2_volume > 0 {
-            let real_hz = 131072.0 / (2048.0 - self.ch2_frequency as f32).max(1.0);
+        // Canal 2: Square Wave (usando wave_position)
+        if self.ch2_enabled && self.ch2_volume > 0 {
+            let duty = (self.ch2_wave_duty & 0x03) as usize;
+            let step = (self.ch2_wave_position & 0x07) as usize;
+            let bit = DUTY_TABLE[duty][step];
 
-            let phase_inc = real_hz / self.sample_rate;
-            self.ch2_phase += phase_inc;
-            if self.ch2_phase >= 1.0 {
-                self.ch2_phase -= 1.0;
-            }
-
-            let duty_ratio = match self.ch2_wave_duty {
-                0 => 0.125, 1 => 0.25, 2 => 0.5, 3 => 0.75, _ => 0.5,
-            };
-
-            let ch2_output = if self.ch2_phase < duty_ratio { 1.0 } else { -1.0 };
+            let wave_out = if bit != 0 { 1.0 } else { -1.0 };
             let volume = self.ch2_volume as f32 / 15.0;
-            let final_output = ch2_output * volume * 0.6;
+            let final_output = wave_out * volume * 0.6;
 
             if self.ch2_left { left_sample += final_output; }
             if self.ch2_right { right_sample += final_output; }
@@ -776,7 +764,9 @@ impl APU {
         self.ch3_enabled = false;
         self.ch4_enabled = false;
 
-        // Limpar a maioria dos registradores (manter wave RAM)
+        // Limpar registradores de todos os canais (manter wave RAM conforme hardware)
+
+        // Canal 1
         self.ch1_sweep_period = 0;
         self.ch1_sweep_direction = false;
         self.ch1_sweep_shift = 0;
@@ -788,8 +778,41 @@ impl APU {
         self.ch1_frequency = 0;
         self.ch1_length_enable = false;
 
-        // Similar para os outros canais...
-        // (Por brevidade, não incluindo todos os resets aqui)
+        // Canal 2
+        self.ch2_wave_duty = 0;
+        self.ch2_length_timer = 0;
+        self.ch2_envelope_initial = 0;
+        self.ch2_envelope_direction = false;
+        self.ch2_envelope_period = 0;
+        self.ch2_frequency = 0;
+        self.ch2_length_enable = false;
+
+        // Canal 3 (NÃO limpa wave RAM - quirk do hardware)
+        self.ch3_dac_enable = false;
+        self.ch3_length_timer = 0;
+        self.ch3_output_level = 0;
+        self.ch3_frequency = 0;
+        self.ch3_length_enable = false;
+
+        // Canal 4
+        self.ch4_length_timer = 0;
+        self.ch4_envelope_initial = 0;
+        self.ch4_envelope_direction = false;
+        self.ch4_envelope_period = 0;
+        self.ch4_clock_shift = 0;
+        self.ch4_width_mode = false;
+        self.ch4_divisor_code = 0;
+        self.ch4_length_enable = false;
+
+        // Reset controles gerais
+        self.left_volume = 0;
+        self.right_volume = 0;
+        self.vin_left_enable = false;
+        self.vin_right_enable = false;
+        self.ch1_left = false; self.ch1_right = false;
+        self.ch2_left = false; self.ch2_right = false;
+        self.ch3_left = false; self.ch3_right = false;
+        self.ch4_left = false; self.ch4_right = false;
     }
 
     /// Atualiza timers dos canais
@@ -817,7 +840,10 @@ impl APU {
             }
         }
 
-        // Canal 3 - Timer de frequência (2x mais rápido)
+        // Canal 3 - Timer de frequência (2x mais rápido que canais 1/2)
+        // No hardware real: período do canal 3 = (2048 - freq) * 2 / 4.194304MHz.
+        // Como update_channel_timers() roda a 4MHz/4 = ~1MHz,
+        // usar (2048 - freq) / 2 dá a mesma frequência final.
         if self.ch3_enabled {
             if self.ch3_frequency_timer > 0 {
                 self.ch3_frequency_timer -= 1;
@@ -840,7 +866,8 @@ impl APU {
                 self.ch4_lfsr |= bit << 14;
 
                 if self.ch4_width_mode {
-                    self.ch4_lfsr |= bit << 6;
+                    // limpa o bit 6, depois escreve o novo bit
+                    self.ch4_lfsr = (self.ch4_lfsr & !(1 << 6)) | (bit << 6);
                 }
             }
         }

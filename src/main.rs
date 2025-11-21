@@ -78,6 +78,7 @@ fn run_sdl(cpu: &mut GB::CPU::CPU) {
         fn callback(&mut self, stream: &mut sdl3::audio::AudioStream, requested: i32) {
             let mut audio_buffer = self.buffer.lock().unwrap();
             let mut out = Vec::<f32>::with_capacity((requested * 2) as usize);
+            let mut underflow_count = 0;
 
             for _ in 0..requested {
                 if let Some((l, r)) = audio_buffer.pop_front() {
@@ -86,12 +87,48 @@ fn run_sdl(cpu: &mut GB::CPU::CPU) {
                 } else {
                     out.push(0.0);
                     out.push(0.0);
+                    underflow_count += 1;
+                }
+            }
+
+            // Debug: reportar apenas underflow extremo (após inicialização)
+            if underflow_count > 0 {
+                static mut UNDERFLOW_COUNT: u32 = 0;
+                static mut STARTUP_GRACE: u32 = 0;
+                unsafe {
+                    STARTUP_GRACE += 1;
+                    // Só reporta underflow após período de "aquecimento" de 5 segundos
+                    if STARTUP_GRACE > 220 { // ~5s a 44Hz de callbacks
+                        UNDERFLOW_COUNT += 1;
+                        if UNDERFLOW_COUNT % 5 == 1 { // Log mais esparso
+                            println!("⚠️  Audio underflow crítico: {} samples zerados (buffer: {}, req: {})",
+                                    underflow_count, audio_buffer.len(), requested);
+                        }
+                    }
                 }
             }
 
             let _ = stream.put_data_f32(&out);
         }
-    }    let audio_device = audio_subsystem
+    }
+
+    // Pré-carrega ~100ms de silêncio pra evitar underflow inicial
+    {
+        let mut buf = audio_buffer.lock().unwrap();
+        let prefill_ms = 120; // 120ms, pode ajustar entre 80–150ms
+        let prefill_samples = (SAMPLE_RATE as usize * prefill_ms) / 1000;
+
+        for _ in 0..prefill_samples {
+            buf.push_back((0.0, 0.0));
+        }
+
+        println!(
+            "🔇 Pré-buffer de áudio: {} samples (~{}ms)",
+            prefill_samples, prefill_ms
+        );
+    }
+
+    let audio_device = audio_subsystem
         .open_playback_stream(
             &desired_spec,
             AudioCallbackData {
@@ -144,11 +181,12 @@ fn run_sdl(cpu: &mut GB::CPU::CPU) {
     const GB_FPS: f64 = 59.7275;                // FPS reais do Game Boy
     const CYCLES_PER_FRAME: u64 = (GB_CPU_HZ as f64 / GB_FPS) as u64; // ~70224
     const SAMPLE_RATE: u32 = 44_100;            // Taxa de áudio
-    const CYCLES_PER_SAMPLE: u64 = GB_CPU_HZ / SAMPLE_RATE as u64; // ~95 ciclos por sample
 
-    let mut apu_cycle_accum: u64 = 0;
+    let cycles_per_sample = GB_CPU_HZ as f64 / SAMPLE_RATE as f64;  // ≈ 95.102040816
+    let mut apu_cycle_accum: f64 = 0.0;
     let mut frame_cycle_accum: u64 = 0;  // Acumula ciclos até formar 1 frame
     let mut debug_print_timer = 0;
+    let mut samples_produced: u64 = 0;   // Conta samples produzidos para debug
 
     // Timing baseado em tempo real
     let mut pending_cycles: f64 = 0.0;
@@ -232,18 +270,18 @@ fn run_sdl(cpu: &mut GB::CPU::CPU) {
 
             pending_cycles -= c as f64;
             frame_cycle_accum += c;
-            apu_cycle_accum += c;
+            apu_cycle_accum += c as f64;
 
-            // AUDIO: gera sample sempre que acumula CYCLES_PER_SAMPLE
-            while apu_cycle_accum >= CYCLES_PER_SAMPLE {
-                apu_cycle_accum -= CYCLES_PER_SAMPLE;
-
+            // AUDIO: gera sample sempre que acumula cycles_per_sample (valor exato)
+            while apu_cycle_accum >= cycles_per_sample {
+                apu_cycle_accum -= cycles_per_sample;
+                samples_produced += 1;
                 let (l, r) = cpu.ram.apu.generate_sample();
                 let mut buffer = audio_buffer.lock().unwrap();
                 buffer.push_back((l * 0.8, r * 0.8));
 
-                // Buffer de ~100ms (4410 samples = 0.1s a 44.1kHz)
-                while buffer.len() > 4410 {
+                // Buffer de ~1s (44100 samples) para testar underflow
+                while buffer.len() > 44100 {
                     buffer.pop_front();
                 }
             }
@@ -256,8 +294,20 @@ fn run_sdl(cpu: &mut GB::CPU::CPU) {
 
                 if debug_print_timer >= 60 {
                     debug_print_timer = 0;
-                    println!("Frames: {} | PC: {:04X} | LY: {}",
-                        frame_counter, cpu.registers.get_pc(), cpu.ram.ppu.ly);
+
+                    // Monitor buffer de áudio
+                    let buffer_size = {
+                        let buffer = audio_buffer.lock().unwrap();
+                        buffer.len()
+                    };
+
+                    // Taxa de produção: samples_produced em 1 segundo (60 frames)
+                    let production_rate = samples_produced as f32;
+                    samples_produced = 0; // Reset contador
+
+                    println!("Frames: {} | PC: {:04X} | LY: {} | Audio: Buffer {}samples (~{:.1}ms) | Prod: {:.0}Hz (target: 44100Hz)",
+                        frame_counter, cpu.registers.get_pc(), cpu.ram.ppu.ly,
+                        buffer_size, (buffer_size as f32 / 44.1), production_rate);
                 }
             }
         }
