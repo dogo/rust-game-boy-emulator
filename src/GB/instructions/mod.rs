@@ -1,8 +1,7 @@
 // Módulo de instruções - organizadas por categoria
-use crate::GB::CPU::CPU;
 
 // Submódulos
-mod helpers;
+pub mod helpers;
 mod load;
 mod arithmetic;
 mod logic;

@@ -203,8 +203,8 @@ impl PPU {
         for sprite_index in 0..40 {
             let sprite = self.get_sprite(sprite_index);
 
+            // Sprite Y é offset por 16, então Y=16 significa linha 0
             let sprite_y = (sprite.y as i16) - 16;
-            let sprite_x = (sprite.x as i16) - 8;
 
             // Verificar se sprite está visível nesta linha
             if (line as i16) >= sprite_y && (line as i16) < sprite_y + sprite_height as i16 {
@@ -379,7 +379,7 @@ impl PPU {
             } else {
                 // Signed: -128 a +127, base em 0x9000 (offset 0x1000 na VRAM)
                 let signed = tile_number as i8;
-                ((0x1000u16 as i16 + (signed as i16) * 16) as u16)
+                (0x1000u16 as i16 + (signed as i16) * 16) as u16
             };
 
             // Ler 2 bytes da linha do tile

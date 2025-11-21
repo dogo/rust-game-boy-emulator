@@ -1,6 +1,7 @@
 use crate::GB::registers;
 use crate::GB::RAM;
 use crate::GB::instructions;
+use crate::GB::instructions::helpers::push_u16;
 
 pub struct CPU {
     pub registers: registers::Registers,
@@ -68,10 +69,13 @@ impl CPU {
     }
 
     pub fn fetch_next(&mut self) -> u8 {
+        let pc_before = self.registers.get_pc();
+
         // Lê o byte na posição do Program Counter
-        let byte = self.ram.read(self.registers.get_pc());
+        let byte = self.ram.read(pc_before);
+
         // Incrementa o PC para apontar para o próximo byte
-        self.registers.set_pc(self.registers.get_pc().wrapping_add(1));
+        self.registers.set_pc(pc_before.wrapping_add(1));
         byte
     }
 
@@ -93,6 +97,8 @@ impl CPU {
             }
         }
 
+        self.service_interrupts();
+
         let opcode = self.fetch_next();
         self.opcode = opcode;
         let instr = CPU::decode(opcode, false);
@@ -104,11 +110,9 @@ impl CPU {
         if self.ime_enable_next {
             self.ime = true;
             self.ime_enable_next = false;
-            eprintln!("✅ IME enabled after EI delay");
         }
 
         self.tick(cycles as u32);
-        self.service_interrupts();
         (cycles, unknown)
     }
 
@@ -214,15 +218,10 @@ impl CPU {
         iflags &= !mask;
         self.ram.write(0xFF0F, iflags);
 
-        // Push PC e jump para vetor
+        // Push PC usando push_u16 para manter consistência total com CALL/RET
         let pc = self.registers.get_pc();
-        // push u16 na pilha
-        let mut sp = self.registers.get_sp();
-        sp = sp.wrapping_sub(1);
-        self.ram.write(sp, (pc >> 8) as u8);
-        sp = sp.wrapping_sub(1);
-        self.ram.write(sp, (pc & 0xFF) as u8);
-        self.registers.set_sp(sp);
+        push_u16(self, pc);
+
         self.registers.set_pc(vector);
 
         // Tempo para atendimento de interrupção (~20 ciclos)
