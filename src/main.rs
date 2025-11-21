@@ -3,7 +3,6 @@
 use gb_emu::GB;
 use std::env;
 use std::fs;
-use std::time::{Duration, Instant};
 
 fn print_cart_info(cpu: &GB::CPU::CPU) {
     let mut title = String::new();
@@ -78,22 +77,21 @@ fn run_sdl(cpu: &mut GB::CPU::CPU) {
     impl sdl3::audio::AudioCallback<f32> for AudioCallbackData {
         fn callback(&mut self, stream: &mut sdl3::audio::AudioStream, requested: i32) {
             let mut audio_buffer = self.buffer.lock().unwrap();
-            let mut out = Vec::<f32>::with_capacity((requested * 2) as usize); // Stereo
+            let mut out = Vec::<f32>::with_capacity((requested * 2) as usize);
 
             for _ in 0..requested {
                 if let Some((l, r)) = audio_buffer.pop_front() {
-                    out.push(l);
-                    out.push(r);
+                    out.push(l.clamp(-1.0, 1.0));
+                    out.push(r.clamp(-1.0, 1.0));
                 } else {
                     out.push(0.0);
                     out.push(0.0);
                 }
             }
+
             let _ = stream.put_data_f32(&out);
         }
-    }
-
-    let audio_device = audio_subsystem
+    }    let audio_device = audio_subsystem
         .open_playback_stream(
             &desired_spec,
             AudioCallbackData {
@@ -113,19 +111,48 @@ fn run_sdl(cpu: &mut GB::CPU::CPU) {
         .expect("Falha ao criar janela");
     let mut canvas = window.into_canvas();
 
+    // Tentativa de habilitar VSync usando FFI direta
+    unsafe {
+        let renderer = canvas.raw();
+        unsafe extern "C" {
+            fn SDL_SetRenderVSync(renderer: *mut std::ffi::c_void, vsync: std::ffi::c_int) -> bool;
+        }
+        if SDL_SetRenderVSync(renderer as *mut std::ffi::c_void, 1) {
+            println!("✅ VSync habilitado com sucesso!");
+        } else {
+            println!("❌ Falha ao habilitar VSync");
+        }
+    }
+
     let texture_creator = canvas.texture_creator();
     let mut texture = texture_creator
         .create_texture_streaming(sdl3::pixels::PixelFormat::RGB24, 160, 144)
         .expect("Falha texture");
 
     let mut event_pump = sdl_ctx.event_pump().expect("Falha event pump");
-    let mut last_frame = Instant::now();
-    let frame_duration = Duration::from_micros(16_667); // ~60 FPS
     let mut frame_counter: u64 = 0;
 
     use sdl3::event::Event;
     use sdl3::keyboard::Keycode;
     use sdl3::rect::Rect;
+    use std::time::{Duration, Instant};
+
+    // Controle de timing: VSync limita velocidade, executa 1/4 frame por loop
+
+    // Constantes do Game Boy
+    const GB_CPU_HZ: u64 = 4_194_304;           // Clock da CPU
+    const GB_FPS: f64 = 59.7275;                // FPS reais do Game Boy
+    const CYCLES_PER_FRAME: u64 = (GB_CPU_HZ as f64 / GB_FPS) as u64; // ~70224
+    const SAMPLE_RATE: u32 = 44_100;            // Taxa de áudio
+    const CYCLES_PER_SAMPLE: u64 = GB_CPU_HZ / SAMPLE_RATE as u64; // ~95 ciclos por sample
+
+    let mut apu_cycle_accum: u64 = 0;
+    let mut frame_cycle_accum: u64 = 0;  // Acumula ciclos até formar 1 frame
+    let mut debug_print_timer = 0;
+
+    // Timing baseado em tempo real
+    let mut pending_cycles: f64 = 0.0;
+    let mut last_time = Instant::now();
 
     loop {
         let mut exit = false;
@@ -183,27 +210,57 @@ fn run_sdl(cpu: &mut GB::CPU::CPU) {
             break;
         }
 
-        // ==== CPU / PPU ====
-        let target_cycles = cpu.cycles + 70_224;
-        while cpu.cycles < target_cycles {
-            let _ = cpu.execute_next();
+        // ==== Timing baseado em tempo real ====
+        let now = Instant::now();
+        let dt = now.duration_since(last_time);
+        last_time = now;
+
+        // Quantos ciclos o Game Boy REAL teria rodado em dt
+        pending_cycles += dt.as_secs_f64() * (GB_CPU_HZ as f64);
+
+        // Evita acumular demais se o app travar (alt+tab etc.)
+        let max_backlog = (GB_CPU_HZ as f64) * 0.25; // no máx 0,25s de backlog
+        if pending_cycles > max_backlog {
+            pending_cycles = max_backlog;
         }
 
-        // ==== APU → buffer de áudio ====
-        let samples_per_frame = 735; // 44.1kHz * ~16.67ms
-        {
-            let mut buffer = audio_buffer.lock().unwrap();
-            for _ in 0..samples_per_frame {
-                let (l, r) = cpu.ram.apu.generate_sample();
-                buffer.push_back((l, r));
+        // ==== CPU / PPU ====
+        // Roda CPU enquanto ainda há ciclos "em débito"
+        while pending_cycles >= 1.0 {
+            let (instruction_cycles, _) = cpu.execute_next();
+            let c = instruction_cycles as u64;
 
-                if buffer.len() > 4410 {
+            pending_cycles -= c as f64;
+            frame_cycle_accum += c;
+            apu_cycle_accum += c;
+
+            // AUDIO: gera sample sempre que acumula CYCLES_PER_SAMPLE
+            while apu_cycle_accum >= CYCLES_PER_SAMPLE {
+                apu_cycle_accum -= CYCLES_PER_SAMPLE;
+
+                let (l, r) = cpu.ram.apu.generate_sample();
+                let mut buffer = audio_buffer.lock().unwrap();
+                buffer.push_back((l * 0.8, r * 0.8));
+
+                // Buffer de ~100ms (4410 samples = 0.1s a 44.1kHz)
+                while buffer.len() > 4410 {
                     buffer.pop_front();
                 }
             }
-        }
 
-        frame_counter += 1;
+            // FRAME: conta frames emulados
+            if frame_cycle_accum >= CYCLES_PER_FRAME {
+                frame_cycle_accum -= CYCLES_PER_FRAME;
+                frame_counter += 1;
+                debug_print_timer += 1;
+
+                if debug_print_timer >= 60 {
+                    debug_print_timer = 0;
+                    println!("Frames: {} | PC: {:04X} | LY: {}",
+                        frame_counter, cpu.registers.get_pc(), cpu.ram.ppu.ly);
+                }
+            }
+        }
 
         // ==== Render ====
         if cpu.ram.ppu.frame_ready {
@@ -242,21 +299,8 @@ fn run_sdl(cpu: &mut GB::CPU::CPU) {
             canvas.present();
         }
 
-        // ==== FPS cap ====
-        let elapsed = last_frame.elapsed();
-        if elapsed < frame_duration {
-            std::thread::sleep(frame_duration - elapsed);
-        }
-        last_frame = Instant::now();
-
-        if frame_counter % 60 == 0 {
-            println!(
-                "Frames: {} | PC: {:04X} | LY: {}",
-                frame_counter,
-                cpu.registers.get_pc(),
-                cpu.ram.ppu.ly
-            );
-        }
+        // Pequena folga pra não travar 100% CPU
+        std::thread::sleep(Duration::from_micros(50));
     }
 
     println!("Encerrando SDL3 após {} frames", frame_counter);
