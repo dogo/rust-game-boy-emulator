@@ -1,7 +1,6 @@
 use crate::GB::registers;
 use crate::GB::RAM;
 use crate::GB::instructions;
-use crate::GB::instructions::helpers::push_u16;
 
 pub struct CPU {
     pub registers: registers::Registers,
@@ -27,6 +26,28 @@ impl CPU {
             cycles: 0,
             ppu_line_cycles: 0,
         }
+    }
+
+    // Stack operations
+    #[inline]
+    pub fn push_u16(&mut self, value: u16) {
+        let mut sp = self.registers.get_sp();
+        sp = sp.wrapping_sub(1);
+        self.ram.write(sp, (value >> 8) as u8);
+        sp = sp.wrapping_sub(1);
+        self.ram.write(sp, (value & 0xFF) as u8);
+        self.registers.set_sp(sp);
+    }
+
+    #[inline]
+    pub fn pop_u16(&mut self) -> u16 {
+        let mut sp = self.registers.get_sp();
+        let lo = self.ram.read(sp) as u16;
+        sp = sp.wrapping_add(1);
+        let hi = self.ram.read(sp) as u16;
+        sp = sp.wrapping_add(1);
+        self.registers.set_sp(sp);
+        (hi << 8) | lo
     }
 
     pub fn init_post_boot(&mut self) {
@@ -225,7 +246,7 @@ impl CPU {
 
         // Push PC usando push_u16 para manter consistência total com CALL/RET
         let pc = self.registers.get_pc();
-        push_u16(self, pc);
+        self.push_u16(pc);
 
         self.registers.set_pc(vector);
 

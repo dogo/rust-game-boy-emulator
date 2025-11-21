@@ -96,21 +96,12 @@ pub fn write_rr(cpu: &mut CPU, idx: u8, val: u16) {
 }
 
 // Stack helpers
+#[inline]
 pub fn push_u16(cpu: &mut CPU, val: u16) {
-    let sp = cpu.registers.get_sp();
-    let sp = sp.wrapping_sub(1);
-    cpu.ram.write(sp, (val >> 8) as u8);
-    let sp = sp.wrapping_sub(1);
-    cpu.ram.write(sp, (val & 0xFF) as u8);
-    cpu.registers.set_sp(sp);
+    cpu.push_u16(val);
 }
 
+#[inline]
 pub fn pop_u16(cpu: &mut CPU) -> u16 {
-    let sp = cpu.registers.get_sp();
-    let lo = cpu.ram.read(sp) as u16;
-    let sp = sp.wrapping_add(1);
-    let hi = cpu.ram.read(sp) as u16;
-    let sp = sp.wrapping_add(1);
-    cpu.registers.set_sp(sp);
-    (hi << 8) | lo
+    cpu.pop_u16()
 }

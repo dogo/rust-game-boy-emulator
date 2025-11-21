@@ -1,7 +1,7 @@
 // Módulo de instruções - organizadas por categoria
 
 // Submódulos
-pub mod helpers;
+mod helpers;
 mod load;
 mod arithmetic;
 mod logic;
