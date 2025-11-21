@@ -7,7 +7,7 @@ pub struct RAM {
     // ROM completa do cartucho (para mapeamento por banco)
     rom: Vec<u8>,
     cart_type: u8,
-    // Estado MBC (MBC1 e MBC3)
+    // Estado MBC (MBC1, MBC2, MBC3 e MBC5)
     rom_bank: u8,       // banco ROM selecionado para 0x4000..=0x7FFF
     ram_enabled: bool,  // enable RAM/RTC (0x0000..=0x1FFF)
     ram_bank: u8,       // seleção de banco de RAM (MBC1: 0-3, MBC3: 0-3 ou RTC 8-C)
@@ -19,6 +19,9 @@ pub struct RAM {
     mbc5_rom_bank_low: u8,  // bits 0-7 do ROM bank (0x2000-0x2FFF)
     mbc5_rom_bank_high: u8, // bit 8 do ROM bank (0x3000-0x3FFF)
     mbc5_ram_bank: u8,      // bits 0-3 = RAM bank, bit 3 = rumble
+    // MBC2 específico
+    mbc2_rom_bank: u8,      // banco ROM (1-15, 0 é mapeado para 1)
+    mbc2_ram: [u8; 512],    // RAM interna 512×4 bits (armazenada como bytes)
     // RAM externa do cartucho (MBC3: até 4 bancos de 8KB = 32KB)
     cart_ram: Vec<u8>,
     // RTC (Real Time Clock) do MBC3
@@ -65,6 +68,8 @@ impl RAM {
             mbc5_rom_bank_low: 1,  // banco ROM baixo (1 por padrão)
             mbc5_rom_bank_high: 0, // banco ROM alto (bit 8)
             mbc5_ram_bank: 0,      // banco RAM + rumble
+            mbc2_rom_bank: 1,      // banco ROM MBC2 (1 por padrão)
+            mbc2_ram: [0; 512],    // RAM interna MBC2 (512×4 bits)
             cart_ram: vec![0; 128 * 1024], // 128KB = 16 bancos de 8KB (MBC5 max)
             rtc_s: 0,
             rtc_m: 0,
@@ -130,6 +135,15 @@ impl RAM {
                     let idx = bank * 0x4000 + off;
                     return self.rom_get(idx);
                 }
+            } else if self.is_mbc2() {
+                if addr < 0x4000 {
+                    return self.rom_get(addr); // Banco 0 fixo
+                } else {
+                    let off = addr - 0x4000;
+                    let bank = self.mbc2_rom_bank as usize;
+                    let idx = bank * 0x4000 + off;
+                    return self.rom_get(idx);
+                }
             } else {
                 // ROM ONLY / sem MBC: banco 0 fixo
                 return self.rom_get(addr);
@@ -176,7 +190,14 @@ impl RAM {
             return val;
         }        // Mapeamento de RAM externa do cartucho (0xA000..=0xBFFF)
         if addr >= 0xA000 && addr < 0xC000 {
-            if (self.is_mbc1() || self.is_mbc3() || self.is_mbc5()) && self.ram_enabled {
+            if self.is_mbc2() && self.ram_enabled {
+                // MBC2: RAM interna 512×4 bits mapeada em 0xA000-0xA1FF
+                if addr <= 0xA1FF {
+                    let ram_addr = (addr - 0xA000) & 0x1FF; // 512 bytes (0-511)
+                    return self.mbc2_ram[ram_addr] | 0xF0; // bits 4-7 sempre 1
+                }
+                return 0xFF;
+            } else if (self.is_mbc1() || self.is_mbc3() || self.is_mbc5()) && self.ram_enabled {
                 if self.is_mbc1() {
                     // MBC1: usa banco efetivo baseado no modo
                     let bank = self.mbc1_effective_ram_bank();
@@ -290,6 +311,38 @@ impl RAM {
                     return;
                 }
                 _ => {}
+            }
+        }
+
+        // Tratamento de registradores MBC2
+        if self.is_mbc2() {
+            match address {
+                0x0000..=0x3FFF => {
+                    // MBC2 tem lógica especial: bit 8 do endereço determina função
+                    if (address & 0x0100) == 0 {
+                        // RAM enable/disable (bit 8 = 0)
+                        let old = self.ram_enabled;
+                        self.ram_enabled = (byte & 0x0F) == 0x0A;
+                        if self.trace_enabled && old != self.ram_enabled {
+                            crate::GB::trace::trace_mbc_ram_enable(self.ram_enabled);
+                        }
+                    } else {
+                        // ROM bank select (bit 8 = 1)
+                        let new_bank = (byte & 0x0F).max(1); // 4 bits, mínimo 1
+                        if self.mbc2_rom_bank != new_bank {
+                            if self.trace_enabled {
+                                let old_bank = self.mbc2_rom_bank;
+                                self.mbc2_rom_bank = new_bank;
+                                crate::GB::trace::trace_mbc_rom_bank(old_bank, new_bank);
+                            } else {
+                                self.mbc2_rom_bank = new_bank;
+
+                            }
+                        }
+                    }
+                    return;
+                }
+                _ => {} // Outros endereços não são tratados pelo MBC2
             }
         }
 
@@ -507,7 +560,13 @@ impl RAM {
 
             0xA000..=0xBFFF => {
                 // Escrita em RAM externa ou RTC
-                if (self.is_mbc1() || self.is_mbc3() || self.is_mbc5()) && self.ram_enabled {
+                if self.is_mbc2() && self.ram_enabled {
+                    // MBC2: RAM interna 512×4 bits mapeada em 0xA000-0xA1FF
+                    if address <= 0xA1FF {
+                        let ram_addr = (address - 0xA000) & 0x1FF; // 512 bytes (0-511)
+                        self.mbc2_ram[ram_addr as usize] = byte & 0x0F; // só 4 bits baixos
+                    }
+                } else if (self.is_mbc1() || self.is_mbc3() || self.is_mbc5()) && self.ram_enabled {
                     if self.is_mbc1() {
                         // MBC1: usa banco efetivo baseado no modo
                         let bank = self.mbc1_effective_ram_bank();
@@ -634,6 +693,10 @@ impl RAM {
 
     fn is_mbc5(&self) -> bool {
         matches!(self.cart_type, 0x19..=0x1E)
+    }
+
+    fn is_mbc2(&self) -> bool {
+        matches!(self.cart_type, 0x05..=0x06)
     }
 
     fn rom_get(&self, idx: usize) -> u8 {
