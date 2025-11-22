@@ -552,13 +552,14 @@ impl PPU {
                     self.change_mode(3, iflags);
                 }
             } else if self.mode_clock < 456 {
-                if self.mode == 0 {
-                    // Reset window state if window is disabled
-                    if (self.lcdc & 0x20) == 0 {
-                        self.wy_trigger = false;
-                        self.wy_pos = -1;
-                    }
-                    // ...existing code...
+                // Mode 0: HBlank
+                if self.mode != 0 {
+                    self.change_mode(0, iflags);
+                }
+                // Se window estiver desabilitada, garante reset do estado
+                if (self.lcdc & 0x20) == 0 {
+                    self.wy_trigger = false;
+                    self.wy_pos = -1;
                 }
             }
         } else {

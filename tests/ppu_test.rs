@@ -459,6 +459,48 @@ mod ppu_tests {
     }
 
     #[test]
+    fn test_ppu_hblank_triggers_rendering() {
+        let mut ppu = PPU::new();
+        let mut iflags = 0u8;
+
+        // BG on, tile data unsigned, tilemap 0x9800
+        ppu.lcdc = 0x91;
+
+        // Criar tile simples (cor 3 sempre)
+        for i in 0..8 {
+            ppu.vram[i * 2] = 0xFF;
+            ppu.vram[i * 2 + 1] = 0xFF;
+        }
+
+        // Usar tile 0 no início do tilemap
+        ppu.vram[0x1800] = 0;
+
+        // Linha 0
+        ppu.ly = 0;
+
+        // Simular execução de CPU: vários steps pequenos até passar a primeira linha
+        let mut total_cycles = 0;
+        while ppu.ly == 0 && total_cycles < 456 {
+            ppu.step(4, &mut iflags);
+            total_cycles += 4;
+        }
+
+        // Agora, a linha 0 deve ter sido renderizada em algum HBlank
+        let line_start = 0;
+        let mut rendered_pixels = 0;
+        for x in 0..160 {
+            if ppu.framebuffer[line_start + x] != 0 {
+                rendered_pixels += 1;
+            }
+        }
+
+        assert!(
+            rendered_pixels > 0,
+            "HBlank should trigger rendering, but framebuffer line is blank"
+        );
+    }
+
+    #[test]
     fn test_window_basic_rendering() {
         let mut ppu = PPU::new();
 
