@@ -549,6 +549,8 @@ impl PPU {
             self.mode_clock = 0;
             self.ly = 0;
             self.frame_ready = false;
+            self.wy_trigger = false;
+            self.wy_pos = -1;
             return;
         }
 
@@ -601,6 +603,8 @@ impl PPU {
             1 => {
                 self.frame_ready = true;
                 *iflags |= 0x01;
+                self.wy_trigger = false;
+                self.wy_pos = -1;
                 (self.stat & 0x10) != 0
             }
             2 => (self.stat & 0x20) != 0,
