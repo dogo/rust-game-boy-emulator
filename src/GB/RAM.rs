@@ -2,6 +2,7 @@
 use crate::GB::mbc::MBC;
 use crate::GB::PPU;
 use crate::GB::APU;
+use crate::GB::timer::Timer;
 
 pub struct RAM {
     memory: [u8; 65536],
@@ -10,10 +11,7 @@ pub struct RAM {
     pub apu: APU::APU,
     pub trace_enabled: bool,
     pub joypad: crate::GB::joypad::Joypad,
-    // Timer state
-    div_counter: u16,
-    timer_last_signal: bool,
-    tima_reload_delay: u8,
+    pub timer: Timer,
 }
 
 impl RAM {
@@ -26,55 +24,17 @@ impl RAM {
         }
     }
 
-    // === API pública para manipular joypad ===
-
-
-    // Timer helpers
-    fn timer_bit_index(&self) -> u8 {
-        match self.memory[0xFF07] & 0x03 {
-            0b00 => 9,
-            0b01 => 3,
-            0b10 => 5,
-            _ => 7,
-        }
-    }
-
-    fn timer_enabled(&self) -> bool {
-        (self.memory[0xFF07] & 0x04) != 0
-    }
-
-    fn current_timer_signal(&self) -> bool {
-        let enabled = self.timer_enabled();
-        if !enabled { return false; }
-        let bit = self.timer_bit_index();
-        ((self.div_counter >> bit) & 1) != 0
-    }
-
     pub fn tick_timers(&mut self, cycles: u32) {
-        for _ in 0..cycles {
-            self.div_counter = self.div_counter.wrapping_add(1);
-            self.memory[0xFF04] = (self.div_counter >> 8) as u8;
-            if self.tima_reload_delay > 0 {
-                self.tima_reload_delay -= 1;
-                if self.tima_reload_delay == 0 {
-                    let tma = self.memory[0xFF06];
-                    self.memory[0xFF05] = tma;
-                    self.memory[0xFF0F] |= 0x04;
-                }
-            }
-            let signal = self.current_timer_signal();
-            if self.timer_last_signal && !signal {
-                let tima = self.memory[0xFF05];
-                if tima == 0xFF {
-                    self.memory[0xFF05] = 0x00;
-                    self.tima_reload_delay = 4;
-                } else {
-                    self.memory[0xFF05] = tima.wrapping_add(1);
-                }
-            }
-            self.timer_last_signal = signal;
-        }
+        let tma = self.memory[0xFF06];
+        let tac = self.memory[0xFF07];
+        let tima = self.memory[0xFF05];
+        let if_reg = self.memory[0xFF0F];
+        let (new_tima, new_if) = self.timer.tick(cycles, tima, tma, tac, if_reg);
+        self.memory[0xFF05] = new_tima;
+        self.memory[0xFF0F] = new_if;
+        self.memory[0xFF04] = self.timer.read_div();
     }
+
     pub fn new(mbc: Box<dyn MBC>) -> Self {
         RAM {
             memory: [0; 65536],
@@ -83,69 +43,61 @@ impl RAM {
             apu: APU::APU::new(),
             trace_enabled: false,
             joypad: crate::GB::joypad::Joypad::new(),
-            div_counter: 0,
-            timer_last_signal: false,
-            tima_reload_delay: 0,
+            timer: Timer::new(),
         }
     }
 
     pub fn read(&self, address: u16) -> u8 {
         if address == 0xFF00 {
-            self.joypad.read()
-        } else {
-            match address {
-                0x0000..=0x7FFF => self.mbc.read_rom(address),
-                0x8000..=0x9FFF => self.ppu.read_vram(address),
-                0xA000..=0xBFFF => self.mbc.read_ram(address),
-                0xFE00..=0xFE9F => self.ppu.read_oam(address),
-                0xFF0F => self.memory[0xFF0F], // IF
-                0xFFFF => self.memory[0xFFFF], // IE
-                0xFF10..=0xFF3F => self.apu.read_register(address),
-                0xFF40..=0xFF4B => self.ppu.read_register(address),
-                _ => self.memory[address as usize],
-            }
+            return self.joypad.read();
+        }
+        match address {
+            0x0000..=0x7FFF => self.mbc.read_rom(address),
+            0x8000..=0x9FFF => self.ppu.read_vram(address),
+            0xA000..=0xBFFF => self.mbc.read_ram(address),
+            0xFE00..=0xFE9F => self.ppu.read_oam(address),
+            0xFF0F => self.memory[0xFF0F], // IF
+            0xFFFF => self.memory[0xFFFF], // IE
+            0xFF10..=0xFF3F => self.apu.read_register(address),
+            0xFF40..=0xFF4B => self.ppu.read_register(address),
+            _ => self.memory[address as usize],
         }
     }
-
     pub fn write(&mut self, address: u16, value: u8) {
         match address {
-            0x0000..=0x7FFF => {
-                self.mbc.write_register(address, value);
-            }
-            0x8000..=0x9FFF => {
-                self.ppu.write_vram(address, value);
-            }
-            0xA000..=0xBFFF => {
-                self.mbc.write_ram(address, value);
-            }
-            0xFE00..=0xFE9F => {
-                self.ppu.write_oam(address, value);
-            }
-            // DMA transfer (OAM sprites)
+            0x0000..=0x7FFF => self.mbc.write_register(address, value),
+            0x8000..=0x9FFF => self.ppu.write_vram(address, value),
+            0xA000..=0xBFFF => self.mbc.write_ram(address, value),
+            0xFE00..=0xFE9F => self.ppu.write_oam(address, value),
+            0xFF00 => self.joypad.write(value),
+            0xFF04 => {
+                let tima = self.memory[0xFF05];
+                let tma = self.memory[0xFF06];
+                let tac = self.memory[0xFF07];
+                let if_reg = self.memory[0xFF0F];
+                let (new_tima, new_if) = self.timer.reset_div(tima, tma, tac, if_reg);
+                self.memory[0xFF05] = new_tima;
+                self.memory[0xFF0F] = new_if;
+                self.memory[0xFF04] = 0;
+            },
+            0xFF07 => {
+                let tima = self.memory[0xFF05];
+                let tma = self.memory[0xFF06];
+                let old_tac = self.memory[0xFF07];
+                let if_reg = self.memory[0xFF0F];
+                let (new_tima, new_if) = self.timer.write_tac(tima, tma, old_tac, value, if_reg);
+                self.memory[0xFF05] = new_tima;
+                self.memory[0xFF0F] = new_if;
+                self.memory[0xFF07] = value;
+            },
             0xFF46 => {
-                self.memory[0xFF46] = value;
                 self.dma_transfer(value);
-            }
-            // Joypad select
-            0xFF00 => {
-                self.joypad.write(value);
-            }
-            0xFF0F => {
-                self.memory[0xFF0F] = value;
-            }
-            0xFFFF => {
-                self.memory[0xFFFF] = value;
-            }
-            0xFF10..=0xFF3F => {
-                self.apu.write_register(address, value);
-            }
-            0xFF40..=0xFF4B => {
-                self.ppu.write_register(address, value);
-            }
-            // Demais registradores / RAM
-            _ => {
-                self.memory[address as usize] = value;
-            }
+            },
+            0xFF0F => self.memory[0xFF0F] = value, // IF
+            0xFFFF => self.memory[0xFFFF] = value, // IE
+            0xFF10..=0xFF3F => self.apu.write_register(address, value),
+            0xFF40..=0xFF4B => self.ppu.write_register(address, value),
+            _ => self.memory[address as usize] = value,
         }
     }
 
