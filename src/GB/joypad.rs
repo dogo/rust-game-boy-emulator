@@ -1,9 +1,9 @@
 // Joypad module: encapsula toda a lógica do controle
 
 pub struct Joypad {
-    select: u8,                                      // bits 4 e 5: seleção de grupo
-    dpad: u8,    // bits 0-3: estado do D-pad (0=pressed, 1=released)
-    buttons: u8, // bits 0-3: estado dos botões de ação (0=pressed, 1=released)
+    select: u8,              // bits 4 e 5: seleção de grupo
+    dpad: u8,                // bits 0-3: estado do D-pad (0=pressed, 1=released)
+    buttons: u8,             // bits 0-3: estado dos botões de ação (0=pressed, 1=released)
     interrupt_pending: bool, // flag para IRQ
 }
 
@@ -41,35 +41,51 @@ impl Joypad {
         let mut irq = false;
         match button {
             "RIGHT" => {
-                if self.dpad & (1 << 0) != 0 { irq = true; }
+                if self.dpad & (1 << 0) != 0 {
+                    irq = true;
+                }
                 self.dpad &= !(1 << 0);
             }
             "LEFT" => {
-                if self.dpad & (1 << 1) != 0 { irq = true; }
+                if self.dpad & (1 << 1) != 0 {
+                    irq = true;
+                }
                 self.dpad &= !(1 << 1);
             }
             "UP" => {
-                if self.dpad & (1 << 2) != 0 { irq = true; }
+                if self.dpad & (1 << 2) != 0 {
+                    irq = true;
+                }
                 self.dpad &= !(1 << 2);
             }
             "DOWN" => {
-                if self.dpad & (1 << 3) != 0 { irq = true; }
+                if self.dpad & (1 << 3) != 0 {
+                    irq = true;
+                }
                 self.dpad &= !(1 << 3);
             }
             "A" => {
-                if self.buttons & (1 << 0) != 0 { irq = true; }
+                if self.buttons & (1 << 0) != 0 {
+                    irq = true;
+                }
                 self.buttons &= !(1 << 0);
             }
             "B" => {
-                if self.buttons & (1 << 1) != 0 { irq = true; }
+                if self.buttons & (1 << 1) != 0 {
+                    irq = true;
+                }
                 self.buttons &= !(1 << 1);
             }
             "SELECT" => {
-                if self.buttons & (1 << 2) != 0 { irq = true; }
+                if self.buttons & (1 << 2) != 0 {
+                    irq = true;
+                }
                 self.buttons &= !(1 << 2);
             }
             "START" => {
-                if self.buttons & (1 << 3) != 0 { irq = true; }
+                if self.buttons & (1 << 3) != 0 {
+                    irq = true;
+                }
                 self.buttons &= !(1 << 3);
             }
             _ => {}
