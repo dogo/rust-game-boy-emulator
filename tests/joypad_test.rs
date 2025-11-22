@@ -7,7 +7,7 @@ mod joypad_tests {
 
     #[test]
     fn test_joypad_basic_operations() {
-        let mut cpu = CPU::new();
+        let mut cpu = CPU::new(Vec::new());
 
         // Simula ROM mínima
         let rom = vec![0x00; 0x8000];
@@ -53,7 +53,7 @@ mod joypad_tests {
 
     #[test]
     fn test_joypad_multiple_buttons() {
-        let mut cpu = CPU::new();
+        let mut cpu = CPU::new(Vec::new());
         let rom = vec![0x00; 0x8000];
         cpu.load_rom(&rom);
 
@@ -73,7 +73,7 @@ mod joypad_tests {
 
     #[test]
     fn test_joypad_mode_switching() {
-        let mut cpu = CPU::new();
+        let mut cpu = CPU::new(Vec::new());
         let rom = vec![0x00; 0x8000];
         cpu.load_rom(&rom);
 

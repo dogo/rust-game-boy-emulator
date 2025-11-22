@@ -375,8 +375,7 @@ fn main() {
     let sav_path = get_sav_path(rom_path);
 
     let data = fs::read(rom_path).expect("Falha ao ler ROM");
-    let mut cpu = GB::CPU::CPU::new();
-    cpu.load_rom(&data);
+    let mut cpu = GB::CPU::CPU::new(data.clone());
     cpu.init_post_boot();
 
     // Carrega save se existir

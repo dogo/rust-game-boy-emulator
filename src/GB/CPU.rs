@@ -13,10 +13,11 @@ pub struct CPU {
 }
 
 impl CPU {
-    pub fn new() -> Self {
+    pub fn new(rom: Vec<u8>) -> Self {
+        let mbc = crate::GB::mbc::create_mbc(rom);
         CPU {
             registers: registers::Registers::new(),
-            ram: RAM::RAM::new(),
+            ram: RAM::RAM::new(mbc),
             ime: false,
             ime_enable_next: false,
             halted: false,
@@ -76,8 +77,7 @@ impl CPU {
                  self.ram.read(0xFF40), self.ram.read(0xFF47), self.ram.read(0xFF48), self.ram.read(0xFF49));
     }
 
-    pub fn load_rom(&mut self, data: &[u8]) {
-        self.ram.load_bytes(data);
+    pub fn load_rom(&mut self) {
         // Inicializa alguns registradores de IO comuns
         self.ram.write(0xFF04, 0); // DIV
         self.ram.write(0xFF0F, 0); // IF
