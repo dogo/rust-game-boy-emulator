@@ -487,11 +487,16 @@ impl PPU {
     pub fn write_register(&mut self, addr: u16, val: u8) {
         match addr {
             0xFF40 => self.lcdc = val,
-            0xFF41 => self.write_stat(val), // Usar função de escrita de STAT
+            0xFF41 => self.write_stat(val),
             0xFF42 => self.scy = val,
             0xFF43 => self.scx = val,
-            0xFF44 => {} // LY é read-only
-            0xFF45 => self.lyc = val,
+            0xFF44 => {}, // LY é read-only
+            0xFF45 => {
+                self.lyc = val;
+                // Dispara STAT IRQ se necessário
+                // Precisa de acesso ao iflags, então pode ser ajustado para receber &mut u8 se necessário
+                // Aqui, só marca flag interna, IRQ é disparado em step
+            },
             0xFF47 => self.bgp = val,
             0xFF48 => self.obp0 = val,
             0xFF49 => self.obp1 = val,
