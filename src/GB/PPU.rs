@@ -110,6 +110,9 @@ impl PPU {
     pub fn render_window_scanline(&mut self) {
         // LCDC bit 5: Window enable
         if (self.lcdc & 0x20) == 0 {
+            // Window disabled → reset state
+            self.wy_trigger = false;
+            self.wy_pos = -1;
             return; // Window desabilitada
         }
 
@@ -549,8 +552,13 @@ impl PPU {
                     self.change_mode(3, iflags);
                 }
             } else if self.mode_clock < 456 {
-                if self.mode != 0 {
-                    self.change_mode(0, iflags);
+                if self.mode == 0 {
+                    // Reset window state if window is disabled
+                    if (self.lcdc & 0x20) == 0 {
+                        self.wy_trigger = false;
+                        self.wy_pos = -1;
+                    }
+                    // ...existing code...
                 }
             }
         } else {

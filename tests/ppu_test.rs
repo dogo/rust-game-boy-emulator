@@ -398,9 +398,10 @@ mod ppu_tests {
         let mut ppu = PPU::new();
         ppu.lcdc = 0x93;
 
-        // Preencher background com cor 2
+        // Preencher background com cor 2 e marcar como opaco no bg_priority
         for i in 0..160 {
             ppu.framebuffer[i] = 2;
+            ppu.bg_priority[i] = true;
         }
 
         // Tile do sprite (cor 1)
@@ -647,13 +648,19 @@ mod ppu_tests {
     #[test]
     fn test_ppu_bg_priority_buffer() {
         let mut ppu = PPU::new();
-        ppu.lcdc = 0x91; // LCD on, BG on
+        ppu.lcdc = 0x91 | 0x02; // LCD on, BG on, sprites ON
         ppu.ly = 0;
-        // Render BG scanline with nonzero color
-        ppu.vram[0x1800] = 1; // tile index
+
+        // Preencher a primeira linha do tilemap com tile 1
+        for x in 0..32 {
+            ppu.vram[0x1800 + x] = 1; // tile index 1 em toda a linha
+        }
+
+        // Tile 1 com todos pixels != 0
         ppu.vram[16] = 0xFF; // tile data (all pixels set)
         ppu.vram[17] = 0xFF;
         ppu.bgp = 0xFF; // Palette: all colors nonzero (3)
+
         ppu.render_bg_scanline();
         let line_start = 0;
         for x in 0..160 {
@@ -664,9 +671,10 @@ mod ppu_tests {
         }
 
         // Sprite priority test
-        // BG pixel set to color 2, palette maps to 2
+        // BG pixel set to color 2, palette maps to opaque
         ppu.framebuffer[0] = 2;
-        ppu.bgp = 0xFF; // Palette: color 2 maps to 3 (opaque)
+        // bg_priority[0] já está true por causa do render_bg_scanline acima
+
         // Sprite with low priority (bit 7 = 1)
         ppu.oam[0] = 16; // Y = linha 0
         ppu.oam[1] = 8; // X = coluna 0
