@@ -9,9 +9,7 @@ pub struct RAM {
     pub ppu: PPU::PPU,
     pub apu: APU::APU,
     pub trace_enabled: bool,
-    // Joypad state
-    joypad_dpad: u8,
-    joypad_buttons: u8,
+    pub joypad: crate::GB::joypad::Joypad,
     // Timer state
     div_counter: u16,
     timer_last_signal: bool,
@@ -30,21 +28,6 @@ impl RAM {
 
     // === API pública para manipular joypad ===
 
-    pub fn press_joypad_button(&mut self, button: u8, is_dpad: bool) {
-        if is_dpad {
-            self.joypad_dpad &= !(1 << button);
-        } else {
-            self.joypad_buttons &= !(1 << button);
-        }
-    }
-
-    pub fn release_joypad_button(&mut self, button: u8, is_dpad: bool) {
-        if is_dpad {
-            self.joypad_dpad |= 1 << button;
-        } else {
-            self.joypad_buttons |= 1 << button;
-        }
-    }
 
     // Timer helpers
     fn timer_bit_index(&self) -> u8 {
@@ -99,8 +82,7 @@ impl RAM {
             ppu: PPU::PPU::new(),
             apu: APU::APU::new(),
             trace_enabled: false,
-            joypad_dpad: 0xFF,
-            joypad_buttons: 0xFF,
+            joypad: crate::GB::joypad::Joypad::new(),
             div_counter: 0,
             timer_last_signal: false,
             tima_reload_delay: 0,
@@ -109,22 +91,7 @@ impl RAM {
 
     pub fn read(&self, address: u16) -> u8 {
         if address == 0xFF00 {
-            // Joypad register
-            let select = self.memory[0xFF00];
-            let mut result = select & 0xF0;
-            // Bit 4 = D-pad select (0 = selected)
-            // Bit 5 = Button select (0 = selected)
-            if select & 0x10 == 0 {
-                // D-pad selected
-                result |= self.joypad_dpad & 0x0F;
-            } else if select & 0x20 == 0 {
-                // Button group selected
-                result |= self.joypad_buttons & 0x0F;
-            } else {
-                // Nenhum grupo selecionado: bits baixos = 0x0F
-                result |= 0x0F;
-            }
-            result
+            self.joypad.read()
         } else {
             match address {
                 0x0000..=0x7FFF => self.mbc.read_rom(address),
@@ -161,7 +128,7 @@ impl RAM {
             }
             // Joypad select
             0xFF00 => {
-                self.memory[0xFF00] = value & 0x30;
+                self.joypad.write(value);
             }
             0xFF0F => {
                 self.memory[0xFF0F] = value;

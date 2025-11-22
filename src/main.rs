@@ -214,14 +214,14 @@ fn run_sdl(cpu: &mut GB::CPU::CPU) {
                     repeat: false,
                     ..
                 } => match k {
-                    Keycode::Right => cpu.press_button("RIGHT"),
-                    Keycode::Left => cpu.press_button("LEFT"),
-                    Keycode::Up => cpu.press_button("UP"),
-                    Keycode::Down => cpu.press_button("DOWN"),
-                    Keycode::Z => cpu.press_button("A"),
-                    Keycode::X => cpu.press_button("B"),
-                    Keycode::Return => cpu.press_button("START"),
-                    Keycode::Backspace => cpu.press_button("SELECT"),
+                    Keycode::Right => cpu.ram.joypad.press("RIGHT"),
+                    Keycode::Left => cpu.ram.joypad.press("LEFT"),
+                    Keycode::Up => cpu.ram.joypad.press("UP"),
+                    Keycode::Down => cpu.ram.joypad.press("DOWN"),
+                    Keycode::Z => cpu.ram.joypad.press("A"),
+                    Keycode::X => cpu.ram.joypad.press("B"),
+                    Keycode::Return => cpu.ram.joypad.press("START"),
+                    Keycode::Backspace => cpu.ram.joypad.press("SELECT"),
                     _ => {}
                 },
                 Event::KeyUp {
@@ -229,14 +229,14 @@ fn run_sdl(cpu: &mut GB::CPU::CPU) {
                     repeat: false,
                     ..
                 } => match k {
-                    Keycode::Right => cpu.release_button("RIGHT"),
-                    Keycode::Left => cpu.release_button("LEFT"),
-                    Keycode::Up => cpu.release_button("UP"),
-                    Keycode::Down => cpu.release_button("DOWN"),
-                    Keycode::Z => cpu.release_button("A"),
-                    Keycode::X => cpu.release_button("B"),
-                    Keycode::Return => cpu.release_button("START"),
-                    Keycode::Backspace => cpu.release_button("SELECT"),
+                    Keycode::Right => cpu.ram.joypad.release("RIGHT"),
+                    Keycode::Left => cpu.ram.joypad.release("LEFT"),
+                    Keycode::Up => cpu.ram.joypad.release("UP"),
+                    Keycode::Down => cpu.ram.joypad.release("DOWN"),
+                    Keycode::Z => cpu.ram.joypad.release("A"),
+                    Keycode::X => cpu.ram.joypad.release("B"),
+                    Keycode::Return => cpu.ram.joypad.release("START"),
+                    Keycode::Backspace => cpu.ram.joypad.release("SELECT"),
                     _ => {}
                 },
                 // qualquer outra coisa a gente só ignora

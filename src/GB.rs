@@ -8,3 +8,4 @@ pub mod instructions;
 pub mod registers;
 pub mod trace;
 pub mod mbc;
+pub mod joypad;
