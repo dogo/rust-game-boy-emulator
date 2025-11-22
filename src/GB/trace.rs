@@ -87,11 +87,11 @@ pub fn trace_timer_interrupt(tma: u8) {
 
 pub fn run_with_trace(cpu: &mut CPU, max_steps: usize) {
     // Ativa trace de operações da RAM (MBC, timer, joypad)
-    cpu.ram.trace_enabled = true;
+    // Trace flag removed: MemoryBus does not have trace_enabled
 
     for step in 0..max_steps {
         let pc = cpu.registers.get_pc();
-        let opcode = cpu.ram.read(pc); // peek
+        let opcode = cpu.bus.read(pc); // peek
         let instr = instructions::decode(opcode);
         // Detalhes extras para diagnosticar polling em IO
         let extra = build_trace_extra(cpu, pc, opcode);
@@ -118,14 +118,14 @@ fn build_trace_extra(cpu: &CPU, pc: u16, opcode: u8) -> String {
 
         // LDH A,(n)
         0xF0 => {
-            let n = cpu.ram.read(pc.wrapping_add(1));
-            let val = cpu.ram.read(0xFF00u16.wrapping_add(n as u16));
+            let n = cpu.bus.read(pc.wrapping_add(1));
+            let val = cpu.bus.read(0xFF00u16.wrapping_add(n as u16));
             format!(" n={:02X} [FF{:02X}]=>{:02X}", n, n, val)
         }
 
         // LDH (n),A
         0xE0 => {
-            let n = cpu.ram.read(pc.wrapping_add(1));
+            let n = cpu.bus.read(pc.wrapping_add(1));
             let a = cpu.registers.get_a();
             format!(" n={:02X} [FF{:02X}]<=A({:02X})", n, n, a)
         }
@@ -133,7 +133,7 @@ fn build_trace_extra(cpu: &CPU, pc: u16, opcode: u8) -> String {
         // LD A,(C)
         0xF2 => {
             let c = cpu.registers.get_c();
-            let val = cpu.ram.read(0xFF00u16.wrapping_add(c as u16));
+            let val = cpu.bus.read(0xFF00u16.wrapping_add(c as u16));
             format!(" C={:02X} [FF{:02X}]=>{:02X}", c, c, val)
         }
 
@@ -146,17 +146,17 @@ fn build_trace_extra(cpu: &CPU, pc: u16, opcode: u8) -> String {
 
         // LD A,(a16)
         0xFA => {
-            let lo = cpu.ram.read(pc.wrapping_add(1)) as u16;
-            let hi = cpu.ram.read(pc.wrapping_add(2)) as u16;
+            let lo = cpu.bus.read(pc.wrapping_add(1)) as u16;
+            let hi = cpu.bus.read(pc.wrapping_add(2)) as u16;
             let addr = (hi << 8) | lo;
-            let val = cpu.ram.read(addr);
+            let val = cpu.bus.read(addr);
             format!(" a16={:04X}=>{:02X}", addr, val)
         }
 
         // LD (a16),A
         0xEA => {
-            let lo = cpu.ram.read(pc.wrapping_add(1)) as u16;
-            let hi = cpu.ram.read(pc.wrapping_add(2)) as u16;
+            let lo = cpu.bus.read(pc.wrapping_add(1)) as u16;
+            let hi = cpu.bus.read(pc.wrapping_add(2)) as u16;
             let addr = (hi << 8) | lo;
             let a = cpu.registers.get_a();
             format!(" a16={:04X}<=A({:02X})", addr, a)
@@ -164,7 +164,7 @@ fn build_trace_extra(cpu: &CPU, pc: u16, opcode: u8) -> String {
 
         // CP A,d8 (FE) — mostra comparacao e flags resultantes
         0xFE => {
-            let n = cpu.ram.read(pc.wrapping_add(1));
+            let n = cpu.bus.read(pc.wrapping_add(1));
             let a = cpu.registers.get_a();
             let z = a == n; // Z set if equal
             let c = a < n;  // C set if borrow (a < n)
@@ -174,7 +174,7 @@ fn build_trace_extra(cpu: &CPU, pc: u16, opcode: u8) -> String {
 
         // JR cc,r8 — 20,28,30,38: mostra offset, condicao e alvo
         0x20 | 0x28 | 0x30 | 0x38 => {
-            let off = cpu.ram.read(pc.wrapping_add(1)) as i8;
+            let off = cpu.bus.read(pc.wrapping_add(1)) as i8;
             let base = cpu.registers.get_pc().wrapping_add(2) as i32;
             let target = (base + off as i32) as u16;
             let z = cpu.registers.get_flag_z();
@@ -191,7 +191,7 @@ fn build_trace_extra(cpu: &CPU, pc: u16, opcode: u8) -> String {
 
         // JR r8 incondicional — 18
         0x18 => {
-            let off = cpu.ram.read(pc.wrapping_add(1)) as i8;
+            let off = cpu.bus.read(pc.wrapping_add(1)) as i8;
             let base = cpu.registers.get_pc().wrapping_add(2) as i32;
             let target = (base + off as i32) as u16;
             format!(" r8={:+#04X} target={:04X}", off, target)
@@ -202,7 +202,7 @@ fn build_trace_extra(cpu: &CPU, pc: u16, opcode: u8) -> String {
 }
 
 fn build_cb_trace(cpu: &CPU, pc: u16) -> String {
-    let cb = cpu.ram.read(pc.wrapping_add(1));
+    let cb = cpu.bus.read(pc.wrapping_add(1));
     let r_idx = cb & 0x07;
     let bit_idx = (cb >> 3) & 0x07;
     let r_name = match r_idx {
@@ -211,7 +211,7 @@ fn build_cb_trace(cpu: &CPU, pc: u16) -> String {
     };
 
     let val: u8 = if r_idx == 6 {
-        cpu.ram.read(cpu.registers.get_hl())
+        cpu.bus.read(cpu.registers.get_hl())
     } else {
         match r_idx {
             0 => cpu.registers.get_b(),

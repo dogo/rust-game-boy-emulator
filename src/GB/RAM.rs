@@ -35,17 +35,6 @@ impl RAM {
         }
     }
 
-    pub fn tick_timers(&mut self, cycles: u32) {
-        let tma = self.memory[0xFF06];
-        let tac = self.memory[0xFF07];
-        let tima = self.memory[0xFF05];
-        let if_reg = self.memory[0xFF0F];
-        let (new_tima, new_if) = self.timer.tick(cycles, tima, tma, tac, if_reg);
-        self.memory[0xFF05] = new_tima;
-        self.memory[0xFF0F] = new_if;
-        self.memory[0xFF04] = self.timer.read_div();
-    }
-
     pub fn new(mbc: Box<dyn MBC>) -> Self {
         RAM {
             memory: [0; 65536],

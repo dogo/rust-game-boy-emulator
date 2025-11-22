@@ -1,13 +1,11 @@
 use crate::GB::CPU::CPU;
-
-#[derive(Debug, Clone)]
 pub struct Instruction {
     pub opcode: u8,
     pub name: &'static str,
     pub cycles: u8,
     pub size: u8,
     pub flags: &'static [FlagBits],
-    pub execute: fn(&Instruction, &mut CPU) -> u64,
+    pub execute: fn(&Instruction, &mut crate::GB::registers::Registers, &mut crate::GB::bus::MemoryBus) -> u64,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -21,7 +19,7 @@ pub enum FlagBits {
 
 impl Instruction {
     pub fn nop() -> Self {
-        fn exec_nop(_instr: &Instruction, _cpu: &mut CPU) -> u64 { 4 }
+        fn exec_nop(_instr: &Instruction, _regs: &mut crate::GB::registers::Registers, _bus: &mut crate::GB::bus::MemoryBus) -> u64 { 4 }
         Instruction {
             opcode: 0x00,
             name: "NOP",
@@ -33,7 +31,7 @@ impl Instruction {
     }
 
     pub fn unknown(opcode: u8) -> Self {
-        fn exec_nop(_instr: &Instruction, _cpu: &mut CPU) -> u64 { 0 }
+        fn exec_nop(_instr: &Instruction, _regs: &mut crate::GB::registers::Registers, _bus: &mut crate::GB::bus::MemoryBus) -> u64 { 0 }
         Instruction {
             opcode,
             name: "UNKNOWN",
@@ -46,51 +44,53 @@ impl Instruction {
 }
 
 // Helpers para ler/escrever registradores por índice (0-7: B,C,D,E,H,L,(HL),A)
-pub fn read_r(cpu: &CPU, idx: u8) -> u8 {
+use crate::GB::bus::MemoryBus;
+
+pub fn read_r(regs: &crate::GB::registers::Registers, bus: &MemoryBus, idx: u8) -> u8 {
     match idx {
-        0 => cpu.registers.get_b(),
-        1 => cpu.registers.get_c(),
-        2 => cpu.registers.get_d(),
-        3 => cpu.registers.get_e(),
-        4 => cpu.registers.get_h(),
-        5 => cpu.registers.get_l(),
-        6 => cpu.ram.read(cpu.registers.get_hl()),
-        7 => cpu.registers.get_a(),
+        0 => regs.get_b(),
+        1 => regs.get_c(),
+        2 => regs.get_d(),
+        3 => regs.get_e(),
+        4 => regs.get_h(),
+        5 => regs.get_l(),
+        6 => bus.read(regs.get_hl()),
+        7 => regs.get_a(),
         _ => 0,
     }
 }
 
-pub fn write_r(cpu: &mut CPU, idx: u8, val: u8) {
+pub fn write_r(regs: &mut crate::GB::registers::Registers, bus: &mut MemoryBus, idx: u8, val: u8) {
     match idx {
-        0 => cpu.registers.set_b(val),
-        1 => cpu.registers.set_c(val),
-        2 => cpu.registers.set_d(val),
-        3 => cpu.registers.set_e(val),
-        4 => cpu.registers.set_h(val),
-        5 => cpu.registers.set_l(val),
-        6 => cpu.ram.write(cpu.registers.get_hl(), val),
-        7 => cpu.registers.set_a(val),
+        0 => regs.set_b(val),
+        1 => regs.set_c(val),
+        2 => regs.set_d(val),
+        3 => regs.set_e(val),
+        4 => regs.set_h(val),
+        5 => regs.set_l(val),
+        6 => bus.write(regs.get_hl(), val),
+        7 => regs.set_a(val),
         _ => {}
     }
 }
 
 // Helpers para pares de registradores 16-bit (0-3: BC,DE,HL,SP)
-pub fn read_rr(cpu: &CPU, idx: u8) -> u16 {
+pub fn read_rr(regs: &crate::GB::registers::Registers, idx: u8) -> u16 {
     match idx {
-        0 => cpu.registers.get_bc(),
-        1 => cpu.registers.get_de(),
-        2 => cpu.registers.get_hl(),
-        3 => cpu.registers.get_sp(),
+        0 => regs.get_bc(),
+        1 => regs.get_de(),
+        2 => regs.get_hl(),
+        3 => regs.get_sp(),
         _ => 0,
     }
 }
 
-pub fn write_rr(cpu: &mut CPU, idx: u8, val: u16) {
+pub fn write_rr(regs: &mut crate::GB::registers::Registers, idx: u8, val: u16) {
     match idx {
-        0 => cpu.registers.set_bc(val),
-        1 => cpu.registers.set_de(val),
-        2 => cpu.registers.set_hl(val),
-        3 => cpu.registers.set_sp(val),
+        0 => regs.set_bc(val),
+        1 => regs.set_de(val),
+        2 => regs.set_hl(val),
+        3 => regs.set_sp(val),
         _ => {}
     }
 }

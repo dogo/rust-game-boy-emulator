@@ -7,14 +7,14 @@ use std::fs;
 fn print_cart_info(cpu: &GB::CPU::CPU) {
     let mut title = String::new();
     for addr in 0x0134..=0x0143 {
-        let ch = cpu.ram.read(addr);
+        let ch = cpu.bus.read(addr);
         if ch == 0 { break; }
         if ch.is_ascii() { title.push(ch as char); }
     }
     println!("Título: {}", title);
-    let cart_type = cpu.ram.read(0x0147);
-    let rom_size_code = cpu.ram.read(0x0148);
-    let ram_size_code = cpu.ram.read(0x0149);
+    let cart_type = cpu.bus.read(0x0147);
+    let rom_size_code = cpu.bus.read(0x0148);
+    let ram_size_code = cpu.bus.read(0x0149);
     let cart_str = match cart_type {
         0x00 => "ROM ONLY",
         0x01 | 0x02 | 0x03 => "MBC1",
@@ -33,7 +33,7 @@ fn print_cart_info(cpu: &GB::CPU::CPU) {
     };
     println!(
         "Cart: {:02X} ({}) | ROM code {:02X} (~{} KB) | RAM code {:02X} (~{} KB)",
-        cpu.ram.read(0x0147), cart_str, rom_size_code, rom_kb / 1024, ram_size_code, ram_kb / 1024
+        cpu.bus.read(0x0147), cart_str, rom_size_code, rom_kb / 1024, ram_size_code, ram_kb / 1024
     );
 }
 
@@ -214,14 +214,14 @@ fn run_sdl(cpu: &mut GB::CPU::CPU) {
                     repeat: false,
                     ..
                 } => match k {
-                    Keycode::Right => cpu.ram.joypad.press("RIGHT"),
-                    Keycode::Left => cpu.ram.joypad.press("LEFT"),
-                    Keycode::Up => cpu.ram.joypad.press("UP"),
-                    Keycode::Down => cpu.ram.joypad.press("DOWN"),
-                    Keycode::Z => cpu.ram.joypad.press("A"),
-                    Keycode::X => cpu.ram.joypad.press("B"),
-                    Keycode::Return => cpu.ram.joypad.press("START"),
-                    Keycode::Backspace => cpu.ram.joypad.press("SELECT"),
+                    Keycode::Right => cpu.bus.joypad.press("RIGHT"),
+                    Keycode::Left => cpu.bus.joypad.press("LEFT"),
+                    Keycode::Up => cpu.bus.joypad.press("UP"),
+                    Keycode::Down => cpu.bus.joypad.press("DOWN"),
+                    Keycode::Z => cpu.bus.joypad.press("A"),
+                    Keycode::X => cpu.bus.joypad.press("B"),
+                    Keycode::Return => cpu.bus.joypad.press("START"),
+                    Keycode::Backspace => cpu.bus.joypad.press("SELECT"),
                     _ => {}
                 },
                 Event::KeyUp {
@@ -229,14 +229,14 @@ fn run_sdl(cpu: &mut GB::CPU::CPU) {
                     repeat: false,
                     ..
                 } => match k {
-                    Keycode::Right => cpu.ram.joypad.release("RIGHT"),
-                    Keycode::Left => cpu.ram.joypad.release("LEFT"),
-                    Keycode::Up => cpu.ram.joypad.release("UP"),
-                    Keycode::Down => cpu.ram.joypad.release("DOWN"),
-                    Keycode::Z => cpu.ram.joypad.release("A"),
-                    Keycode::X => cpu.ram.joypad.release("B"),
-                    Keycode::Return => cpu.ram.joypad.release("START"),
-                    Keycode::Backspace => cpu.ram.joypad.release("SELECT"),
+                    Keycode::Right => cpu.bus.joypad.release("RIGHT"),
+                    Keycode::Left => cpu.bus.joypad.release("LEFT"),
+                    Keycode::Up => cpu.bus.joypad.release("UP"),
+                    Keycode::Down => cpu.bus.joypad.release("DOWN"),
+                    Keycode::Z => cpu.bus.joypad.release("A"),
+                    Keycode::X => cpu.bus.joypad.release("B"),
+                    Keycode::Return => cpu.bus.joypad.release("START"),
+                    Keycode::Backspace => cpu.bus.joypad.release("SELECT"),
                     _ => {}
                 },
                 // qualquer outra coisa a gente só ignora
@@ -276,7 +276,7 @@ fn run_sdl(cpu: &mut GB::CPU::CPU) {
             while apu_cycle_accum >= cycles_per_sample {
                 apu_cycle_accum -= cycles_per_sample;
                 samples_produced += 1;
-                let (l, r) = cpu.ram.apu.generate_sample();
+                let (l, r) = cpu.bus.apu.generate_sample();
                 let mut buffer = audio_buffer.lock().unwrap();
                 buffer.push_back((l * 0.8, r * 0.8));
 
@@ -306,17 +306,17 @@ fn run_sdl(cpu: &mut GB::CPU::CPU) {
                     samples_produced = 0; // Reset contador
 
                     println!("Frames: {} | PC: {:04X} | LY: {} | Audio: Buffer {}samples (~{:.1}ms) | Prod: {:.0}Hz (target: 44100Hz)",
-                        frame_counter, cpu.registers.get_pc(), cpu.ram.ppu.ly,
+                        frame_counter, cpu.registers.get_pc(), cpu.bus.ppu.ly,
                         buffer_size, (buffer_size as f32 / 44.1), production_rate);
                 }
             }
         }
 
         // ==== Render ====
-        if cpu.ram.ppu.frame_ready {
-            cpu.ram.ppu.frame_ready = false;
+        if cpu.bus.ppu.frame_ready {
+            cpu.bus.ppu.frame_ready = false;
 
-            let fb = &cpu.ram.ppu.framebuffer;
+            let fb = &cpu.bus.ppu.framebuffer;
             texture
                 .with_lock(None, |buf: &mut [u8], _pitch| {
                     for y in 0..144 {
@@ -379,7 +379,7 @@ fn main() {
     cpu.init_post_boot();
 
     // Carrega save se existir
-    if let Err(e) = cpu.ram.load_cart_ram(&sav_path) {
+    if let Err(e) = cpu.bus.load_cart_ram(&sav_path) {
         eprintln!("⚠️ Erro ao carregar save: {}", e);
     }
 
@@ -392,7 +392,7 @@ fn main() {
     }
 
     // Salva RAM ao sair
-    if let Err(e) = cpu.ram.save_cart_ram(&sav_path) {
+    if let Err(e) = cpu.bus.save_cart_ram(&sav_path) {
         eprintln!("⚠️ Erro ao salvar: {}", e);
     }
 }

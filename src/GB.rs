@@ -10,3 +10,4 @@ pub mod trace;
 pub mod mbc;
 pub mod joypad;
 pub mod timer;
+pub mod bus;

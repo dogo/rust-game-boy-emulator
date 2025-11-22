@@ -4,7 +4,7 @@ use crate::GB::instructions;
 
 pub struct CPU {
     pub registers: registers::Registers,
-    pub ram: RAM::RAM,
+    pub bus: crate::GB::bus::MemoryBus,
     pub ime: bool,  // Interrupt Master Enable - Quando true habilita e intercepta interrupções
     pub ime_enable_next: bool, // EI habilita IME após a próxima instrução
     pub halted: bool, // CPU está em estado HALT
@@ -17,7 +17,7 @@ impl CPU {
         let mbc = crate::GB::mbc::create_mbc(rom);
         CPU {
             registers: registers::Registers::new(),
-            ram: RAM::RAM::new(mbc),
+            bus: crate::GB::bus::MemoryBus::new(mbc),
             ime: false,
             ime_enable_next: false,
             halted: false,
@@ -31,18 +31,18 @@ impl CPU {
     pub fn push_u16(&mut self, value: u16) {
         let mut sp = self.registers.get_sp();
         sp = sp.wrapping_sub(1);
-        self.ram.write(sp, (value >> 8) as u8);
+        self.bus.write(sp, (value >> 8) as u8);
         sp = sp.wrapping_sub(1);
-        self.ram.write(sp, (value & 0xFF) as u8);
+        self.bus.write(sp, (value & 0xFF) as u8);
         self.registers.set_sp(sp);
     }
 
     #[inline]
     pub fn pop_u16(&mut self) -> u16 {
         let mut sp = self.registers.get_sp();
-        let lo = self.ram.read(sp) as u16;
+        let lo = self.bus.read(sp) as u16;
         sp = sp.wrapping_add(1);
-        let hi = self.ram.read(sp) as u16;
+        let hi = self.bus.read(sp) as u16;
         sp = sp.wrapping_add(1);
         self.registers.set_sp(sp);
         (hi << 8) | lo
@@ -58,37 +58,37 @@ impl CPU {
         self.registers.set_pc(0x0100); // Entrada no cartucho
 
         // IO registers pós-boot (valores típicos DMG)
-        self.ram.write(0xFF40, 0x91); // LCDC - LCD ligado, BG habilitado (sprites o jogo habilita depois)
-        self.ram.write(0xFF42, 0x00); // SCY
-        self.ram.write(0xFF43, 0x00); // SCX
-        self.ram.write(0xFF44, 0x00); // LY
-        self.ram.write(0xFF45, 0x00); // LYC
-        self.ram.write(0xFF47, 0xFC); // BGP - paleta background
-        self.ram.write(0xFF48, 0xFF); // OBP0 - paleta sprites 0
-        self.ram.write(0xFF49, 0xFF); // OBP1 - paleta sprites 1
-        self.ram.write(0xFF4A, 0x00); // WY - window Y
-        self.ram.write(0xFF4B, 0x00); // WX - window X
+        self.bus.write(0xFF40, 0x91); // LCDC - LCD ligado, BG habilitado (sprites o jogo habilita depois)
+        self.bus.write(0xFF42, 0x00); // SCY
+        self.bus.write(0xFF43, 0x00); // SCX
+        self.bus.write(0xFF44, 0x00); // LY
+        self.bus.write(0xFF45, 0x00); // LYC
+        self.bus.write(0xFF47, 0xFC); // BGP - paleta background
+        self.bus.write(0xFF48, 0xFF); // OBP0 - paleta sprites 0
+        self.bus.write(0xFF49, 0xFF); // OBP1 - paleta sprites 1
+        self.bus.write(0xFF4A, 0x00); // WY - window Y
+        self.bus.write(0xFF4B, 0x00); // WX - window X
 
         eprintln!("🚀 POST-BOOT STATE 🚀");
         eprintln!("Registers: AF={:04X} BC={:04X} DE={:04X} HL={:04X} SP={:04X} PC={:04X}",
                  self.registers.get_af(), self.registers.get_bc(), self.registers.get_de(),
                  self.registers.get_hl(), self.registers.get_sp(), self.registers.get_pc());
         eprintln!("IO: LCDC={:02X} BGP={:02X} OBP0={:02X} OBP1={:02X}",
-                 self.ram.read(0xFF40), self.ram.read(0xFF47), self.ram.read(0xFF48), self.ram.read(0xFF49));
+             self.bus.read(0xFF40), self.bus.read(0xFF47), self.bus.read(0xFF48), self.bus.read(0xFF49));
     }
 
     pub fn load_rom(&mut self) {
         // Inicializa alguns registradores de IO comuns
-        self.ram.write(0xFF04, 0); // DIV
-        self.ram.write(0xFF0F, 0); // IF
-        self.ram.write(0xFFFF, 0); // IE
+        self.bus.write(0xFF04, 0); // DIV
+        self.bus.write(0xFF0F, 0); // IF
+        self.bus.write(0xFFFF, 0); // IE
     }
 
     pub fn fetch_next(&mut self) -> u8 {
         let pc_before = self.registers.get_pc();
 
         // Lê o byte na posição do Program Counter
-        let byte = self.ram.read(pc_before);
+        let byte = self.bus.read(pc_before);
 
         // Incrementa o PC para apontar para o próximo byte
         self.registers.set_pc(pc_before.wrapping_add(1));
@@ -102,27 +102,52 @@ impl CPU {
     pub fn execute_next(&mut self) -> (u64, bool) {
         // Se CPU está em HALT, não executa instruções até uma interrupção acordar
         if self.halted {
-            let if_reg = self.ram.read(0xFF0F);
-            let ie_reg = self.ram.read(0xFFFF);
+            let if_reg = self.bus.read(0xFF0F);
+            let ie_reg = self.bus.read(0xFFFF);
             if (if_reg & ie_reg) != 0 {
                 self.halted = false;
                 // TODO: Implementar HALT bug (IME=0 com interrupção pendente)
                 // No hardware real, se IME=0 e há interrupção pendente, PC não incrementa corretamente
             } else {
                 // CPU ainda halted, simula 4 ciclos de espera
-                self.tick(4);
+                self.bus.tick(4);
                 return (4, false);
             }
         }
 
-        self.service_interrupts();
-
+        // FETCH
         let opcode = self.fetch_next();
         self.opcode = opcode;
+
+        // DECODE
         let instr = CPU::decode(opcode, false);
         let unknown = instr.name == "UNKNOWN";
-        let cycles = (instr.execute)(&instr, self);
+
+        // EXECUTE
+        let cycles = (instr.execute)(&instr, &mut self.registers, &mut self.bus);
         self.cycles += cycles as u64;
+
+        // 🔧 EFEITOS ESPECIAIS NO CPU (fora dos registradores)
+        match opcode {
+            0xF3 => { // DI
+                self.ime = false;
+            }
+            0xFB => { // EI
+                // Habilita IME após a PRÓXIMA instrução
+                self.ime_enable_next = true;
+            }
+            0x76 => { // HALT
+                self.halted = true;
+            }
+            0x10 => { // STOP (trata igual HALT por enquanto)
+                self.halted = true;
+            }
+            0xD9 => { // RETI
+                // RET já foi feito na própria instrução (pop PC), aqui só reabilita IME
+                self.ime = true;
+            }
+            _ => {}
+        }
 
         // EI habilita IME após a próxima instrução
         if self.ime_enable_next {
@@ -130,31 +155,20 @@ impl CPU {
             self.ime_enable_next = false;
         }
 
-        self.tick(cycles as u32);
+        // Tick do bus depois da execução da instrução
+        self.bus.tick(cycles as u32);
+
+        // Atende interrupções se habilitadas (IME) e pendentes (IF & IE)
+        self.service_interrupts();
+
         (cycles, unknown)
-    }
-
-    // Avança temporizadores, APU e PPU com base nos ciclos consumidos pela instrução
-    // PPU = Picture Processing Unit (Unidade de Processamento de Imagem)
-    // APU = Audio Processing Unit (Unidade de Processamento de Áudio)
-    fn tick(&mut self, cycles: u32) {
-        // Timers (DIV/TIMA/TMA/TAC)
-        self.ram.tick_timers(cycles);
-
-        // APU (Audio Processing Unit)
-        for _ in 0..cycles {
-            self.ram.apu.tick();
-        }
-
-        // PPU (Picture Processing Unit)
-        self.ram.step_ppu(cycles);
     }
 
     // Atende interrupções se habilitadas (IME) e pendentes (IF & IE)
     fn service_interrupts(&mut self) {
         if !self.ime { return; }
-        let ie = self.ram.read(0xFFFF);
-        let mut iflags = self.ram.read(0xFF0F);
+        let ie = self.bus.read(0xFFFF);
+        let mut iflags = self.bus.read(0xFF0F);
         let pending = ie & iflags;
         if pending == 0 { return; }
 
@@ -174,7 +188,7 @@ impl CPU {
 
         // Limpa o bit atendido em IF
         iflags &= !mask;
-        self.ram.write(0xFF0F, iflags);
+        self.bus.write(0xFF0F, iflags);
 
         // Push PC usando push_u16 para manter consistência total com CALL/RET
         let pc = self.registers.get_pc();
@@ -185,7 +199,7 @@ impl CPU {
         // Tempo para atendimento de interrupção (~20 ciclos)
         // NOTE: Custo fixo approximation, independente do vetor
         self.cycles += 20;
-        self.tick(20);
+        self.bus.tick(20);
     }
 
     // === API pública de joypad ===
