@@ -1,7 +1,7 @@
 // Instruções lógicas
-use crate::GB::registers::Registers;
-use crate::GB::bus::MemoryBus;
 use super::helpers::{Instruction, read_r};
+use crate::GB::bus::MemoryBus;
+use crate::GB::registers::Registers;
 
 pub fn and_a_r(opcode: u8) -> Instruction {
     fn exec(instr: &Instruction, regs: &mut Registers, bus: &mut MemoryBus) -> u64 {
@@ -16,7 +16,14 @@ pub fn and_a_r(opcode: u8) -> Instruction {
         regs.set_flag_c(false);
         if src == 6 { 8 } else { 4 }
     }
-    Instruction { opcode, name: "AND A,r", cycles: 4, size: 1, flags: &[], execute: exec }
+    Instruction {
+        opcode,
+        name: "AND A,r",
+        cycles: 4,
+        size: 1,
+        flags: &[],
+        execute: exec,
+    }
 }
 
 pub fn and_a_d8(opcode: u8) -> Instruction {
@@ -32,7 +39,14 @@ pub fn and_a_d8(opcode: u8) -> Instruction {
         regs.set_flag_c(false);
         8
     }
-    Instruction { opcode, name: "AND A,d8", cycles: 8, size: 2, flags: &[], execute: exec }
+    Instruction {
+        opcode,
+        name: "AND A,d8",
+        cycles: 8,
+        size: 2,
+        flags: &[],
+        execute: exec,
+    }
 }
 
 pub fn or_a_r(opcode: u8) -> Instruction {
@@ -48,7 +62,14 @@ pub fn or_a_r(opcode: u8) -> Instruction {
         regs.set_flag_c(false);
         if src == 6 { 8 } else { 4 }
     }
-    Instruction { opcode, name: "OR A,r", cycles: 4, size: 1, flags: &[], execute: exec }
+    Instruction {
+        opcode,
+        name: "OR A,r",
+        cycles: 4,
+        size: 1,
+        flags: &[],
+        execute: exec,
+    }
 }
 
 pub fn or_a_d8(opcode: u8) -> Instruction {
@@ -64,7 +85,14 @@ pub fn or_a_d8(opcode: u8) -> Instruction {
         regs.set_flag_c(false);
         8
     }
-    Instruction { opcode, name: "OR A,d8", cycles: 8, size: 2, flags: &[], execute: exec }
+    Instruction {
+        opcode,
+        name: "OR A,d8",
+        cycles: 8,
+        size: 2,
+        flags: &[],
+        execute: exec,
+    }
 }
 
 pub fn xor_a_r(opcode: u8) -> Instruction {
@@ -80,7 +108,14 @@ pub fn xor_a_r(opcode: u8) -> Instruction {
         regs.set_flag_c(false);
         if src == 6 { 8 } else { 4 }
     }
-    Instruction { opcode, name: "XOR A,r", cycles: 4, size: 1, flags: &[], execute: exec }
+    Instruction {
+        opcode,
+        name: "XOR A,r",
+        cycles: 4,
+        size: 1,
+        flags: &[],
+        execute: exec,
+    }
 }
 
 pub fn xor_a_d8(opcode: u8) -> Instruction {
@@ -96,7 +131,14 @@ pub fn xor_a_d8(opcode: u8) -> Instruction {
         regs.set_flag_c(false);
         8
     }
-    Instruction { opcode, name: "XOR A,d8", cycles: 8, size: 2, flags: &[], execute: exec }
+    Instruction {
+        opcode,
+        name: "XOR A,d8",
+        cycles: 8,
+        size: 2,
+        flags: &[],
+        execute: exec,
+    }
 }
 
 fn sub_set_flags(regs: &mut Registers, a: u8, val: u8, carry_in: u8) -> u8 {
@@ -117,7 +159,14 @@ pub fn cp_a_r(opcode: u8) -> Instruction {
         sub_set_flags(regs, a, val, 0);
         if src == 6 { 8 } else { 4 }
     }
-    Instruction { opcode, name: "CP A,r", cycles: 4, size: 1, flags: &[], execute: exec }
+    Instruction {
+        opcode,
+        name: "CP A,r",
+        cycles: 4,
+        size: 1,
+        flags: &[],
+        execute: exec,
+    }
 }
 
 pub fn cp_a_d8(opcode: u8) -> Instruction {
@@ -128,7 +177,14 @@ pub fn cp_a_d8(opcode: u8) -> Instruction {
         sub_set_flags(regs, a, imm, 0);
         8
     }
-    Instruction { opcode, name: "CP A,d8", cycles: 8, size: 2, flags: &[], execute: exec }
+    Instruction {
+        opcode,
+        name: "CP A,d8",
+        cycles: 8,
+        size: 2,
+        flags: &[],
+        execute: exec,
+    }
 }
 
 // Rotations (sem prefixo CB) — 1 byte, 4 ciclos, Z sempre 0, N=0, H=0
@@ -144,7 +200,14 @@ pub fn rlca(opcode: u8) -> Instruction {
         regs.set_flag_c(carry);
         4
     }
-    Instruction { opcode, name: "RLCA", cycles: 4, size: 1, flags: &[], execute: exec }
+    Instruction {
+        opcode,
+        name: "RLCA",
+        cycles: 4,
+        size: 1,
+        flags: &[],
+        execute: exec,
+    }
 }
 
 pub fn rrca(opcode: u8) -> Instruction {
@@ -159,7 +222,14 @@ pub fn rrca(opcode: u8) -> Instruction {
         regs.set_flag_c(carry);
         4
     }
-    Instruction { opcode, name: "RRCA", cycles: 4, size: 1, flags: &[], execute: exec }
+    Instruction {
+        opcode,
+        name: "RRCA",
+        cycles: 4,
+        size: 1,
+        flags: &[],
+        execute: exec,
+    }
 }
 
 pub fn rla(opcode: u8) -> Instruction {
@@ -175,7 +245,14 @@ pub fn rla(opcode: u8) -> Instruction {
         regs.set_flag_c(carry);
         4
     }
-    Instruction { opcode, name: "RLA", cycles: 4, size: 1, flags: &[], execute: exec }
+    Instruction {
+        opcode,
+        name: "RLA",
+        cycles: 4,
+        size: 1,
+        flags: &[],
+        execute: exec,
+    }
 }
 
 pub fn rra(opcode: u8) -> Instruction {
@@ -191,7 +268,14 @@ pub fn rra(opcode: u8) -> Instruction {
         regs.set_flag_c(carry);
         4
     }
-    Instruction { opcode, name: "RRA", cycles: 4, size: 1, flags: &[], execute: exec }
+    Instruction {
+        opcode,
+        name: "RRA",
+        cycles: 4,
+        size: 1,
+        flags: &[],
+        execute: exec,
+    }
 }
 
 // CPL - Complement A (0x2F)
@@ -203,7 +287,14 @@ pub fn cpl(opcode: u8) -> Instruction {
         regs.set_flag_h(true);
         4
     }
-    Instruction { opcode, name: "CPL", cycles: 4, size: 1, flags: &[], execute: exec }
+    Instruction {
+        opcode,
+        name: "CPL",
+        cycles: 4,
+        size: 1,
+        flags: &[],
+        execute: exec,
+    }
 }
 
 // SCF - Set Carry Flag (0x37)
@@ -214,7 +305,14 @@ pub fn scf(opcode: u8) -> Instruction {
         regs.set_flag_c(true);
         4
     }
-    Instruction { opcode, name: "SCF", cycles: 4, size: 1, flags: &[], execute: exec }
+    Instruction {
+        opcode,
+        name: "SCF",
+        cycles: 4,
+        size: 1,
+        flags: &[],
+        execute: exec,
+    }
 }
 
 // CCF - Complement Carry Flag (0x3F)
@@ -226,5 +324,12 @@ pub fn ccf(opcode: u8) -> Instruction {
         regs.set_flag_c(!c);
         4
     }
-    Instruction { opcode, name: "CCF", cycles: 4, size: 1, flags: &[], execute: exec }
+    Instruction {
+        opcode,
+        name: "CCF",
+        cycles: 4,
+        size: 1,
+        flags: &[],
+        execute: exec,
+    }
 }

@@ -1,6 +1,6 @@
-use crate::GB::registers::Registers;
-use crate::GB::bus::MemoryBus;
 use super::helpers::Instruction;
+use crate::GB::bus::MemoryBus;
+use crate::GB::registers::Registers;
 
 pub fn call_a16(opcode: u8) -> Instruction {
     fn exec(_instr: &Instruction, regs: &mut Registers, bus: &mut MemoryBus) -> u64 {
@@ -14,7 +14,14 @@ pub fn call_a16(opcode: u8) -> Instruction {
         regs.set_pc(addr);
         24
     }
-    Instruction { opcode, name: "CALL a16", cycles: 24, size: 3, flags: &[], execute: exec }
+    Instruction {
+        opcode,
+        name: "CALL a16",
+        cycles: 24,
+        size: 3,
+        flags: &[],
+        execute: exec,
+    }
 }
 
 pub fn call_cc_a16(opcode: u8) -> Instruction {
@@ -40,7 +47,14 @@ pub fn call_cc_a16(opcode: u8) -> Instruction {
             12
         }
     }
-    Instruction { opcode, name: "CALL cc,a16", cycles: 12, size: 3, flags: &[], execute: exec }
+    Instruction {
+        opcode,
+        name: "CALL cc,a16",
+        cycles: 12,
+        size: 3,
+        flags: &[],
+        execute: exec,
+    }
 }
 
 pub fn ret(opcode: u8) -> Instruction {
@@ -49,7 +63,14 @@ pub fn ret(opcode: u8) -> Instruction {
         regs.set_pc(addr);
         16
     }
-    Instruction { opcode, name: "RET", cycles: 16, size: 1, flags: &[], execute: exec }
+    Instruction {
+        opcode,
+        name: "RET",
+        cycles: 16,
+        size: 1,
+        flags: &[],
+        execute: exec,
+    }
 }
 
 pub fn ret_cc(opcode: u8) -> Instruction {
@@ -69,7 +90,14 @@ pub fn ret_cc(opcode: u8) -> Instruction {
             8
         }
     }
-    Instruction { opcode, name: "RET cc", cycles: 8, size: 1, flags: &[], execute: exec }
+    Instruction {
+        opcode,
+        name: "RET cc",
+        cycles: 8,
+        size: 1,
+        flags: &[],
+        execute: exec,
+    }
 }
 
 pub fn reti(opcode: u8) -> Instruction {
@@ -79,7 +107,14 @@ pub fn reti(opcode: u8) -> Instruction {
         // IME enable must be handled by CPU struct after instruction execution
         16
     }
-    Instruction { opcode, name: "RETI", cycles: 16, size: 1, flags: &[], execute: exec }
+    Instruction {
+        opcode,
+        name: "RETI",
+        cycles: 16,
+        size: 1,
+        flags: &[],
+        execute: exec,
+    }
 }
 
 pub fn push(opcode: u8) -> Instruction {
@@ -95,7 +130,14 @@ pub fn push(opcode: u8) -> Instruction {
         push_u16(regs, bus, val);
         16
     }
-    Instruction { opcode, name: "PUSH rr", cycles: 16, size: 1, flags: &[], execute: exec }
+    Instruction {
+        opcode,
+        name: "PUSH rr",
+        cycles: 16,
+        size: 1,
+        flags: &[],
+        execute: exec,
+    }
 }
 
 pub fn pop(opcode: u8) -> Instruction {
@@ -111,7 +153,14 @@ pub fn pop(opcode: u8) -> Instruction {
         }
         12
     }
-    Instruction { opcode, name: "POP rr", cycles: 12, size: 1, flags: &[], execute: exec }
+    Instruction {
+        opcode,
+        name: "POP rr",
+        cycles: 12,
+        size: 1,
+        flags: &[],
+        execute: exec,
+    }
 }
 
 pub fn rst(opcode: u8) -> Instruction {
@@ -122,7 +171,14 @@ pub fn rst(opcode: u8) -> Instruction {
         regs.set_pc(addr);
         16
     }
-    Instruction { opcode, name: "RST", cycles: 16, size: 1, flags: &[], execute: exec }
+    Instruction {
+        opcode,
+        name: "RST",
+        cycles: 16,
+        size: 1,
+        flags: &[],
+        execute: exec,
+    }
 }
 
 // Stack helpers migrated to take &mut Registers and &mut MemoryBus

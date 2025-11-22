@@ -4,9 +4,9 @@ pub struct MBC1 {
     rom: Vec<u8>,
     ram: Vec<u8>,
     ram_enabled: bool,
-    bank_reg1: u8,  // bits 0-4 ROM
-    bank_reg2: u8,  // bits 5-6 ROM ou RAM
-    mode: u8,       // 0=ROM, 1=RAM
+    bank_reg1: u8, // bits 0-4 ROM
+    bank_reg2: u8, // bits 5-6 ROM ou RAM
+    mode: u8,      // 0=ROM, 1=RAM
 }
 
 impl MBC1 {
@@ -23,7 +23,9 @@ impl MBC1 {
 
     fn effective_rom_bank(&self) -> usize {
         let mut bank = self.bank_reg1 as usize;
-        if bank == 0 { bank = 1; }
+        if bank == 0 {
+            bank = 1;
+        }
         if self.mode == 0 {
             bank |= ((self.bank_reg2 as usize) & 0x03) << 5;
         }
@@ -79,14 +81,18 @@ impl MBC for MBC1 {
     }
 
     fn read_ram(&self, address: u16) -> u8 {
-        if !self.ram_enabled { return 0xFF; }
+        if !self.ram_enabled {
+            return 0xFF;
+        }
         let bank = self.effective_ram_bank();
         let addr = bank * 0x2000 + ((address - 0xA000) as usize);
         self.ram.get(addr).copied().unwrap_or(0xFF)
     }
 
     fn write_ram(&mut self, address: u16, value: u8) {
-        if !self.ram_enabled { return; }
+        if !self.ram_enabled {
+            return;
+        }
         let bank = self.effective_ram_bank();
         let addr = bank * 0x2000 + ((address - 0xA000) as usize);
         if addr < self.ram.len() {

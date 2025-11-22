@@ -1,13 +1,13 @@
+use crate::GB::APU;
+use crate::GB::PPU;
+use crate::GB::joypad::Joypad;
 use crate::GB::mbc::MBC;
 use crate::GB::timer::Timer;
-use crate::GB::joypad::Joypad;
-use crate::GB::PPU;
-use crate::GB::APU;
 
 pub struct MemoryBus {
     mbc: Box<dyn MBC>,
-    wram: [u8; 0x2000],  // Work RAM (8KB)
-    hram: [u8; 0x7F],    // High RAM (127 bytes)
+    wram: [u8; 0x2000], // Work RAM (8KB)
+    hram: [u8; 0x7F],   // High RAM (127 bytes)
     timer: Timer,
     pub joypad: Joypad,
     pub ppu: PPU::PPU,
@@ -15,25 +15,25 @@ pub struct MemoryBus {
     tima: u8, // FF05
     tma: u8,  // FF06
     tac: u8,  // FF07
-    ie: u8,  // 0xFFFF
-    if_: u8, // 0xFF0F
+    ie: u8,   // 0xFFFF
+    if_: u8,  // 0xFF0F
 }
 
 impl MemoryBus {
-        pub fn load_cart_ram(&mut self, path: &str) -> Result<(), String> {
-            let data = std::fs::read(path).map_err(|e| e.to_string())?;
-            self.mbc.load_ram(&data);
-            Ok(())
-        }
+    pub fn load_cart_ram(&mut self, path: &str) -> Result<(), String> {
+        let data = std::fs::read(path).map_err(|e| e.to_string())?;
+        self.mbc.load_ram(&data);
+        Ok(())
+    }
 
-        pub fn save_cart_ram(&self, path: &str) -> Result<(), String> {
-            if let Some(data) = self.mbc.save_ram() {
-                std::fs::write(path, &data).map_err(|e| e.to_string())?;
-                Ok(())
-            } else {
-                Err("No RAM to save".to_string())
-            }
+    pub fn save_cart_ram(&self, path: &str) -> Result<(), String> {
+        if let Some(data) = self.mbc.save_ram() {
+            std::fs::write(path, &data).map_err(|e| e.to_string())?;
+            Ok(())
+        } else {
+            Err("No RAM to save".to_string())
         }
+    }
     pub fn new(mbc: Box<dyn MBC>) -> Self {
         let joypad = Joypad::new();
         let mut bus = Self {
@@ -93,7 +93,7 @@ impl MemoryBus {
                 if echo_addr <= 0xFDFF {
                     self.wram[(echo_addr - 0xE000) as usize] = value;
                 }
-            },
+            }
             0xE000..=0xFDFF => {
                 let idx = (address - 0xE000) as usize;
                 self.wram[idx] = value;
@@ -102,29 +102,33 @@ impl MemoryBus {
                 if main_addr >= 0xC000 && main_addr <= 0xDFFF {
                     self.wram[(main_addr - 0xC000) as usize] = value;
                 }
-            },
+            }
             0xFE00..=0xFE9F => self.ppu.write_oam(address, value),
             0xFF46 => self.dma_transfer(value),
             0xFF00 => self.joypad.write(value),
             0xFF04 => {
-                let (new_tima, new_if) = self.timer.reset_div(self.tima, self.tma, self.tac, self.if_);
+                let (new_tima, new_if) = self
+                    .timer
+                    .reset_div(self.tima, self.tma, self.tac, self.if_);
                 self.tima = new_tima;
                 self.if_ = new_if;
-            },
+            }
             0xFF05 => self.tima = value,
             0xFF06 => self.tma = value,
             0xFF07 => {
-                let (new_tima, new_if) = self.timer.write_tac(self.tima, self.tma, self.tac, value, self.if_);
+                let (new_tima, new_if) = self
+                    .timer
+                    .write_tac(self.tima, self.tma, self.tac, value, self.if_);
                 self.tima = new_tima;
                 self.if_ = new_if;
                 self.tac = value;
-            },
+            }
             0xFF0F => self.if_ = value,
             0xFF10..=0xFF3F => self.apu.write_register(address, value),
             0xFF40..=0xFF4B => self.ppu.write_register(address, value),
             0xFF80..=0xFFFE => self.hram[(address - 0xFF80) as usize] = value,
             0xFFFF => self.ie = value,
-            _ => {},
+            _ => {}
         }
     }
 
@@ -146,7 +150,9 @@ impl MemoryBus {
     }
 
     pub fn tick(&mut self, cycles: u32) {
-        let (new_tima, new_if) = self.timer.tick(cycles, self.tima, self.tma, self.tac, self.if_);
+        let (new_tima, new_if) = self
+            .timer
+            .tick(cycles, self.tima, self.tma, self.tac, self.if_);
         self.tima = new_tima;
         self.if_ = new_if;
         // Tick do APU por ciclo

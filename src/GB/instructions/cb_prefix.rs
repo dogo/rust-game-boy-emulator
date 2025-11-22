@@ -1,6 +1,6 @@
-use crate::GB::registers::Registers;
-use crate::GB::bus::MemoryBus;
 use super::helpers::{Instruction, read_r, write_r};
+use crate::GB::bus::MemoryBus;
+use crate::GB::registers::Registers;
 
 pub fn cb(opcode: u8) -> Instruction {
     fn exec(_instr: &Instruction, regs: &mut Registers, bus: &mut MemoryBus) -> u64 {
@@ -20,7 +20,14 @@ pub fn cb(opcode: u8) -> Instruction {
             0xC0..=0xFF => exec_set(cb_op, regs, bus),
         }
     }
-    Instruction { opcode, name: "CB", cycles: 4, size: 2, flags: &[], execute: exec }
+    Instruction {
+        opcode,
+        name: "CB",
+        cycles: 4,
+        size: 2,
+        flags: &[],
+        execute: exec,
+    }
 }
 
 fn exec_rlc(cb_op: u8, regs: &mut Registers, bus: &mut MemoryBus) -> u64 {

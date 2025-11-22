@@ -46,5 +46,4 @@ pub trait MBC {
 
     /// Carrega RAM de arquivo
     fn load_ram(&mut self, data: &[u8]);
-
 }

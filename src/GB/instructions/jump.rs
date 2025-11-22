@@ -1,6 +1,6 @@
-use crate::GB::registers::Registers;
-use crate::GB::bus::MemoryBus;
 use super::helpers::Instruction;
+use crate::GB::bus::MemoryBus;
+use crate::GB::registers::Registers;
 
 pub fn jr_r8(opcode: u8) -> Instruction {
     fn exec(_instr: &Instruction, regs: &mut Registers, bus: &mut MemoryBus) -> u64 {
@@ -9,7 +9,14 @@ pub fn jr_r8(opcode: u8) -> Instruction {
         regs.set_pc(regs.get_pc().wrapping_add(offset as u16));
         12
     }
-    Instruction { opcode, name: "JR r8", cycles: 12, size: 2, flags: &[], execute: exec }
+    Instruction {
+        opcode,
+        name: "JR r8",
+        cycles: 12,
+        size: 2,
+        flags: &[],
+        execute: exec,
+    }
 }
 
 pub fn jr_cc_r8(opcode: u8) -> Instruction {
@@ -31,7 +38,14 @@ pub fn jr_cc_r8(opcode: u8) -> Instruction {
             8
         }
     }
-    Instruction { opcode, name: "JR cc,r8", cycles: 8, size: 2, flags: &[], execute: exec }
+    Instruction {
+        opcode,
+        name: "JR cc,r8",
+        cycles: 8,
+        size: 2,
+        flags: &[],
+        execute: exec,
+    }
 }
 
 pub fn jp_a16(opcode: u8) -> Instruction {
@@ -43,7 +57,14 @@ pub fn jp_a16(opcode: u8) -> Instruction {
         regs.set_pc((hi << 8) | lo);
         16
     }
-    Instruction { opcode, name: "JP a16", cycles: 16, size: 3, flags: &[], execute: exec }
+    Instruction {
+        opcode,
+        name: "JP a16",
+        cycles: 16,
+        size: 3,
+        flags: &[],
+        execute: exec,
+    }
 }
 
 pub fn jp_cc_a16(opcode: u8) -> Instruction {
@@ -67,7 +88,14 @@ pub fn jp_cc_a16(opcode: u8) -> Instruction {
             12
         }
     }
-    Instruction { opcode, name: "JP cc,a16", cycles: 12, size: 3, flags: &[], execute: exec }
+    Instruction {
+        opcode,
+        name: "JP cc,a16",
+        cycles: 12,
+        size: 3,
+        flags: &[],
+        execute: exec,
+    }
 }
 
 pub fn jp_hl(opcode: u8) -> Instruction {
@@ -75,5 +103,12 @@ pub fn jp_hl(opcode: u8) -> Instruction {
         regs.set_pc(regs.get_hl());
         4
     }
-    Instruction { opcode, name: "JP (HL)", cycles: 4, size: 1, flags: &[], execute: exec }
+    Instruction {
+        opcode,
+        name: "JP (HL)",
+        cycles: 4,
+        size: 1,
+        flags: &[],
+        execute: exec,
+    }
 }

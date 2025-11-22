@@ -4,7 +4,14 @@ use crate::GB::instructions;
 // === Funções de trace para operações da RAM ===
 
 pub fn trace_mbc_ram_enable(enabled: bool) {
-    println!("[MBC] RAM {}", if enabled { "habilitado" } else { "desabilitado" });
+    println!(
+        "[MBC] RAM {}",
+        if enabled {
+            "habilitado"
+        } else {
+            "desabilitado"
+        }
+    );
 }
 
 pub fn trace_mbc_rom_bank(old_bank: u8, new_bank: u8) {
@@ -29,28 +36,47 @@ pub fn trace_mbc_ram_rtc_select(byte: u8) {
 // === Funções específicas do MBC1 ===
 
 pub fn trace_mbc1_reg1_write(old_reg: u8, new_reg: u8, old_rom: u8, new_rom: u8) {
-    println!("[MBC1] Reg1: {:02X} -> {:02X} (ROM bank {:02X} -> {:02X})",
-             old_reg, new_reg, old_rom, new_rom);
+    println!(
+        "[MBC1] Reg1: {:02X} -> {:02X} (ROM bank {:02X} -> {:02X})",
+        old_reg, new_reg, old_rom, new_rom
+    );
 }
 
 pub fn trace_mbc1_reg2_write(old_reg: u8, new_reg: u8, old_rom: u8, new_rom: u8, ram_bank: u8) {
-    println!("[MBC1] Reg2: {:02X} -> {:02X} (ROM {:02X} -> {:02X}, RAM bank {})",
-             old_reg, new_reg, old_rom, new_rom, ram_bank);
+    println!(
+        "[MBC1] Reg2: {:02X} -> {:02X} (ROM {:02X} -> {:02X}, RAM bank {})",
+        old_reg, new_reg, old_rom, new_rom, ram_bank
+    );
 }
 
 pub fn trace_mbc1_mode_switch(old_mode: u8, new_mode: u8) {
-    println!("[MBC1] Mode: {} -> {} ({})",
-             old_mode, new_mode,
-             if new_mode == 0 { "ROM banking" } else { "RAM banking" });
+    println!(
+        "[MBC1] Mode: {} -> {} ({})",
+        old_mode,
+        new_mode,
+        if new_mode == 0 {
+            "ROM banking"
+        } else {
+            "RAM banking"
+        }
+    );
 }
 
 pub fn trace_mbc_rtc_latch(h: u8, m: u8, s: u8, dh: u8, dl: u8) {
-    println!("[MBC3] RTC latched: {:02}:{:02}:{:02} dia={}",
-             h, m, s, ((dh as u16 & 1) << 8) | dl as u16);
+    println!(
+        "[MBC3] RTC latched: {:02}:{:02}:{:02} dia={}",
+        h,
+        m,
+        s,
+        ((dh as u16 & 1) << 8) | dl as u16
+    );
 }
 
 pub fn trace_joypad_selection(dpad: bool, buttons: bool) {
-    println!("[JOYPAD] Seleção: dpad={} buttons={}", dpad as u8, buttons as u8);
+    println!(
+        "[JOYPAD] Seleção: dpad={} buttons={}",
+        dpad as u8, buttons as u8
+    );
 }
 
 pub fn trace_joypad_press(button: &str) {
@@ -67,8 +93,18 @@ pub fn trace_timer_div_reset() {
 
 pub fn trace_timer_tac(byte: u8) {
     let en = (byte & 0x04) != 0;
-    let freq = match byte & 0x03 { 0b00 => 4096, 0b01 => 262144, 0b10 => 65536, _ => 16384 };
-    println!("[TIMER] TAC<={:02X} (enable={}, freq={}Hz)", byte & 0x07, en as u8, freq);
+    let freq = match byte & 0x03 {
+        0b00 => 4096,
+        0b01 => 262144,
+        0b10 => 65536,
+        _ => 16384,
+    };
+    println!(
+        "[TIMER] TAC<={:02X} (enable={}, freq={}Hz)",
+        byte & 0x07,
+        en as u8,
+        freq
+    );
 }
 
 pub fn trace_timer_tima(byte: u8) {
@@ -99,7 +135,10 @@ pub fn run_with_trace(cpu: &mut CPU, max_steps: usize) {
         if extra.is_empty() {
             println!("{:05} PC={:04X} OP={:02X} {}", step, pc, opcode, instr.name);
         } else {
-            println!("{:05} PC={:04X} OP={:02X} {}{}", step, pc, opcode, instr.name, extra);
+            println!(
+                "{:05} PC={:04X} OP={:02X} {}{}",
+                step, pc, opcode, instr.name, extra
+            );
         }
 
         let (_cycles, unknown) = cpu.execute_next();
@@ -167,9 +206,12 @@ fn build_trace_extra(cpu: &CPU, pc: u16, opcode: u8) -> String {
             let n = cpu.bus.read(pc.wrapping_add(1));
             let a = cpu.registers.get_a();
             let z = a == n; // Z set if equal
-            let c = a < n;  // C set if borrow (a < n)
+            let c = a < n; // C set if borrow (a < n)
             let h = (a & 0x0F) < (n & 0x0F); // half-borrow
-            format!(" A={:02X} n={:02X} => Z={} N=1 H={} C={}", a, n, z as u8, h as u8, c as u8)
+            format!(
+                " A={:02X} n={:02X} => Z={} N=1 H={} C={}",
+                a, n, z as u8, h as u8, c as u8
+            )
         }
 
         // JR cc,r8 — 20,28,30,38: mostra offset, condicao e alvo
@@ -186,7 +228,10 @@ fn build_trace_extra(cpu: &CPU, pc: u16, opcode: u8) -> String {
                 0x38 => c,  // C
                 _ => false,
             };
-            format!(" r8={:+#04X} cond={} target={:04X}", off, cond as u8, target)
+            format!(
+                " r8={:+#04X} cond={} target={:04X}",
+                off, cond as u8, target
+            )
         }
 
         // JR r8 incondicional — 18
@@ -197,7 +242,7 @@ fn build_trace_extra(cpu: &CPU, pc: u16, opcode: u8) -> String {
             format!(" r8={:+#04X} target={:04X}", off, target)
         }
 
-        _ => String::new()
+        _ => String::new(),
     }
 }
 
@@ -206,8 +251,14 @@ fn build_cb_trace(cpu: &CPU, pc: u16) -> String {
     let r_idx = cb & 0x07;
     let bit_idx = (cb >> 3) & 0x07;
     let r_name = match r_idx {
-        0 => "B", 1 => "C", 2 => "D", 3 => "E",
-        4 => "H", 5 => "L", 6 => "(HL)", _ => "A"
+        0 => "B",
+        1 => "C",
+        2 => "D",
+        3 => "E",
+        4 => "H",
+        5 => "L",
+        6 => "(HL)",
+        _ => "A",
     };
 
     let val: u8 = if r_idx == 6 {
@@ -251,10 +302,21 @@ fn build_cb_trace(cpu: &CPU, pc: u16) -> String {
     match desc {
         "BIT" => {
             let bit_set = (val & (1u8 << bit_idx)) != 0;
-            format!(" CB={:02X} {} {},{} val={:02X} => Z={}", cb, desc, bit_idx, r_name, val, (!bit_set) as u8)
+            format!(
+                " CB={:02X} {} {},{} val={:02X} => Z={}",
+                cb,
+                desc,
+                bit_idx,
+                r_name,
+                val,
+                (!bit_set) as u8
+            )
         }
         "RES" | "SET" => {
-            format!(" CB={:02X} {} {},{} before={:02X}", cb, desc, bit_idx, r_name, val)
+            format!(
+                " CB={:02X} {} {},{} before={:02X}",
+                cb, desc, bit_idx, r_name, val
+            )
         }
         _ => {
             // Predict carry flag outcome for shifts/rotates
@@ -268,9 +330,15 @@ fn build_cb_trace(cpu: &CPU, pc: u16) -> String {
                 _ => c_in,
             };
             if desc == "SWAP" {
-                format!(" CB={:02X} {} {} val={:02X} C_in={} => C_out=0", cb, desc, r_name, val, c_in)
+                format!(
+                    " CB={:02X} {} {} val={:02X} C_in={} => C_out=0",
+                    cb, desc, r_name, val, c_in
+                )
             } else {
-                format!(" CB={:02X} {} {} val={:02X} C_in={} => C_out={}", cb, desc, r_name, val, c_in, c_out)
+                format!(
+                    " CB={:02X} {} {} val={:02X} C_in={} => C_out={}",
+                    cb, desc, r_name, val, c_in, c_out
+                )
             }
         }
     }

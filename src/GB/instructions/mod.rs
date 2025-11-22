@@ -1,17 +1,17 @@
 // Módulo de instruções - organizadas por categoria
 
 // Submódulos
-mod helpers;
-mod load;
 mod arithmetic;
-mod logic;
-mod jump;
-mod stack;
-mod control;
 mod cb_prefix;
+mod control;
+mod helpers;
+mod jump;
+mod load;
+mod logic;
+mod stack;
 
 // Re-exporta tipos públicos
-pub use helpers::{Instruction, FlagBits};
+pub use helpers::{FlagBits, Instruction};
 
 // Re-exporta função decode
 pub fn decode(opcode: u8) -> Instruction {
@@ -124,6 +124,8 @@ pub fn decode(opcode: u8) -> Instruction {
         0xCB => cb_prefix::cb(opcode),
 
         // Opcodes ilegais/não documentados - tratados como NOP
-        0xD3 | 0xDB | 0xDD | 0xE3 | 0xE4 | 0xEB | 0xEC | 0xED | 0xF4 | 0xFC | 0xFD => Instruction::nop(),
+        0xD3 | 0xDB | 0xDD | 0xE3 | 0xE4 | 0xEB | 0xEC | 0xED | 0xF4 | 0xFC | 0xFD => {
+            Instruction::nop()
+        }
     }
 }

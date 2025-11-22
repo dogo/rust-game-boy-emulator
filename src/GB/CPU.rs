@@ -1,14 +1,14 @@
-use crate::GB::registers;
 use crate::GB::instructions;
+use crate::GB::registers;
 
 pub struct CPU {
     pub registers: registers::Registers,
     pub bus: crate::GB::bus::MemoryBus,
-    pub ime: bool,  // Interrupt Master Enable - Quando true habilita e intercepta interrupções
+    pub ime: bool, // Interrupt Master Enable - Quando true habilita e intercepta interrupções
     pub ime_enable_next: bool, // EI habilita IME após a próxima instrução
     pub halted: bool, // CPU está em estado HALT
-    pub opcode: u8,  // Opcode da instrução em execução
-    pub cycles: u64,  // Contagem total de ciclos
+    pub opcode: u8, // Opcode da instrução em execução
+    pub cycles: u64, // Contagem total de ciclos
 }
 
 impl CPU {
@@ -69,11 +69,22 @@ impl CPU {
         self.bus.write(0xFF4B, 0x00); // WX - window X
 
         eprintln!("🚀 POST-BOOT STATE 🚀");
-        eprintln!("Registers: AF={:04X} BC={:04X} DE={:04X} HL={:04X} SP={:04X} PC={:04X}",
-                 self.registers.get_af(), self.registers.get_bc(), self.registers.get_de(),
-                 self.registers.get_hl(), self.registers.get_sp(), self.registers.get_pc());
-        eprintln!("IO: LCDC={:02X} BGP={:02X} OBP0={:02X} OBP1={:02X}",
-             self.bus.read(0xFF40), self.bus.read(0xFF47), self.bus.read(0xFF48), self.bus.read(0xFF49));
+        eprintln!(
+            "Registers: AF={:04X} BC={:04X} DE={:04X} HL={:04X} SP={:04X} PC={:04X}",
+            self.registers.get_af(),
+            self.registers.get_bc(),
+            self.registers.get_de(),
+            self.registers.get_hl(),
+            self.registers.get_sp(),
+            self.registers.get_pc()
+        );
+        eprintln!(
+            "IO: LCDC={:02X} BGP={:02X} OBP0={:02X} OBP1={:02X}",
+            self.bus.read(0xFF40),
+            self.bus.read(0xFF47),
+            self.bus.read(0xFF48),
+            self.bus.read(0xFF49)
+        );
     }
 
     pub fn load_rom(&mut self) {
@@ -128,20 +139,25 @@ impl CPU {
 
         // 🔧 EFEITOS ESPECIAIS NO CPU (fora dos registradores)
         match opcode {
-            0xF3 => { // DI
+            0xF3 => {
+                // DI
                 self.ime = false;
             }
-            0xFB => { // EI
+            0xFB => {
+                // EI
                 // Habilita IME após a PRÓXIMA instrução
                 self.ime_enable_next = true;
             }
-            0x76 => { // HALT
+            0x76 => {
+                // HALT
                 self.halted = true;
             }
-            0x10 => { // STOP (trata igual HALT por enquanto)
+            0x10 => {
+                // STOP (trata igual HALT por enquanto)
                 self.halted = true;
             }
-            0xD9 => { // RETI
+            0xD9 => {
+                // RETI
                 // RET já foi feito na própria instrução (pop PC), aqui só reabilita IME
                 self.ime = true;
             }
@@ -165,11 +181,15 @@ impl CPU {
 
     // Atende interrupções se habilitadas (IME) e pendentes (IF & IE)
     fn service_interrupts(&mut self) {
-        if !self.ime { return; }
+        if !self.ime {
+            return;
+        }
         let ie = self.bus.read(0xFFFF);
         let mut iflags = self.bus.read(0xFF0F);
         let pending = ie & iflags;
-        if pending == 0 { return; }
+        if pending == 0 {
+            return;
+        }
 
         // Desabilita IME e atende na ordem de prioridade
         self.ime = false;
@@ -204,5 +224,4 @@ impl CPU {
     // === API pública de joypad ===
     // Botões D-pad: Right=0, Left=1, Up=2, Down=3
     // Botões ação: A=0, B=1, Select=2, Start=3
-
 }

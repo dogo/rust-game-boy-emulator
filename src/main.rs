@@ -8,8 +8,12 @@ fn print_cart_info(cpu: &GB::CPU::CPU) {
     let mut title = String::new();
     for addr in 0x0134..=0x0143 {
         let ch = cpu.bus.read(addr);
-        if ch == 0 { break; }
-        if ch.is_ascii() { title.push(ch as char); }
+        if ch == 0 {
+            break;
+        }
+        if ch.is_ascii() {
+            title.push(ch as char);
+        }
     }
     println!("Título: {}", title);
     let cart_type = cpu.bus.read(0x0147);
@@ -24,16 +28,37 @@ fn print_cart_info(cpu: &GB::CPU::CPU) {
         _ => "(desconhecido)",
     };
     let rom_kb: u32 = match rom_size_code {
-        0x00 => 32 * 1024, 0x01 => 64 * 1024, 0x02 => 128 * 1024, 0x03 => 256 * 1024,
-        0x04 => 512 * 1024, 0x05 => 1024 * 1024, 0x06 => 2048 * 1024, 0x07 => 4096 * 1024,
-        0x08 => 8192 * 1024, 0x52 => 1152 * 1024, 0x53 => 1280 * 1024, 0x54 => 1536 * 1024, _ => 0,
+        0x00 => 32 * 1024,
+        0x01 => 64 * 1024,
+        0x02 => 128 * 1024,
+        0x03 => 256 * 1024,
+        0x04 => 512 * 1024,
+        0x05 => 1024 * 1024,
+        0x06 => 2048 * 1024,
+        0x07 => 4096 * 1024,
+        0x08 => 8192 * 1024,
+        0x52 => 1152 * 1024,
+        0x53 => 1280 * 1024,
+        0x54 => 1536 * 1024,
+        _ => 0,
     };
     let ram_kb: u32 = match ram_size_code {
-        0x00 => 0, 0x01 => 2 * 1024, 0x02 => 8 * 1024, 0x03 => 32 * 1024, 0x04 => 128 * 1024, 0x05 => 64 * 1024, _ => 0,
+        0x00 => 0,
+        0x01 => 2 * 1024,
+        0x02 => 8 * 1024,
+        0x03 => 32 * 1024,
+        0x04 => 128 * 1024,
+        0x05 => 64 * 1024,
+        _ => 0,
     };
     println!(
         "Cart: {:02X} ({}) | ROM code {:02X} (~{} KB) | RAM code {:02X} (~{} KB)",
-        cpu.bus.read(0x0147), cart_str, rom_size_code, rom_kb / 1024, ram_size_code, ram_kb / 1024
+        cpu.bus.read(0x0147),
+        cart_str,
+        rom_size_code,
+        rom_kb / 1024,
+        ram_size_code,
+        ram_kb / 1024
     );
 }
 
@@ -98,11 +123,17 @@ fn run_sdl(cpu: &mut GB::CPU::CPU) {
                 unsafe {
                     STARTUP_GRACE += 1;
                     // Só reporta underflow após período de "aquecimento" de 5 segundos
-                    if STARTUP_GRACE > 220 { // ~5s a 44Hz de callbacks
+                    if STARTUP_GRACE > 220 {
+                        // ~5s a 44Hz de callbacks
                         UNDERFLOW_COUNT += 1;
-                        if UNDERFLOW_COUNT % 5 == 1 { // Log mais esparso
-                            println!("⚠️  Audio underflow crítico: {} samples zerados (buffer: {}, req: {})",
-                                    underflow_count, audio_buffer.len(), requested);
+                        if UNDERFLOW_COUNT % 5 == 1 {
+                            // Log mais esparso
+                            println!(
+                                "⚠️  Audio underflow crítico: {} samples zerados (buffer: {}, req: {})",
+                                underflow_count,
+                                audio_buffer.len(),
+                                requested
+                            );
                         }
                     }
                 }
@@ -137,7 +168,9 @@ fn run_sdl(cpu: &mut GB::CPU::CPU) {
         )
         .expect("Falha ao abrir dispositivo de áudio");
 
-    audio_device.resume().expect("Failed to start audio playback");
+    audio_device
+        .resume()
+        .expect("Failed to start audio playback");
 
     // ==== VÍDEO ====
     let scale = 3u32;
@@ -177,16 +210,16 @@ fn run_sdl(cpu: &mut GB::CPU::CPU) {
     // Controle de timing: VSync limita velocidade, executa 1/4 frame por loop
 
     // Constantes do Game Boy
-    const GB_CPU_HZ: u64 = 4_194_304;           // Clock da CPU
-    const GB_FPS: f64 = 59.7275;                // FPS reais do Game Boy
+    const GB_CPU_HZ: u64 = 4_194_304; // Clock da CPU
+    const GB_FPS: f64 = 59.7275; // FPS reais do Game Boy
     const CYCLES_PER_FRAME: u64 = (GB_CPU_HZ as f64 / GB_FPS) as u64; // ~70224
-    const SAMPLE_RATE: u32 = 44_100;            // Taxa de áudio
+    const SAMPLE_RATE: u32 = 44_100; // Taxa de áudio
 
-    let cycles_per_sample = GB_CPU_HZ as f64 / SAMPLE_RATE as f64;  // ≈ 95.102040816
+    let cycles_per_sample = GB_CPU_HZ as f64 / SAMPLE_RATE as f64; // ≈ 95.102040816
     let mut apu_cycle_accum: f64 = 0.0;
-    let mut frame_cycle_accum: u64 = 0;  // Acumula ciclos até formar 1 frame
+    let mut frame_cycle_accum: u64 = 0; // Acumula ciclos até formar 1 frame
     let mut debug_print_timer = 0;
-    let mut samples_produced: u64 = 0;   // Conta samples produzidos para debug
+    let mut samples_produced: u64 = 0; // Conta samples produzidos para debug
 
     // Timing baseado em tempo real
     let mut pending_cycles: f64 = 0.0;
@@ -305,9 +338,15 @@ fn run_sdl(cpu: &mut GB::CPU::CPU) {
                     let production_rate = samples_produced as f32;
                     samples_produced = 0; // Reset contador
 
-                    println!("Frames: {} | PC: {:04X} | LY: {} | Audio: Buffer {}samples (~{:.1}ms) | Prod: {:.0}Hz (target: 44100Hz)",
-                        frame_counter, cpu.registers.get_pc(), cpu.bus.ppu.ly,
-                        buffer_size, (buffer_size as f32 / 44.1), production_rate);
+                    println!(
+                        "Frames: {} | PC: {:04X} | LY: {} | Audio: Buffer {}samples (~{:.1}ms) | Prod: {:.0}Hz (target: 44100Hz)",
+                        frame_counter,
+                        cpu.registers.get_pc(),
+                        cpu.bus.ppu.ly,
+                        buffer_size,
+                        (buffer_size as f32 / 44.1),
+                        production_rate
+                    );
                 }
             }
         }

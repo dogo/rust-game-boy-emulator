@@ -1,7 +1,6 @@
-
-use crate::GB::mbc::MBC;
-use crate::GB::PPU;
 use crate::GB::APU;
+use crate::GB::PPU;
+use crate::GB::mbc::MBC;
 use crate::GB::timer::Timer;
 
 pub struct RAM {
@@ -79,7 +78,7 @@ impl RAM {
                 self.memory[0xFF05] = new_tima;
                 self.memory[0xFF0F] = new_if;
                 self.memory[0xFF04] = 0;
-            },
+            }
             0xFF07 => {
                 let tima = self.memory[0xFF05];
                 let tma = self.memory[0xFF06];
@@ -89,10 +88,10 @@ impl RAM {
                 self.memory[0xFF05] = new_tima;
                 self.memory[0xFF0F] = new_if;
                 self.memory[0xFF07] = value;
-            },
+            }
             0xFF46 => {
                 self.dma_transfer(value);
-            },
+            }
             0xFF0F => self.memory[0xFF0F] = value, // IF
             0xFFFF => self.memory[0xFFFF] = value, // IE
             0xFF10..=0xFF3F => self.apu.write_register(address, value),
@@ -100,7 +99,6 @@ impl RAM {
             _ => self.memory[address as usize] = value,
         }
     }
-
 
     // === Save/Load persistence para arquivos .sav ===
 
@@ -126,7 +124,11 @@ impl RAM {
         let save_data = fs::read(sav_path)?;
         if !save_data.is_empty() {
             self.mbc.load_ram(&save_data);
-            println!("💾 Save carregado: {} ({} bytes)", sav_path, save_data.len());
+            println!(
+                "💾 Save carregado: {} ({} bytes)",
+                sav_path,
+                save_data.len()
+            );
         }
         Ok(())
     }

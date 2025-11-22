@@ -1,5 +1,5 @@
 // Instruções de Aritmética
-use super::helpers::{Instruction, FlagBits};
+use super::helpers::{FlagBits, Instruction};
 
 fn add_set_flags(regs: &mut crate::GB::registers::Registers, a: u8, val: u8, carry_in: u8) -> u8 {
     let sum = a as u16 + val as u16 + carry_in as u16;
@@ -22,7 +22,11 @@ fn sub_set_flags(regs: &mut crate::GB::registers::Registers, a: u8, val: u8, car
 }
 
 pub fn add_a_r(opcode: u8) -> Instruction {
-    fn exec(instr: &Instruction, regs: &mut crate::GB::registers::Registers, bus: &mut crate::GB::bus::MemoryBus) -> u64 {
+    fn exec(
+        instr: &Instruction,
+        regs: &mut crate::GB::registers::Registers,
+        bus: &mut crate::GB::bus::MemoryBus,
+    ) -> u64 {
         let src = instr.opcode & 0x07;
         let a = regs.get_a();
         let val = crate::GB::instructions::helpers::read_r(regs, bus, src);
@@ -30,11 +34,22 @@ pub fn add_a_r(opcode: u8) -> Instruction {
         regs.set_a(res);
         if src == 6 { 8 } else { 4 }
     }
-    Instruction { opcode, name: "ADD A,r", cycles: 4, size: 1, flags: &[], execute: exec }
+    Instruction {
+        opcode,
+        name: "ADD A,r",
+        cycles: 4,
+        size: 1,
+        flags: &[],
+        execute: exec,
+    }
 }
 
 pub fn add_a_d8(opcode: u8) -> Instruction {
-    fn exec(_instr: &Instruction, regs: &mut crate::GB::registers::Registers, bus: &mut crate::GB::bus::MemoryBus) -> u64 {
+    fn exec(
+        _instr: &Instruction,
+        regs: &mut crate::GB::registers::Registers,
+        bus: &mut crate::GB::bus::MemoryBus,
+    ) -> u64 {
         let imm = bus.read(regs.get_pc());
         regs.set_pc(regs.get_pc().wrapping_add(1));
         let a = regs.get_a();
@@ -42,11 +57,22 @@ pub fn add_a_d8(opcode: u8) -> Instruction {
         regs.set_a(res);
         8
     }
-    Instruction { opcode, name: "ADD A,d8", cycles: 8, size: 2, flags: &[], execute: exec }
+    Instruction {
+        opcode,
+        name: "ADD A,d8",
+        cycles: 8,
+        size: 2,
+        flags: &[],
+        execute: exec,
+    }
 }
 
 pub fn adc_a_r(opcode: u8) -> Instruction {
-    fn exec(instr: &Instruction, regs: &mut crate::GB::registers::Registers, bus: &mut crate::GB::bus::MemoryBus) -> u64 {
+    fn exec(
+        instr: &Instruction,
+        regs: &mut crate::GB::registers::Registers,
+        bus: &mut crate::GB::bus::MemoryBus,
+    ) -> u64 {
         let src = instr.opcode & 0x07;
         let a = regs.get_a();
         let val = crate::GB::instructions::helpers::read_r(regs, bus, src);
@@ -55,11 +81,22 @@ pub fn adc_a_r(opcode: u8) -> Instruction {
         regs.set_a(res);
         if src == 6 { 8 } else { 4 }
     }
-    Instruction { opcode, name: "ADC A,r", cycles: 4, size: 1, flags: &[], execute: exec }
+    Instruction {
+        opcode,
+        name: "ADC A,r",
+        cycles: 4,
+        size: 1,
+        flags: &[],
+        execute: exec,
+    }
 }
 
 pub fn adc_a_d8(opcode: u8) -> Instruction {
-    fn exec(_instr: &Instruction, regs: &mut crate::GB::registers::Registers, bus: &mut crate::GB::bus::MemoryBus) -> u64 {
+    fn exec(
+        _instr: &Instruction,
+        regs: &mut crate::GB::registers::Registers,
+        bus: &mut crate::GB::bus::MemoryBus,
+    ) -> u64 {
         let imm = bus.read(regs.get_pc());
         regs.set_pc(regs.get_pc().wrapping_add(1));
         let a = regs.get_a();
@@ -68,11 +105,22 @@ pub fn adc_a_d8(opcode: u8) -> Instruction {
         regs.set_a(res);
         8
     }
-    Instruction { opcode, name: "ADC A,d8", cycles: 8, size: 2, flags: &[], execute: exec }
+    Instruction {
+        opcode,
+        name: "ADC A,d8",
+        cycles: 8,
+        size: 2,
+        flags: &[],
+        execute: exec,
+    }
 }
 
 pub fn sub_a_r(opcode: u8) -> Instruction {
-    fn exec(instr: &Instruction, regs: &mut crate::GB::registers::Registers, bus: &mut crate::GB::bus::MemoryBus) -> u64 {
+    fn exec(
+        instr: &Instruction,
+        regs: &mut crate::GB::registers::Registers,
+        bus: &mut crate::GB::bus::MemoryBus,
+    ) -> u64 {
         let src = instr.opcode & 0x07;
         let a = regs.get_a();
         let val = crate::GB::instructions::helpers::read_r(regs, bus, src);
@@ -80,11 +128,22 @@ pub fn sub_a_r(opcode: u8) -> Instruction {
         regs.set_a(res);
         if src == 6 { 8 } else { 4 }
     }
-    Instruction { opcode, name: "SUB A,r", cycles: 4, size: 1, flags: &[], execute: exec }
+    Instruction {
+        opcode,
+        name: "SUB A,r",
+        cycles: 4,
+        size: 1,
+        flags: &[],
+        execute: exec,
+    }
 }
 
 pub fn sub_a_d8(opcode: u8) -> Instruction {
-    fn exec(_instr: &Instruction, regs: &mut crate::GB::registers::Registers, bus: &mut crate::GB::bus::MemoryBus) -> u64 {
+    fn exec(
+        _instr: &Instruction,
+        regs: &mut crate::GB::registers::Registers,
+        bus: &mut crate::GB::bus::MemoryBus,
+    ) -> u64 {
         let imm = bus.read(regs.get_pc());
         regs.set_pc(regs.get_pc().wrapping_add(1));
         let a = regs.get_a();
@@ -92,11 +151,22 @@ pub fn sub_a_d8(opcode: u8) -> Instruction {
         regs.set_a(res);
         8
     }
-    Instruction { opcode, name: "SUB A,d8", cycles: 8, size: 2, flags: &[], execute: exec }
+    Instruction {
+        opcode,
+        name: "SUB A,d8",
+        cycles: 8,
+        size: 2,
+        flags: &[],
+        execute: exec,
+    }
 }
 
 pub fn sbc_a_r(opcode: u8) -> Instruction {
-    fn exec(instr: &Instruction, regs: &mut crate::GB::registers::Registers, bus: &mut crate::GB::bus::MemoryBus) -> u64 {
+    fn exec(
+        instr: &Instruction,
+        regs: &mut crate::GB::registers::Registers,
+        bus: &mut crate::GB::bus::MemoryBus,
+    ) -> u64 {
         let src = instr.opcode & 0x07;
         let a = regs.get_a();
         let val = crate::GB::instructions::helpers::read_r(regs, bus, src);
@@ -105,11 +175,22 @@ pub fn sbc_a_r(opcode: u8) -> Instruction {
         regs.set_a(res);
         if src == 6 { 8 } else { 4 }
     }
-    Instruction { opcode, name: "SBC A,r", cycles: 4, size: 1, flags: &[], execute: exec }
+    Instruction {
+        opcode,
+        name: "SBC A,r",
+        cycles: 4,
+        size: 1,
+        flags: &[],
+        execute: exec,
+    }
 }
 
 pub fn sbc_a_d8(opcode: u8) -> Instruction {
-    fn exec(_instr: &Instruction, regs: &mut crate::GB::registers::Registers, bus: &mut crate::GB::bus::MemoryBus) -> u64 {
+    fn exec(
+        _instr: &Instruction,
+        regs: &mut crate::GB::registers::Registers,
+        bus: &mut crate::GB::bus::MemoryBus,
+    ) -> u64 {
         let imm = bus.read(regs.get_pc());
         regs.set_pc(regs.get_pc().wrapping_add(1));
         let a = regs.get_a();
@@ -118,31 +199,64 @@ pub fn sbc_a_d8(opcode: u8) -> Instruction {
         regs.set_a(res);
         8
     }
-    Instruction { opcode, name: "SBC A,d8", cycles: 8, size: 2, flags: &[], execute: exec }
+    Instruction {
+        opcode,
+        name: "SBC A,d8",
+        cycles: 8,
+        size: 2,
+        flags: &[],
+        execute: exec,
+    }
 }
 
 pub fn inc_rr(opcode: u8) -> Instruction {
-    fn exec(instr: &Instruction, regs: &mut crate::GB::registers::Registers, _bus: &mut crate::GB::bus::MemoryBus) -> u64 {
+    fn exec(
+        instr: &Instruction,
+        regs: &mut crate::GB::registers::Registers,
+        _bus: &mut crate::GB::bus::MemoryBus,
+    ) -> u64 {
         let idx = (instr.opcode >> 4) & 0x03;
         let val = crate::GB::instructions::helpers::read_rr(regs, idx).wrapping_add(1);
         crate::GB::instructions::helpers::write_rr(regs, idx, val);
         8
     }
-    Instruction { opcode, name: "INC rr", cycles: 8, size: 1, flags: &[], execute: exec }
+    Instruction {
+        opcode,
+        name: "INC rr",
+        cycles: 8,
+        size: 1,
+        flags: &[],
+        execute: exec,
+    }
 }
 
 pub fn dec_rr(opcode: u8) -> Instruction {
-    fn exec(instr: &Instruction, regs: &mut crate::GB::registers::Registers, _bus: &mut crate::GB::bus::MemoryBus) -> u64 {
+    fn exec(
+        instr: &Instruction,
+        regs: &mut crate::GB::registers::Registers,
+        _bus: &mut crate::GB::bus::MemoryBus,
+    ) -> u64 {
         let idx = (instr.opcode >> 4) & 0x03;
         let val = crate::GB::instructions::helpers::read_rr(regs, idx).wrapping_sub(1);
         crate::GB::instructions::helpers::write_rr(regs, idx, val);
         8
     }
-    Instruction { opcode, name: "DEC rr", cycles: 8, size: 1, flags: &[], execute: exec }
+    Instruction {
+        opcode,
+        name: "DEC rr",
+        cycles: 8,
+        size: 1,
+        flags: &[],
+        execute: exec,
+    }
 }
 
 pub fn add_hl_rr(opcode: u8) -> Instruction {
-    fn exec(instr: &Instruction, regs: &mut crate::GB::registers::Registers, _bus: &mut crate::GB::bus::MemoryBus) -> u64 {
+    fn exec(
+        instr: &Instruction,
+        regs: &mut crate::GB::registers::Registers,
+        _bus: &mut crate::GB::bus::MemoryBus,
+    ) -> u64 {
         let idx = (instr.opcode >> 4) & 0x03;
         let hl = regs.get_hl();
         let rr = crate::GB::instructions::helpers::read_rr(regs, idx);
@@ -153,12 +267,23 @@ pub fn add_hl_rr(opcode: u8) -> Instruction {
         regs.set_flag_c((hl as u32 + rr as u32) > 0xFFFF);
         8
     }
-    Instruction { opcode, name: "ADD HL,rr", cycles: 8, size: 1, flags: &[], execute: exec }
+    Instruction {
+        opcode,
+        name: "ADD HL,rr",
+        cycles: 8,
+        size: 1,
+        flags: &[],
+        execute: exec,
+    }
 }
 
 // INC r (r = B,C,D,E,H,L,(HL),A)
 pub fn inc_r(opcode: u8) -> Instruction {
-    fn exec(instr: &Instruction, regs: &mut crate::GB::registers::Registers, bus: &mut crate::GB::bus::MemoryBus) -> u64 {
+    fn exec(
+        instr: &Instruction,
+        regs: &mut crate::GB::registers::Registers,
+        bus: &mut crate::GB::bus::MemoryBus,
+    ) -> u64 {
         let r = (instr.opcode >> 3) & 0x07;
         let val = crate::GB::instructions::helpers::read_r(regs, bus, r);
         let res = val.wrapping_add(1);
@@ -168,12 +293,23 @@ pub fn inc_r(opcode: u8) -> Instruction {
         regs.set_flag_h((val & 0x0F) + 1 > 0x0F);
         if r == 6 { 12 } else { 4 }
     }
-    Instruction { opcode, name: "INC r", cycles: 4, size: 1, flags: &[FlagBits::Z, FlagBits::N, FlagBits::H], execute: exec }
+    Instruction {
+        opcode,
+        name: "INC r",
+        cycles: 4,
+        size: 1,
+        flags: &[FlagBits::Z, FlagBits::N, FlagBits::H],
+        execute: exec,
+    }
 }
 
 // DEC r (r = B, C, D, E, H, L, (HL), A)
 pub fn dec_r(opcode: u8) -> Instruction {
-    fn exec(instr: &Instruction, regs: &mut crate::GB::registers::Registers, bus: &mut crate::GB::bus::MemoryBus) -> u64 {
+    fn exec(
+        instr: &Instruction,
+        regs: &mut crate::GB::registers::Registers,
+        bus: &mut crate::GB::bus::MemoryBus,
+    ) -> u64 {
         let r = (instr.opcode >> 3) & 0x07;
         let val = crate::GB::instructions::helpers::read_r(regs, bus, r);
         let res = val.wrapping_sub(1);
@@ -183,13 +319,24 @@ pub fn dec_r(opcode: u8) -> Instruction {
         regs.set_flag_h((val & 0x0F) == 0);
         if r == 6 { 12 } else { 4 }
     }
-    Instruction { opcode, name: "DEC r", cycles: 4, size: 1, flags: &[FlagBits::Z, FlagBits::N, FlagBits::H], execute: exec }
+    Instruction {
+        opcode,
+        name: "DEC r",
+        cycles: 4,
+        size: 1,
+        flags: &[FlagBits::Z, FlagBits::N, FlagBits::H],
+        execute: exec,
+    }
 }
 
 // DAA - Decimal Adjust Accumulator (0x27)
 // Ajusta A para BCD após ADD/ADC/SUB/SBC conforme flags N,H,C
 pub fn daa(opcode: u8) -> Instruction {
-    fn exec(_instr: &Instruction, regs: &mut crate::GB::registers::Registers, _bus: &mut crate::GB::bus::MemoryBus) -> u64 {
+    fn exec(
+        _instr: &Instruction,
+        regs: &mut crate::GB::registers::Registers,
+        _bus: &mut crate::GB::bus::MemoryBus,
+    ) -> u64 {
         let mut a = regs.get_a();
         let n = regs.get_flag_n();
         let mut c = regs.get_flag_c();
@@ -206,8 +353,12 @@ pub fn daa(opcode: u8) -> Instruction {
             }
             a = a.wrapping_add(adjust);
         } else {
-            if c { adjust |= 0x60; }
-            if h { adjust |= 0x06; }
+            if c {
+                adjust |= 0x60;
+            }
+            if h {
+                adjust |= 0x06;
+            }
             a = a.wrapping_sub(adjust);
         }
 
@@ -218,12 +369,23 @@ pub fn daa(opcode: u8) -> Instruction {
         regs.set_flag_c(c);
         4
     }
-    Instruction { opcode, name: "DAA", cycles: 4, size: 1, flags: &[], execute: exec }
+    Instruction {
+        opcode,
+        name: "DAA",
+        cycles: 4,
+        size: 1,
+        flags: &[],
+        execute: exec,
+    }
 }
 
 // ADD SP,r8 (0xE8) - adiciona signed byte a SP
 pub fn add_sp_r8(opcode: u8) -> Instruction {
-    fn exec(_instr: &Instruction, regs: &mut crate::GB::registers::Registers, bus: &mut crate::GB::bus::MemoryBus) -> u64 {
+    fn exec(
+        _instr: &Instruction,
+        regs: &mut crate::GB::registers::Registers,
+        bus: &mut crate::GB::bus::MemoryBus,
+    ) -> u64 {
         let offset = bus.read(regs.get_pc()) as i8;
         regs.set_pc(regs.get_pc().wrapping_add(1));
         let sp = regs.get_sp();
@@ -238,5 +400,12 @@ pub fn add_sp_r8(opcode: u8) -> Instruction {
         regs.set_sp(result);
         16
     }
-    Instruction { opcode, name: "ADD SP,r8", cycles: 16, size: 2, flags: &[], execute: exec }
+    Instruction {
+        opcode,
+        name: "ADD SP,r8",
+        cycles: 16,
+        size: 2,
+        flags: &[],
+        execute: exec,
+    }
 }

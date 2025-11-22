@@ -11,13 +11,13 @@ mod ppu_tests {
 
         // Criar um tile simples: checkerboard pattern
         // Linha 0: 10101010 (0xAA em bits)
-        ppu.vram[0] = 0xAA;  // LSB: 10101010
-        ppu.vram[1] = 0x00;  // MSB: 00000000
+        ppu.vram[0] = 0xAA; // LSB: 10101010
+        ppu.vram[1] = 0x00; // MSB: 00000000
         // Resultado esperado: cores 1,0,1,0,1,0,1,0
 
         // Linha 1: 01010101 (0x55 em bits)
-        ppu.vram[2] = 0x55;  // LSB: 01010101
-        ppu.vram[3] = 0x00;  // MSB: 00000000
+        ppu.vram[2] = 0x55; // LSB: 01010101
+        ppu.vram[3] = 0x00; // MSB: 00000000
         // Resultado esperado: cores 0,1,0,1,0,1,0,1
 
         let pixels = ppu.decode_tile(0);
@@ -46,8 +46,8 @@ mod ppu_tests {
         // Cor 3 (11): LSB=1, MSB=1
 
         // Linha 0: cores 3,2,1,0, 3,2,1,0
-        ppu.vram[0] = 0b10101010;  // LSB
-        ppu.vram[1] = 0b11001100;  // MSB
+        ppu.vram[0] = 0b10101010; // LSB
+        ppu.vram[1] = 0b11001100; // MSB
         // Pixels: cor=(MSB<<1)|LSB para cada bit
         // bit 7: MSB=1, LSB=1 -> cor 3
         // bit 6: MSB=1, LSB=0 -> cor 2
@@ -55,14 +55,14 @@ mod ppu_tests {
         // bit 4: MSB=0, LSB=0 -> cor 0
 
         let pixels = ppu.decode_tile(0);
-        assert_eq!(pixels[0], 3);  // bit 7
-        assert_eq!(pixels[1], 2);  // bit 6
-        assert_eq!(pixels[2], 1);  // bit 5
-        assert_eq!(pixels[3], 0);  // bit 4
-        assert_eq!(pixels[4], 3);  // bit 3
-        assert_eq!(pixels[5], 2);  // bit 2
-        assert_eq!(pixels[6], 1);  // bit 1
-        assert_eq!(pixels[7], 0);  // bit 0
+        assert_eq!(pixels[0], 3); // bit 7
+        assert_eq!(pixels[1], 2); // bit 6
+        assert_eq!(pixels[2], 1); // bit 5
+        assert_eq!(pixels[3], 0); // bit 4
+        assert_eq!(pixels[4], 3); // bit 3
+        assert_eq!(pixels[5], 2); // bit 2
+        assert_eq!(pixels[6], 1); // bit 1
+        assert_eq!(pixels[7], 0); // bit 0
     }
 
     #[test]
@@ -75,10 +75,10 @@ mod ppu_tests {
         // bits 3-2 (cor 1): 11 = 3
         // bits 1-0 (cor 0): 00 = 0
 
-        assert_eq!(ppu.apply_palette(0), 0);  // cor 0 -> 0 (branco)
-        assert_eq!(ppu.apply_palette(1), 3);  // cor 1 -> 3 (preto)
-        assert_eq!(ppu.apply_palette(2), 3);  // cor 2 -> 3 (preto)
-        assert_eq!(ppu.apply_palette(3), 3);  // cor 3 -> 3 (preto)
+        assert_eq!(ppu.apply_palette(0), 0); // cor 0 -> 0 (branco)
+        assert_eq!(ppu.apply_palette(1), 3); // cor 1 -> 3 (preto)
+        assert_eq!(ppu.apply_palette(2), 3); // cor 2 -> 3 (preto)
+        assert_eq!(ppu.apply_palette(3), 3); // cor 3 -> 3 (preto)
 
         // Testar paleta customizada: 0xE4 = 11100100
         // bits 7-6 (cor 3): 11 = 3 (preto)
@@ -87,10 +87,10 @@ mod ppu_tests {
         // bits 1-0 (cor 0): 00 = 0 (branco)
         ppu.bgp = 0xE4;
 
-        assert_eq!(ppu.apply_palette(0), 0);  // cor 0 -> 0 (branco)
-        assert_eq!(ppu.apply_palette(1), 1);  // cor 1 -> 1 (cinza claro)
-        assert_eq!(ppu.apply_palette(2), 2);  // cor 2 -> 2 (cinza escuro)
-        assert_eq!(ppu.apply_palette(3), 3);  // cor 3 -> 3 (preto)
+        assert_eq!(ppu.apply_palette(0), 0); // cor 0 -> 0 (branco)
+        assert_eq!(ppu.apply_palette(1), 1); // cor 1 -> 1 (cinza claro)
+        assert_eq!(ppu.apply_palette(2), 2); // cor 2 -> 2 (cinza escuro)
+        assert_eq!(ppu.apply_palette(3), 3); // cor 3 -> 3 (preto)
     }
 
     #[test]
@@ -99,17 +99,17 @@ mod ppu_tests {
 
         // Configurar tile 0 com padrão sólido (cor 3)
         for i in 0..8 {
-            ppu.vram[i * 2] = 0xFF;      // LSB todos 1
-            ppu.vram[i * 2 + 1] = 0xFF;  // MSB todos 1
+            ppu.vram[i * 2] = 0xFF; // LSB todos 1
+            ppu.vram[i * 2 + 1] = 0xFF; // MSB todos 1
         }
 
         // Configurar tile map para usar tile 0 em todas as posições
-        for i in 0..32*32 {
-            ppu.vram[0x1800 + i] = 0;  // Tile 0
+        for i in 0..32 * 32 {
+            ppu.vram[0x1800 + i] = 0; // Tile 0
         }
 
         // LCDC: BG enabled, tile map 0x9800, tile data 0x8000
-        ppu.lcdc = 0x91;  // bit 0=1 (BG on), bit 4=1 (tile data 0x8000)
+        ppu.lcdc = 0x91; // bit 0=1 (BG on), bit 4=1 (tile data 0x8000)
 
         // Paleta: 0xE4 (3,2,1,0)
         ppu.bgp = 0xE4;
@@ -143,8 +143,8 @@ mod ppu_tests {
 
         // Tile map: primeira coluna usa tile 0, segunda coluna usa tile 1
         for y in 0..32 {
-            ppu.vram[0x1800 + y * 32] = 0;  // Coluna 0: tile 0
-            ppu.vram[0x1800 + y * 32 + 1] = 1;  // Coluna 1: tile 1
+            ppu.vram[0x1800 + y * 32] = 0; // Coluna 0: tile 0
+            ppu.vram[0x1800 + y * 32 + 1] = 1; // Coluna 1: tile 1
         }
 
         ppu.lcdc = 0x91;
@@ -156,9 +156,9 @@ mod ppu_tests {
         ppu.ly = 0;
         ppu.render_bg_scanline();
 
-        assert_eq!(ppu.framebuffer[0], 0);  // Tile 0
-        assert_eq!(ppu.framebuffer[7], 0);  // Tile 0
-        assert_eq!(ppu.framebuffer[8], 3);  // Tile 1
+        assert_eq!(ppu.framebuffer[0], 0); // Tile 0
+        assert_eq!(ppu.framebuffer[7], 0); // Tile 0
+        assert_eq!(ppu.framebuffer[8], 3); // Tile 1
         assert_eq!(ppu.framebuffer[15], 3); // Tile 1
 
         // Com scroll X=4: deve deslocar 4 pixels para esquerda
@@ -167,9 +167,9 @@ mod ppu_tests {
         ppu.render_bg_scanline();
 
         // Primeiros 4 pixels são os últimos 4 de tile 0
-        assert_eq!(ppu.framebuffer[0], 0);  // Ainda tile 0
-        assert_eq!(ppu.framebuffer[3], 0);  // Último pixel de tile 0
-        assert_eq!(ppu.framebuffer[4], 3);  // Primeiro pixel de tile 1
+        assert_eq!(ppu.framebuffer[0], 0); // Ainda tile 0
+        assert_eq!(ppu.framebuffer[3], 0); // Último pixel de tile 0
+        assert_eq!(ppu.framebuffer[4], 3); // Primeiro pixel de tile 1
     }
 
     #[test]
@@ -227,7 +227,10 @@ mod ppu_tests {
         ppu.update_stat_mode(1);
 
         // Verificar que STAT interrupt deve ser gerado
-        assert!(ppu.check_stat_interrupt(), "STAT interrupt deveria ser gerado no VBlank");
+        assert!(
+            ppu.check_stat_interrupt(),
+            "STAT interrupt deveria ser gerado no VBlank"
+        );
 
         // Verificar modo PPU
         assert_eq!(ppu.stat & 0x03, 1, "Modo PPU deveria ser 1 (VBlank)");
@@ -251,7 +254,10 @@ mod ppu_tests {
         assert_eq!(ppu.stat & 0x04, 0x04, "Flag LYC=LY deveria estar setada");
 
         // Verificar que STAT interrupt deve ser gerado
-        assert!(ppu.check_stat_interrupt(), "STAT interrupt deveria ser gerado quando LYC=LY");
+        assert!(
+            ppu.check_stat_interrupt(),
+            "STAT interrupt deveria ser gerado quando LYC=LY"
+        );
     }
 
     #[test]
@@ -266,7 +272,10 @@ mod ppu_tests {
         ppu.update_stat_mode(1);
 
         // Verificar que STAT interrupt NÃO deve ser gerado
-        assert!(!ppu.check_stat_interrupt(), "STAT interrupt não deveria ser gerado quando desabilitado");
+        assert!(
+            !ppu.check_stat_interrupt(),
+            "STAT interrupt não deveria ser gerado quando desabilitado"
+        );
     }
 
     #[test]
@@ -278,17 +287,17 @@ mod ppu_tests {
 
         // Criar tile para sprite no VRAM (tile 1)
         // Linha 0: 11110000 (0xF0 em bits)
-        ppu.vram[16] = 0xF0;  // LSB
-        ppu.vram[17] = 0x00;  // MSB
+        ppu.vram[16] = 0xF0; // LSB
+        ppu.vram[17] = 0x00; // MSB
         // Linha 1: 00001111 (0x0F em bits)
-        ppu.vram[18] = 0x0F;  // LSB
-        ppu.vram[19] = 0x00;  // MSB
+        ppu.vram[18] = 0x0F; // LSB
+        ppu.vram[19] = 0x00; // MSB
 
         // Configurar sprite 0 no OAM
-        ppu.oam[0] = 16 + 2;  // Y = linha 2 (16 + 2)
-        ppu.oam[1] = 8 + 10;  // X = coluna 10 (8 + 10)
-        ppu.oam[2] = 1;       // Tile index 1
-        ppu.oam[3] = 0x00;    // Atributos: paleta OBP0, normal
+        ppu.oam[0] = 16 + 2; // Y = linha 2 (16 + 2)
+        ppu.oam[1] = 8 + 10; // X = coluna 10 (8 + 10)
+        ppu.oam[2] = 1; // Tile index 1
+        ppu.oam[3] = 0x00; // Atributos: paleta OBP0, normal
 
         // Configurar paleta OBP0 (cores diferentes do BG)
         ppu.obp0 = 0xE4; // 11 10 01 00 = cores 3,2,1,0
@@ -299,11 +308,21 @@ mod ppu_tests {
         // Verificar pixels do sprite na linha 2 (linha 0 do tile)
         // Pixels 10-13: cor 1 do tile com paleta 0xE4 → cor 1
         for x in 10..14 {
-            assert_eq!(ppu.framebuffer[2 * 160 + x], 1, "Pixel [{}, 2] deveria ser cor 1", x);
+            assert_eq!(
+                ppu.framebuffer[2 * 160 + x],
+                1,
+                "Pixel [{}, 2] deveria ser cor 1",
+                x
+            );
         }
         // Pixels 14-17 devem ter cor 0 (transparente, não altera framebuffer)
         for x in 14..18 {
-            assert_eq!(ppu.framebuffer[2 * 160 + x], 0, "Pixel [{}, 2] deveria ser cor 0", x);
+            assert_eq!(
+                ppu.framebuffer[2 * 160 + x],
+                0,
+                "Pixel [{}, 2] deveria ser cor 0",
+                x
+            );
         }
     }
 
@@ -315,14 +334,14 @@ mod ppu_tests {
         ppu.lcdc = 0x93;
 
         // Criar tile simples
-        ppu.vram[16] = 0xFF;  // Todos os pixels cor 1
+        ppu.vram[16] = 0xFF; // Todos os pixels cor 1
         ppu.vram[17] = 0x00;
 
         // Sprite usando paleta OBP1 (bit 4 = 1)
-        ppu.oam[0] = 16;      // Y = linha 0
-        ppu.oam[1] = 8;       // X = coluna 0
-        ppu.oam[2] = 1;       // Tile 1
-        ppu.oam[3] = 0x10;    // Bit 4 = paleta OBP1
+        ppu.oam[0] = 16; // Y = linha 0
+        ppu.oam[1] = 8; // X = coluna 0
+        ppu.oam[2] = 1; // Tile 1
+        ppu.oam[3] = 0x10; // Bit 4 = paleta OBP1
 
         // Configurar paletas diferentes
         ppu.obp0 = 0xE4; // OBP0: cor 1 → 1
@@ -344,10 +363,10 @@ mod ppu_tests {
         ppu.vram[17] = 0x00;
 
         // Sprite com flip horizontal (bit 5 = 1)
-        ppu.oam[0] = 16;      // Y = linha 0
-        ppu.oam[1] = 8;       // X = coluna 0
-        ppu.oam[2] = 1;       // Tile 1
-        ppu.oam[3] = 0x20;    // Bit 5 = flip horizontal
+        ppu.oam[0] = 16; // Y = linha 0
+        ppu.oam[1] = 8; // X = coluna 0
+        ppu.oam[2] = 1; // Tile 1
+        ppu.oam[3] = 0x20; // Bit 5 = flip horizontal
 
         ppu.obp0 = 0xE4;
         ppu.render_sprites_scanline(0);
@@ -355,7 +374,11 @@ mod ppu_tests {
         // Com flip, 11110000 vira 00001111
         // Primeiros 4 pixels devem ser cor 0 (transparente)
         for x in 0..4 {
-            assert_eq!(ppu.framebuffer[x], 0, "Pixel {} deveria ser transparente", x);
+            assert_eq!(
+                ppu.framebuffer[x], 0,
+                "Pixel {} deveria ser transparente",
+                x
+            );
         }
         // Últimos 4 pixels: cor 1 do tile com paleta 0xE4 → cor 1
         for x in 4..8 {
@@ -378,23 +401,29 @@ mod ppu_tests {
         ppu.vram[17] = 0x00;
 
         // Sprite com prioridade baixa (bit 7 = 1)
-        ppu.oam[0] = 16;      // Y = linha 0
-        ppu.oam[1] = 8;       // X = coluna 0
-        ppu.oam[2] = 1;       // Tile 1
-        ppu.oam[3] = 0x80;    // Bit 7 = prioridade baixa
+        ppu.oam[0] = 16; // Y = linha 0
+        ppu.oam[1] = 8; // X = coluna 0
+        ppu.oam[2] = 1; // Tile 1
+        ppu.oam[3] = 0x80; // Bit 7 = prioridade baixa
 
         ppu.obp0 = 0xE4;
         ppu.render_sprites_scanline(0);
 
         // Sprite com prioridade baixa não deve sobrescrever BG cor != 0
-        assert_eq!(ppu.framebuffer[0], 2, "Sprite com prioridade baixa não deveria sobrescrever BG");
+        assert_eq!(
+            ppu.framebuffer[0], 2,
+            "Sprite com prioridade baixa não deveria sobrescrever BG"
+        );
 
         // Testar sprite com prioridade alta
-        ppu.oam[3] = 0x00;    // Bit 7 = 0 = prioridade alta
+        ppu.oam[3] = 0x00; // Bit 7 = 0 = prioridade alta
         ppu.render_sprites_scanline(0);
 
         // Agora deve sobrescrever
-        assert_eq!(ppu.framebuffer[0], 1, "Sprite com prioridade alta deveria sobrescrever BG");
+        assert_eq!(
+            ppu.framebuffer[0], 1,
+            "Sprite com prioridade alta deveria sobrescrever BG"
+        );
     }
 
     #[test]
@@ -415,7 +444,10 @@ mod ppu_tests {
         ppu.render_sprites_scanline(0);
 
         // Framebuffer deve permanecer 0 (sprites desabilitados)
-        assert_eq!(ppu.framebuffer[0], 0, "Sprites desabilitados não deveriam renderizar");
+        assert_eq!(
+            ppu.framebuffer[0], 0,
+            "Sprites desabilitados não deveriam renderizar"
+        );
     }
 
     #[test]
@@ -425,12 +457,12 @@ mod ppu_tests {
         // Habilitar BG e Window no LCDC (bits 0, 4 e 5)
         // Bit 4 = 1 para usar modo unsigned (0x8000-0x8FFF)
         ppu.lcdc = 0xB1 | 0x10; // LCD on, BG on, Window on, unsigned mode
-        ppu.ly = 5;      // Linha atual
-        ppu.wy = 5;      // Window começa na linha 5 (window_y = 0)
-        ppu.wx = 10;     // Window começa na coluna 3 (10-7)
+        ppu.ly = 5; // Linha atual
+        ppu.wy = 5; // Window começa na linha 5 (window_y = 0)
+        ppu.wx = 10; // Window começa na coluna 3 (10-7)
 
         // Criar tile para window (tile index 1, endereço 0x10 em VRAM)
-        ppu.vram[16] = 0xFF;  // Linha 0: todos pixels cor 1
+        ppu.vram[16] = 0xFF; // Linha 0: todos pixels cor 1
         ppu.vram[17] = 0x00;
 
         // Configurar window tile map (usar 0x9800, bit 6 do LCDC = 0)
@@ -443,8 +475,14 @@ mod ppu_tests {
         ppu.render_window_scanline();
 
         // Verificar pixels da window (começam na coluna 3, tile tem pixels cor 1→paleta→1)
-        for x in 3..11 { // 8 pixels do tile
-            assert_eq!(ppu.framebuffer[5 * 160 + x], 1, "Pixel window [{}, 5] deveria ser cor 1", x);
+        for x in 3..11 {
+            // 8 pixels do tile
+            assert_eq!(
+                ppu.framebuffer[5 * 160 + x],
+                1,
+                "Pixel window [{}, 5] deveria ser cor 1",
+                x
+            );
         }
     }
 
@@ -467,7 +505,11 @@ mod ppu_tests {
 
         // Framebuffer deve permanecer 0 (window desabilitada)
         for x in 3..11 {
-            assert_eq!(ppu.framebuffer[10 * 160 + x], 0, "Window desabilitada não deveria renderizar");
+            assert_eq!(
+                ppu.framebuffer[10 * 160 + x],
+                0,
+                "Window desabilitada não deveria renderizar"
+            );
         }
     }
 
@@ -477,8 +519,8 @@ mod ppu_tests {
 
         // Window habilitada mas WY > LY
         ppu.lcdc = 0xB1;
-        ppu.ly = 5;      // Linha atual
-        ppu.wy = 10;     // Window só começa na linha 10
+        ppu.ly = 5; // Linha atual
+        ppu.wy = 10; // Window só começa na linha 10
         ppu.wx = 10;
 
         // Configurar tile
@@ -490,7 +532,11 @@ mod ppu_tests {
 
         // Window não deve renderizar (WY > LY)
         for x in 3..11 {
-            assert_eq!(ppu.framebuffer[5 * 160 + x], 0, "Window não deveria renderizar quando WY > LY");
+            assert_eq!(
+                ppu.framebuffer[5 * 160 + x],
+                0,
+                "Window não deveria renderizar quando WY > LY"
+            );
         }
     }
 }

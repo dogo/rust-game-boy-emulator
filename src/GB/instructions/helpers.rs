@@ -4,7 +4,11 @@ pub struct Instruction {
     pub cycles: u8,
     pub size: u8,
     pub flags: &'static [FlagBits],
-    pub execute: fn(&Instruction, &mut crate::GB::registers::Registers, &mut crate::GB::bus::MemoryBus) -> u64,
+    pub execute: fn(
+        &Instruction,
+        &mut crate::GB::registers::Registers,
+        &mut crate::GB::bus::MemoryBus,
+    ) -> u64,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -18,7 +22,13 @@ pub enum FlagBits {
 
 impl Instruction {
     pub fn nop() -> Self {
-        fn exec_nop(_instr: &Instruction, _regs: &mut crate::GB::registers::Registers, _bus: &mut crate::GB::bus::MemoryBus) -> u64 { 4 }
+        fn exec_nop(
+            _instr: &Instruction,
+            _regs: &mut crate::GB::registers::Registers,
+            _bus: &mut crate::GB::bus::MemoryBus,
+        ) -> u64 {
+            4
+        }
         Instruction {
             opcode: 0x00,
             name: "NOP",
@@ -30,7 +40,13 @@ impl Instruction {
     }
 
     pub fn unknown(opcode: u8) -> Self {
-        fn exec_nop(_instr: &Instruction, _regs: &mut crate::GB::registers::Registers, _bus: &mut crate::GB::bus::MemoryBus) -> u64 { 0 }
+        fn exec_nop(
+            _instr: &Instruction,
+            _regs: &mut crate::GB::registers::Registers,
+            _bus: &mut crate::GB::bus::MemoryBus,
+        ) -> u64 {
+            0
+        }
         Instruction {
             opcode,
             name: "UNKNOWN",

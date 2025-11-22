@@ -29,12 +29,21 @@ impl Timer {
 
     fn current_timer_signal(&self, tac: u8) -> bool {
         let enabled = self.timer_enabled(tac);
-        if !enabled { return false; }
+        if !enabled {
+            return false;
+        }
         let bit = self.timer_bit_index(tac);
         ((self.div_counter >> bit) & 1) != 0
     }
 
-    pub fn tick(&mut self, cycles: u32, mut tima: u8, tma: u8, tac: u8, mut if_reg: u8) -> (u8, u8) {
+    pub fn tick(
+        &mut self,
+        cycles: u32,
+        mut tima: u8,
+        tma: u8,
+        tac: u8,
+        mut if_reg: u8,
+    ) -> (u8, u8) {
         for _ in 0..cycles {
             self.div_counter = self.div_counter.wrapping_add(1);
             if self.tima_reload_delay > 0 {
@@ -81,7 +90,14 @@ impl Timer {
         (tima, if_reg)
     }
     /// Detecta edge ao escrever em TAC (FF07)
-    pub fn write_tac(&mut self, tima: u8, tma: u8, old_tac: u8, new_tac: u8, if_reg: u8) -> (u8, u8) {
+    pub fn write_tac(
+        &mut self,
+        tima: u8,
+        tma: u8,
+        old_tac: u8,
+        new_tac: u8,
+        if_reg: u8,
+    ) -> (u8, u8) {
         let old_signal = self.current_timer_signal(old_tac);
         let new_signal = self.current_timer_signal(new_tac);
         let mut tima = tima;

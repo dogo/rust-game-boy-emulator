@@ -23,17 +23,17 @@ pub struct PPU {
     pub framebuffer: [u8; 160 * 144],
 
     // Registradores PPU (endereços I/O)
-    pub lcdc: u8,  // 0xFF40 - LCD Control
-    pub stat: u8,  // 0xFF41 - LCD Status
-    pub scy: u8,   // 0xFF42 - Scroll Y
-    pub scx: u8,   // 0xFF43 - Scroll X
-    pub ly: u8,    // 0xFF44 - Line Y (linha atual sendo renderizada)
-    pub lyc: u8,   // 0xFF45 - LY Compare
-    pub bgp: u8,   // 0xFF47 - Background Palette
-    pub obp0: u8,  // 0xFF48 - Object Palette 0
-    pub obp1: u8,  // 0xFF49 - Object Palette 1
-    pub wy: u8,    // 0xFF4A - Window Y
-    pub wx: u8,    // 0xFF4B - Window X
+    pub lcdc: u8, // 0xFF40 - LCD Control
+    pub stat: u8, // 0xFF41 - LCD Status
+    pub scy: u8,  // 0xFF42 - Scroll Y
+    pub scx: u8,  // 0xFF43 - Scroll X
+    pub ly: u8,   // 0xFF44 - Line Y (linha atual sendo renderizada)
+    pub lyc: u8,  // 0xFF45 - LY Compare
+    pub bgp: u8,  // 0xFF47 - Background Palette
+    pub obp0: u8, // 0xFF48 - Object Palette 0
+    pub obp1: u8, // 0xFF49 - Object Palette 1
+    pub wy: u8,   // 0xFF4A - Window Y
+    pub wx: u8,   // 0xFF4B - Window X
 
     // OAM (Object Attribute Memory) - 160 bytes (40 sprites × 4 bytes)
     pub oam: [u8; 160],
@@ -50,13 +50,13 @@ impl PPU {
         PPU {
             vram: [0; 0x2000],
             framebuffer: [0; 160 * 144],
-            lcdc: 0x91,  // Default pós-boot: LCD on, BG on, 8x8 sprites
+            lcdc: 0x91, // Default pós-boot: LCD on, BG on, 8x8 sprites
             stat: 0x00,
             scy: 0,
             scx: 0,
             ly: 0,
             lyc: 0,
-            bgp: 0xFC,   // Default: cores 3,3,2,1,0 = branco,branco,cinza claro,cinza escuro
+            bgp: 0xFC, // Default: cores 3,3,2,1,0 = branco,branco,cinza claro,cinza escuro
             obp0: 0xFF,
             obp1: 0xFF,
             wy: 0,
@@ -87,7 +87,7 @@ impl PPU {
     // Atualiza flag LYC=LY (bit 2 do STAT)
     pub fn update_lyc_flag(&mut self) {
         if self.ly == self.lyc {
-            self.stat |= 0x04;  // Seta bit 2
+            self.stat |= 0x04; // Seta bit 2
         } else {
             self.stat &= !0x04; // Limpa bit 2
         }
@@ -131,9 +131,9 @@ impl PPU {
         // LCDC bit 6: Window tile map select
         // 0 = 0x9800-0x9BFF, 1 = 0x9C00-0x9FFF
         let tile_map_base = if (self.lcdc & 0x40) != 0 {
-            0x1C00  // Offset em VRAM (0x9C00 - 0x8000)
+            0x1C00 // Offset em VRAM (0x9C00 - 0x8000)
         } else {
-            0x1800  // Offset em VRAM (0x9800 - 0x8000)
+            0x1800 // Offset em VRAM (0x9800 - 0x8000)
         };
 
         // LCDC bit 4: BG/Window tile data select (mesmo que BG)
@@ -157,7 +157,9 @@ impl PPU {
 
             // Obter tile index do tile map
             let tile_map_addr = tile_map_base + tile_y * 32 + tile_x;
-            if tile_map_addr >= 0x2000 { continue; }
+            if tile_map_addr >= 0x2000 {
+                continue;
+            }
             let tile_index = self.vram[tile_map_addr];
 
             // Calcular endereço do tile
@@ -170,7 +172,9 @@ impl PPU {
                 (0x1000u16 as i16 + (signed as i16) * 16) as u16
             };
 
-            if tile_addr + (pixel_y as u16) * 2 + 1 >= 0x2000 { continue; }
+            if tile_addr + (pixel_y as u16) * 2 + 1 >= 0x2000 {
+                continue;
+            }
 
             // Ler linha do tile
             let byte1 = self.vram[(tile_addr + (pixel_y as u16) * 2) as usize];
@@ -245,7 +249,9 @@ impl PPU {
         // Calcular endereço do tile (sprites sempre usam 0x8000-0x8FFF)
         let tile_addr = (tile_index as u16) * 16 + (tile_line as u16) * 2;
 
-        if tile_addr + 1 >= 0x2000 { return; } // Bounds check
+        if tile_addr + 1 >= 0x2000 {
+            return;
+        } // Bounds check
 
         let byte1 = self.vram[tile_addr as usize];
         let byte2 = self.vram[(tile_addr + 1) as usize];
@@ -255,7 +261,9 @@ impl PPU {
             let screen_x = sprite_x.wrapping_add(pixel_x);
 
             // Verificar bounds horizontais
-            if screen_x >= 160 { continue; }
+            if screen_x >= 160 {
+                continue;
+            }
 
             // Calcular bit position (flip horizontal se bit 5 setado)
             let bit_pos = if (sprite.attributes & 0x20) != 0 {
@@ -270,7 +278,9 @@ impl PPU {
             let color = (bit2 << 1) | bit1;
 
             // Cor 0 é transparente para sprites
-            if color == 0 { continue; }
+            if color == 0 {
+                continue;
+            }
 
             // Verificar prioridade (bit 7 do atributo)
             let bg_priority = (sprite.attributes & 0x80) != 0;
@@ -301,14 +311,14 @@ impl PPU {
     // Cor final = (bit_msb << 1) | bit_lsb  → 0-3
     pub fn decode_tile(&self, tile_index: u16) -> [u8; 64] {
         let mut pixels = [0u8; 64];
-        let tile_addr = tile_index * 16;  // Cada tile = 16 bytes
+        let tile_addr = tile_index * 16; // Cada tile = 16 bytes
 
         for y in 0..8 {
             let byte1 = self.vram[(tile_addr + y * 2) as usize];
             let byte2 = self.vram[(tile_addr + y * 2 + 1) as usize];
 
             for x in 0..8 {
-                let bit_index = 7 - x;  // Pixels são MSB first
+                let bit_index = 7 - x; // Pixels são MSB first
                 let lsb = (byte1 >> bit_index) & 1;
                 let msb = (byte2 >> bit_index) & 1;
                 let color = (msb << 1) | lsb;
@@ -344,9 +354,9 @@ impl PPU {
         // LCDC bit 3: BG tile map select
         // 0 = 0x9800-0x9BFF, 1 = 0x9C00-0x9FFF
         let tile_map_base = if (self.lcdc & 0x08) != 0 {
-            0x1C00  // Offset em VRAM (0x9C00 - 0x8000)
+            0x1C00 // Offset em VRAM (0x9C00 - 0x8000)
         } else {
-            0x1800  // Offset em VRAM (0x9800 - 0x8000)
+            0x1800 // Offset em VRAM (0x9800 - 0x8000)
         };
 
         // LCDC bit 4: BG/Window tile data select
@@ -356,7 +366,7 @@ impl PPU {
 
         // Calcular posição Y no tile map (com scroll)
         let y = self.ly.wrapping_add(self.scy);
-        let tile_y = (y / 8) as usize;  // Qual linha de tiles (0-31)
+        let tile_y = (y / 8) as usize; // Qual linha de tiles (0-31)
         let pixel_y = (y % 8) as usize; // Offset dentro do tile (0-7)
 
         let line_start = self.ly as usize * 160;
@@ -364,7 +374,7 @@ impl PPU {
         for screen_x in 0..160 {
             // Calcular posição X no tile map (com scroll)
             let x = (screen_x as u8).wrapping_add(self.scx);
-            let tile_x = (x / 8) as usize;  // Qual coluna de tiles (0-31)
+            let tile_x = (x / 8) as usize; // Qual coluna de tiles (0-31)
             let pixel_x = (x % 8) as usize; // Offset dentro do tile (0-7)
 
             // Ler tile number do tile map
@@ -426,11 +436,7 @@ impl PPU {
     // Lê byte da OAM (endereço 0xFE00-0xFE9F)
     pub fn read_oam(&self, addr: u16) -> u8 {
         let offset = (addr - 0xFE00) as usize;
-        if offset < 160 {
-            self.oam[offset]
-        } else {
-            0xFF
-        }
+        if offset < 160 { self.oam[offset] } else { 0xFF }
     }
 
     // Escreve byte na OAM
@@ -445,7 +451,7 @@ impl PPU {
     pub fn read_register(&self, addr: u16) -> u8 {
         match addr {
             0xFF40 => self.lcdc,
-            0xFF41 => self.stat | 0x80,  // Bit 7 sempre 1
+            0xFF41 => self.stat | 0x80, // Bit 7 sempre 1
             0xFF42 => self.scy,
             0xFF43 => self.scx,
             0xFF44 => self.ly,
@@ -463,17 +469,17 @@ impl PPU {
     pub fn write_register(&mut self, addr: u16, val: u8) {
         match addr {
             0xFF40 => self.lcdc = val,
-            0xFF41 => self.stat = (self.stat & 0x07) | (val & 0xF8),  // Bits 0-2 são read-only
+            0xFF41 => self.stat = (self.stat & 0x07) | (val & 0xF8), // Bits 0-2 são read-only
             0xFF42 => self.scy = val,
             0xFF43 => self.scx = val,
-            0xFF44 => {},  // LY é read-only
+            0xFF44 => {} // LY é read-only
             0xFF45 => self.lyc = val,
             0xFF47 => self.bgp = val,
             0xFF48 => self.obp0 = val,
             0xFF49 => self.obp1 = val,
             0xFF4A => self.wy = val,
             0xFF4B => self.wx = val,
-            _ => {},
+            _ => {}
         }
     }
 

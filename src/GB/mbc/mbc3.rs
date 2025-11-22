@@ -44,7 +44,9 @@ impl MBC for MBC3 {
             0x0000..=0x1FFF => self.ram_enabled = (value & 0x0F) == 0x0A,
             0x2000..=0x3FFF => {
                 let mut bank = value & 0x7F;
-                if bank == 0 { bank = 1; }
+                if bank == 0 {
+                    bank = 1;
+                }
                 self.rom_bank = bank;
             }
             0x4000..=0x5FFF => self.ram_bank = value,
@@ -58,7 +60,9 @@ impl MBC for MBC3 {
         }
     }
     fn read_ram(&self, address: u16) -> u8 {
-        if !self.ram_enabled { return 0xFF; }
+        if !self.ram_enabled {
+            return 0xFF;
+        }
         match self.ram_bank {
             0x00..=0x03 => {
                 let idx = (self.ram_bank as usize) * 0x2000 + ((address - 0xA000) as usize);
@@ -69,7 +73,9 @@ impl MBC for MBC3 {
         }
     }
     fn write_ram(&mut self, address: u16, value: u8) {
-        if !self.ram_enabled { return; }
+        if !self.ram_enabled {
+            return;
+        }
         match self.ram_bank {
             0x00..=0x03 => {
                 let idx = (self.ram_bank as usize) * 0x2000 + ((address - 0xA000) as usize);
@@ -85,7 +91,11 @@ impl MBC for MBC3 {
         }
     }
     fn save_ram(&self) -> Option<Vec<u8>> {
-        if self.ram.is_empty() { None } else { Some(self.ram.clone()) }
+        if self.ram.is_empty() {
+            None
+        } else {
+            Some(self.ram.clone())
+        }
     }
     fn load_ram(&mut self, data: &[u8]) {
         let len = data.len().min(self.ram.len());

@@ -16,8 +16,16 @@ mod joypad_tests {
         // Seleciona D-pad: bit 4=0, bit 5=1 → escreve 0x20
         cpu.bus.write(0xFF00, 0x20);
         let val = cpu.bus.read(0xFF00);
-        println!("Estado inicial D-pad: 0x{:02X}, bits 3-0: 0x{:X}", val, val & 0x0F);
-        assert_eq!(val & 0x0F, 0x0F, "D-pad inicial deve ser 0x0F (todos soltos)");
+        println!(
+            "Estado inicial D-pad: 0x{:02X}, bits 3-0: 0x{:X}",
+            val,
+            val & 0x0F
+        );
+        assert_eq!(
+            val & 0x0F,
+            0x0F,
+            "D-pad inicial deve ser 0x0F (todos soltos)"
+        );
 
         // Pressiona RIGHT (bit 0)
         cpu.bus.joypad.press("RIGHT");
@@ -75,8 +83,8 @@ mod joypad_tests {
         cpu.load_rom();
 
         // Pressiona botões de ambos os grupos
-        cpu.bus.joypad.press("DOWN");  // D-pad
-        cpu.bus.joypad.press("B");     // Ação
+        cpu.bus.joypad.press("DOWN"); // D-pad
+        cpu.bus.joypad.press("B"); // Ação
 
         // Lê D-pad: bit 4=0, bit 5=1 → 0x20
         cpu.bus.write(0xFF00, 0x20);

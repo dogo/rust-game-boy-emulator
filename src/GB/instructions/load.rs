@@ -1,7 +1,7 @@
 // Instruções de LOAD
-use crate::GB::registers::Registers;
-use crate::GB::bus::MemoryBus;
 use super::helpers::{Instruction, read_r, write_r, write_rr};
+use crate::GB::bus::MemoryBus;
+use crate::GB::registers::Registers;
 
 pub fn ld_r_r(opcode: u8) -> Instruction {
     fn exec(instr: &Instruction, regs: &mut Registers, bus: &mut MemoryBus) -> u64 {
