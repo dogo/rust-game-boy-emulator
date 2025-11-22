@@ -518,7 +518,7 @@ impl PPU {
     }
 
     // Escreve registrador PPU
-    pub fn write_register(&mut self, addr: u16, val: u8) {
+    pub fn write_register(&mut self, addr: u16, val: u8, iflags: &mut u8) {
         match addr {
             0xFF40 => self.lcdc = val,
             0xFF41 => self.write_stat(val),
@@ -527,9 +527,9 @@ impl PPU {
             0xFF44 => {} // LY é read-only
             0xFF45 => {
                 self.lyc = val;
-                // Dispara STAT IRQ se necessário
-                // Precisa de acesso ao iflags, então pode ser ajustado para receber &mut u8 se necessário
-                // Aqui, só marca flag interna, IRQ é disparado em step
+                // Refined: update LYC flag and check STAT IRQ immediately
+                self.update_lyc_flag();
+                self.check_lyc_interrupt(iflags);
             }
             0xFF47 => self.bgp = val,
             0xFF48 => self.obp0 = val,

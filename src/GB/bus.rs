@@ -140,7 +140,7 @@ impl MemoryBus {
             }
             0xFF0F => self.if_ = value,
             0xFF10..=0xFF3F => self.apu.write_register(address, value),
-            0xFF40..=0xFF4B => self.ppu.write_register(address, value),
+            0xFF40..=0xFF4B => self.ppu.write_register(address, value, &mut self.if_),
             0xFF80..=0xFFFE => self.hram[(address - 0xFF80) as usize] = value,
             0xFFFF => self.ie = value,
             _ => {}

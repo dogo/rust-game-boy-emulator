@@ -95,7 +95,7 @@ impl RAM {
             0xFF0F => self.memory[0xFF0F] = value, // IF
             0xFFFF => self.memory[0xFFFF] = value, // IE
             0xFF10..=0xFF3F => self.apu.write_register(address, value),
-            0xFF40..=0xFF4B => self.ppu.write_register(address, value),
+            0xFF40..=0xFF4B => self.ppu.write_register(address, value, &mut self.memory[0xFF0F]),
             _ => self.memory[address as usize] = value,
         }
     }
