@@ -20,6 +20,23 @@ pub struct MemoryBus {
 }
 
 impl MemoryBus {
+    #[inline]
+    pub fn get_ie(&self) -> u8 {
+        self.ie
+    }
+
+    #[inline]
+    pub fn get_if(&self) -> u8 {
+        self.if_
+    }
+
+    /// Limpa bits específicos de IF e reflete no registrador mapeado em 0xFF0F
+    #[inline]
+    pub fn clear_if_bits(&mut self, mask: u8) {
+        self.if_ &= !mask;
+        self.write(0xFF0F, self.if_);
+    }
+
     /// Seta o bit de interrupção do Joypad (IF bit 4)
     pub fn request_joypad_interrupt(&mut self) {
         self.if_ |= 0x10;

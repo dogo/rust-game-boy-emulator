@@ -181,18 +181,21 @@ impl CPU {
 
     // Atende interrupções se habilitadas (IME) e pendentes (IF & IE)
     fn service_interrupts(&mut self) {
+        // 1) Só faz qualquer coisa se IME estiver habilitado
         if !self.ime {
             return;
         }
-        let ie = self.bus.read(0xFFFF);
-        let mut iflags = self.bus.read(0xFF0F);
+
+        let ie = self.bus.get_ie();
+        let iflags = self.bus.get_if();
         let pending = ie & iflags;
+
+        // 2) Se não tem pending, sai
         if pending == 0 {
             return;
         }
 
-        // Desabilita IME e atende na ordem de prioridade
-        self.ime = false;
+        // 3) Decide vetor real
         let (vector, mask) = if (pending & 0x01) != 0 {
             (0x0040u16, 0x01u8) // VBlank
         } else if (pending & 0x02) != 0 {
@@ -205,23 +208,20 @@ impl CPU {
             (0x0060u16, 0x10u8) // Joypad
         };
 
-        // Limpa o bit atendido em IF
-        iflags &= !mask;
-        self.bus.write(0xFF0F, iflags);
+        // 4) Desabilita IME enquanto atende
+        self.ime = false;
 
-        // Push PC usando push_u16 para manter consistência total com CALL/RET
+        // 5) Limpa bit em IF pela API do bus
+        self.bus.clear_if_bits(mask);
+
+        // 6) Push PC e salta pro vetor
         let pc = self.registers.get_pc();
         self.push_u16(pc);
-
         self.registers.set_pc(vector);
 
-        // Tempo para atendimento de interrupção (~20 ciclos)
-        // NOTE: Custo fixo approximation, independente do vetor
+        // 7) Custo da interrupção (~20 ciclos)
         self.cycles += 20;
         self.bus.tick(20);
     }
 
-    // === API pública de joypad ===
-    // Botões D-pad: Right=0, Left=1, Up=2, Down=3
-    // Botões ação: A=0, B=1, Select=2, Start=3
 }
