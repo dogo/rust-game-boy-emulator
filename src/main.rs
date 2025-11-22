@@ -225,6 +225,18 @@ fn run_sdl(cpu: &mut GB::CPU::CPU) {
     let mut pending_cycles: f64 = 0.0;
     let mut last_time = Instant::now();
 
+    // Helpers para tratar input de botões
+    let handle_button = |cpu: &mut GB::CPU::CPU, button: &str| {
+        cpu.bus.joypad.press(button);
+        if cpu.bus.joypad.take_interrupt_request() {
+            cpu.bus.request_joypad_interrupt();
+        }
+    };
+
+    let handle_release = |cpu: &mut GB::CPU::CPU, button: &str| {
+        cpu.bus.joypad.release(button);
+    };
+
     loop {
         let mut exit = false;
 
@@ -247,14 +259,14 @@ fn run_sdl(cpu: &mut GB::CPU::CPU) {
                     repeat: false,
                     ..
                 } => match k {
-                    Keycode::Right => cpu.bus.joypad.press("RIGHT"),
-                    Keycode::Left => cpu.bus.joypad.press("LEFT"),
-                    Keycode::Up => cpu.bus.joypad.press("UP"),
-                    Keycode::Down => cpu.bus.joypad.press("DOWN"),
-                    Keycode::Z => cpu.bus.joypad.press("A"),
-                    Keycode::X => cpu.bus.joypad.press("B"),
-                    Keycode::Return => cpu.bus.joypad.press("START"),
-                    Keycode::Backspace => cpu.bus.joypad.press("SELECT"),
+                    Keycode::Right => handle_button(cpu, "RIGHT"),
+                    Keycode::Left => handle_button(cpu, "LEFT"),
+                    Keycode::Up => handle_button(cpu, "UP"),
+                    Keycode::Down => handle_button(cpu, "DOWN"),
+                    Keycode::Z => handle_button(cpu, "A"),
+                    Keycode::X => handle_button(cpu, "B"),
+                    Keycode::Return => handle_button(cpu, "START"),
+                    Keycode::Backspace => handle_button(cpu, "SELECT"),
                     _ => {}
                 },
                 Event::KeyUp {
@@ -262,14 +274,14 @@ fn run_sdl(cpu: &mut GB::CPU::CPU) {
                     repeat: false,
                     ..
                 } => match k {
-                    Keycode::Right => cpu.bus.joypad.release("RIGHT"),
-                    Keycode::Left => cpu.bus.joypad.release("LEFT"),
-                    Keycode::Up => cpu.bus.joypad.release("UP"),
-                    Keycode::Down => cpu.bus.joypad.release("DOWN"),
-                    Keycode::Z => cpu.bus.joypad.release("A"),
-                    Keycode::X => cpu.bus.joypad.release("B"),
-                    Keycode::Return => cpu.bus.joypad.release("START"),
-                    Keycode::Backspace => cpu.bus.joypad.release("SELECT"),
+                    Keycode::Right => handle_release(cpu, "RIGHT"),
+                    Keycode::Left => handle_release(cpu, "LEFT"),
+                    Keycode::Up => handle_release(cpu, "UP"),
+                    Keycode::Down => handle_release(cpu, "DOWN"),
+                    Keycode::Z => handle_release(cpu, "A"),
+                    Keycode::X => handle_release(cpu, "B"),
+                    Keycode::Return => handle_release(cpu, "START"),
+                    Keycode::Backspace => handle_release(cpu, "SELECT"),
                     _ => {}
                 },
                 // qualquer outra coisa a gente só ignora

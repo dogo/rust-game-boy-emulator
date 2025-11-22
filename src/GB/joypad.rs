@@ -4,7 +4,7 @@ pub struct Joypad {
     select: u8,                                      // bits 4 e 5: seleção de grupo
     dpad: u8,    // bits 0-3: estado do D-pad (0=pressed, 1=released)
     buttons: u8, // bits 0-3: estado dos botões de ação (0=pressed, 1=released)
-    pub request_interrupt: Option<Box<dyn FnMut()>>, // callback para IF bit 4
+    interrupt_pending: bool, // flag para IRQ
 }
 
 impl Joypad {
@@ -13,7 +13,7 @@ impl Joypad {
             select: 0x30,  // bits 4 e 5 = 1 (nenhum grupo selecionado)
             dpad: 0x0F,    // todos soltos
             buttons: 0x0F, // todos soltos
-            request_interrupt: None,
+            interrupt_pending: false,
         }
     }
 
@@ -38,20 +38,54 @@ impl Joypad {
     }
 
     pub fn press(&mut self, button: &str) {
+        let mut irq = false;
         match button {
-            "RIGHT" => self.dpad &= !(1 << 0),
-            "LEFT" => self.dpad &= !(1 << 1),
-            "UP" => self.dpad &= !(1 << 2),
-            "DOWN" => self.dpad &= !(1 << 3),
-            "A" => self.buttons &= !(1 << 0),
-            "B" => self.buttons &= !(1 << 1),
-            "SELECT" => self.buttons &= !(1 << 2),
-            "START" => self.buttons &= !(1 << 3),
+            "RIGHT" => {
+                if self.dpad & (1 << 0) != 0 { irq = true; }
+                self.dpad &= !(1 << 0);
+            }
+            "LEFT" => {
+                if self.dpad & (1 << 1) != 0 { irq = true; }
+                self.dpad &= !(1 << 1);
+            }
+            "UP" => {
+                if self.dpad & (1 << 2) != 0 { irq = true; }
+                self.dpad &= !(1 << 2);
+            }
+            "DOWN" => {
+                if self.dpad & (1 << 3) != 0 { irq = true; }
+                self.dpad &= !(1 << 3);
+            }
+            "A" => {
+                if self.buttons & (1 << 0) != 0 { irq = true; }
+                self.buttons &= !(1 << 0);
+            }
+            "B" => {
+                if self.buttons & (1 << 1) != 0 { irq = true; }
+                self.buttons &= !(1 << 1);
+            }
+            "SELECT" => {
+                if self.buttons & (1 << 2) != 0 { irq = true; }
+                self.buttons &= !(1 << 2);
+            }
+            "START" => {
+                if self.buttons & (1 << 3) != 0 { irq = true; }
+                self.buttons &= !(1 << 3);
+            }
             _ => {}
         }
-        // Solicita interrupção de Joypad (IF bit 4)
-        if let Some(cb) = self.request_interrupt.as_mut() {
-            cb();
+        // Só dispara interrupção se houve transição solto->pressionado
+        if irq {
+            self.interrupt_pending = true;
+        }
+    }
+    /// Consome o pedido de interrupção, se houver
+    pub fn take_interrupt_request(&mut self) -> bool {
+        if self.interrupt_pending {
+            self.interrupt_pending = false;
+            true
+        } else {
+            false
         }
     }
 

@@ -20,6 +20,11 @@ pub struct MemoryBus {
 }
 
 impl MemoryBus {
+    /// Seta o bit de interrupção do Joypad (IF bit 4)
+    pub fn request_joypad_interrupt(&mut self) {
+        self.if_ |= 0x10;
+    }
+
     pub fn load_cart_ram(&mut self, path: &str) -> Result<(), String> {
         let data = std::fs::read(path).map_err(|e| e.to_string())?;
         self.mbc.load_ram(&data);
@@ -35,13 +40,12 @@ impl MemoryBus {
         }
     }
     pub fn new(mbc: Box<dyn MBC>) -> Self {
-        let joypad = Joypad::new();
-        let mut bus = Self {
+        Self {
             mbc,
             wram: [0; 0x2000],
             hram: [0; 0x7F],
             timer: Timer::new(),
-            joypad,
+            joypad: Joypad::new(),
             ppu: PPU::PPU::new(),
             apu: APU::APU::new(),
             tima: 0,
@@ -49,13 +53,7 @@ impl MemoryBus {
             tac: 0,
             ie: 0,
             if_: 0,
-        };
-        // Conecta o callback de interrupção do joypad
-        let if_ptr: *mut u8 = &mut bus.if_;
-        bus.joypad.request_interrupt = Some(Box::new(move || unsafe {
-            *if_ptr |= 0x10; // bit 4 - joypad
-        }));
-        bus
+        }
     }
 
     pub fn read(&self, address: u16) -> u8 {
