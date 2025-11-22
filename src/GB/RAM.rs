@@ -16,10 +16,21 @@ pub struct RAM {
 
 impl RAM {
     // DMA transfer: copia 160 bytes para OAM
+    /// Executa transferência DMA instantânea para OAM.
+    /// Lê diretamente da ROM, VRAM, RAM do cartucho, RAM interna e echo RAM.
+    /// Não lê da OAM nem da área proibida.
     fn dma_transfer(&mut self, value: u8) {
-        let source = (value as u16) << 8;
+        let base = (value as u16) << 8;
         for offset in 0..160u16 {
-            let byte = self.read(source + offset);
+            let addr = base + offset;
+            let byte = match addr {
+                0x0000..=0x7FFF => self.mbc.read_rom(addr),
+                0x8000..=0x9FFF => self.ppu.read_vram(addr),
+                0xA000..=0xBFFF => self.mbc.read_ram(addr),
+                0xC000..=0xDFFF => self.memory[addr as usize],
+                0xE000..=0xFDFF => self.memory[(addr - 0x2000) as usize], // echo RAM
+                _ => 0xFF, // áreas proibidas retornam 0xFF
+            };
             self.ppu.write_oam(0xFE00 + offset, byte);
         }
     }

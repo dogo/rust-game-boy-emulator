@@ -4,6 +4,7 @@ pub struct Joypad {
     select: u8,         // bits 4 e 5: seleção de grupo
     dpad: u8,          // bits 0-3: estado do D-pad (0=pressed, 1=released)
     buttons: u8,       // bits 0-3: estado dos botões de ação (0=pressed, 1=released)
+    pub request_interrupt: Option<Box<dyn FnMut()>>, // callback para IF bit 4
 }
 
 impl Joypad {
@@ -11,7 +12,8 @@ impl Joypad {
         Joypad {
             select: 0x30, // bits 4 e 5 = 1 (nenhum grupo selecionado)
             dpad: 0x0F,   // todos soltos
-            buttons: 0x0F // todos soltos
+            buttons: 0x0F, // todos soltos
+            request_interrupt: None,
         }
     }
 
@@ -20,7 +22,8 @@ impl Joypad {
     }
 
     pub fn read(&self) -> u8 {
-        let mut result = self.select;
+        // bits 6 e 7 sempre 1
+        let mut result = 0xC0 | self.select;
         if self.select & 0x10 == 0 {
             // D-pad selecionado
             result |= self.dpad & 0x0F;
@@ -45,6 +48,10 @@ impl Joypad {
             "SELECT" => self.buttons &= !(1 << 2),
             "START"  => self.buttons &= !(1 << 3),
             _ => {}
+        }
+        // Solicita interrupção de Joypad (IF bit 4)
+        if let Some(cb) = self.request_interrupt.as_mut() {
+            cb();
         }
     }
 
