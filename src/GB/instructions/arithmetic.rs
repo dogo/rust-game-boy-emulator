@@ -1,6 +1,5 @@
 // Instruções de Aritmética
-use crate::GB::CPU::CPU;
-use super::helpers::{Instruction, FlagBits, read_r, write_r, read_rr, write_rr};
+use super::helpers::{Instruction, FlagBits};
 
 fn add_set_flags(regs: &mut crate::GB::registers::Registers, a: u8, val: u8, carry_in: u8) -> u8 {
     let sum = a as u16 + val as u16 + carry_in as u16;

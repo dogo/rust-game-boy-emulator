@@ -1,4 +1,3 @@
-use crate::GB::CPU::CPU;
 pub struct Instruction {
     pub opcode: u8,
     pub name: &'static str,
@@ -93,15 +92,4 @@ pub fn write_rr(regs: &mut crate::GB::registers::Registers, idx: u8, val: u16) {
         3 => regs.set_sp(val),
         _ => {}
     }
-}
-
-// Stack helpers
-#[inline]
-pub fn push_u16(cpu: &mut CPU, val: u16) {
-    cpu.push_u16(val);
-}
-
-#[inline]
-pub fn pop_u16(cpu: &mut CPU) -> u16 {
-    cpu.pop_u16()
 }
