@@ -277,8 +277,12 @@ mod ppu_tests {
         ppu.update_stat_mode(1);
 
         // Verificar que STAT interrupt NÃO deve ser gerado
-        let stat_irq = !((ppu.ly >= 144 && (ppu.stat & 0x10 != 0)) || (ppu.ly == ppu.lyc && (ppu.stat & 0x40 != 0)));
-        assert!(stat_irq, "STAT interrupt não deveria ser gerado quando desabilitado");
+        let stat_irq = !((ppu.ly >= 144 && (ppu.stat & 0x10 != 0))
+            || (ppu.ly == ppu.lyc && (ppu.stat & 0x40 != 0)));
+        assert!(
+            stat_irq,
+            "STAT interrupt não deveria ser gerado quando desabilitado"
+        );
     }
 
     #[test]
@@ -554,14 +558,26 @@ mod ppu_tests {
         ppu.lyc = 10;
         ppu.update_lyc_flag();
         ppu.check_lyc_interrupt(&mut iflags);
-        assert_eq!(ppu.stat & 0x04, 0x04, "LYC flag should be set when LY == LYC");
-        assert_eq!(iflags & 0x02, 0x02, "STAT IRQ should be triggered when LY == LYC and interrupt enabled");
+        assert_eq!(
+            ppu.stat & 0x04,
+            0x04,
+            "LYC flag should be set when LY == LYC"
+        );
+        assert_eq!(
+            iflags & 0x02,
+            0x02,
+            "STAT IRQ should be triggered when LY == LYC and interrupt enabled"
+        );
 
         // Change LY so LYC != LY
         ppu.ly = 11;
         ppu.update_lyc_flag();
         ppu.check_lyc_interrupt(&mut iflags);
-        assert_eq!(ppu.stat & 0x04, 0x00, "LYC flag should be cleared when LY != LYC");
+        assert_eq!(
+            ppu.stat & 0x04,
+            0x00,
+            "LYC flag should be cleared when LY != LYC"
+        );
 
         // Test writing to LYC triggers flag/IRQ immediately
         ppu.ly = 20;
@@ -569,8 +585,16 @@ mod ppu_tests {
         ppu.stat = 0x40;
         iflags = 0;
         ppu.write_register(0xFF45, 20, &mut iflags);
-        assert_eq!(ppu.stat & 0x04, 0x04, "LYC flag should be set after writing LYC == LY");
-        assert_eq!(iflags & 0x02, 0x02, "STAT IRQ should be triggered after writing LYC == LY");
+        assert_eq!(
+            ppu.stat & 0x04,
+            0x04,
+            "LYC flag should be set after writing LYC == LY"
+        );
+        assert_eq!(
+            iflags & 0x02,
+            0x02,
+            "STAT IRQ should be triggered after writing LYC == LY"
+        );
     }
 
     #[test]
@@ -633,7 +657,10 @@ mod ppu_tests {
         ppu.render_bg_scanline();
         let line_start = 0;
         for x in 0..160 {
-            assert!(ppu.bg_priority[line_start + x], "BG priority buffer should be set for opaque BG pixels");
+            assert!(
+                ppu.bg_priority[line_start + x],
+                "BG priority buffer should be set for opaque BG pixels"
+            );
         }
 
         // Sprite priority test
@@ -650,11 +677,17 @@ mod ppu_tests {
         ppu.vram[17] = 0x00;
         ppu.render_sprites_scanline(0);
         // Sprite com prioridade baixa não deve sobrescrever BG cor != 0
-        assert_eq!(ppu.framebuffer[0], 2, "Sprite com prioridade baixa não deveria sobrescrever BG");
+        assert_eq!(
+            ppu.framebuffer[0], 2,
+            "Sprite com prioridade baixa não deveria sobrescrever BG"
+        );
         // Sprite com prioridade alta
         ppu.oam[3] = 0x00; // Bit 7 = 0 = prioridade alta
         ppu.render_sprites_scanline(0);
         // Agora deve sobrescrever
-        assert_eq!(ppu.framebuffer[0], 1, "Sprite com prioridade alta deveria sobrescrever BG");
+        assert_eq!(
+            ppu.framebuffer[0], 1,
+            "Sprite com prioridade alta deveria sobrescrever BG"
+        );
     }
 }

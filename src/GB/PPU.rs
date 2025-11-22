@@ -79,7 +79,6 @@ impl PPU {
         }
     }
 
-
     // Atualiza flag LYC=LY (bit 2 do STAT)
     pub fn update_lyc_flag(&mut self) {
         if self.ly == self.lyc {
@@ -176,9 +175,9 @@ impl PPU {
                 // Modo unsigned: 0x8000 + index * 16
                 (tile_index as u16) * 16
             } else {
-                // Modo signed: 0x9000 + (signed_index * 16)
+                // Modo signed: 0x9000 + (tile_index as i8) * 16
                 let signed = tile_index as i8;
-                (0x1000u16 as i16 + (signed as i16) * 16) as u16
+                (0x1000 + (signed as i16) * 16) as u16
             };
 
             if tile_addr + (pixel_y as u16) * 2 + 1 >= 0x2000 {
@@ -258,7 +257,7 @@ impl PPU {
             sprite.tile_index
         };
 
-        // Calcular endereço do tile (sprites sempre usam 0x8000-0x8FFF)
+        // Calcular endereço do tile (sprites sempre usam unsigned)
         let tile_addr = (tile_index as u16) * 16 + (tile_line as u16) * 2;
 
         if tile_addr + 1 >= 0x2000 {
