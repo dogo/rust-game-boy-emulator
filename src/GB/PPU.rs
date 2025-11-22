@@ -22,6 +22,9 @@ pub struct PPU {
     // Framebuffer - 160×144 pixels, cada pixel = 0-3 (2 bits por cor)
     pub framebuffer: [u8; 160 * 144],
 
+    /// Per-pixel BG priority buffer (true = BG/window pixel is opaque)
+    pub bg_priority: [bool; 160 * 144],
+
     // Registradores PPU (endereços I/O)
     pub lcdc: u8, // 0xFF40 - LCD Control
     pub stat: u8, // 0xFF41 - LCD Status
@@ -55,6 +58,7 @@ impl PPU {
         PPU {
             vram: [0; 0x2000],
             framebuffer: [0; 160 * 144],
+            bg_priority: [false; 160 * 144],
             lcdc: 0x91, // Default pós-boot: LCD on, BG on, 8x8 sprites
             stat: 0x00,
             scy: 0,
@@ -210,6 +214,8 @@ impl PPU {
             // Aplicar paleta BGP (window usa mesma paleta que BG)
             let final_color = self.apply_palette(color);
             self.framebuffer[line_start + screen_x as usize] = final_color;
+            // Window priority: true if window pixel is opaque (color != 0)
+            self.bg_priority[line_start + screen_x as usize] = color != 0;
         }
     }
 
@@ -243,12 +249,13 @@ impl PPU {
         });
         // Renderiza na ordem
         for &(sprite, _sprite_index) in visible_sprites.iter() {
-            self.render_single_sprite(sprite, line, sprite_height);
+            self.render_single_sprite_with_priority(sprite, line, sprite_height);
         }
     }
 
     // Renderiza um único sprite na scanline
-    fn render_single_sprite(&mut self, sprite: Sprite, line: u8, sprite_height: u8) {
+    // Sprite rendering with BG priority buffer
+    fn render_single_sprite_with_priority(&mut self, sprite: Sprite, line: u8, sprite_height: u8) {
         let sprite_y = sprite.y.wrapping_sub(16);
         let sprite_x = sprite.x.wrapping_sub(8);
 
@@ -307,8 +314,8 @@ impl PPU {
             let bg_priority = (sprite.attributes & 0x80) != 0;
             let framebuffer_pos = (line as usize) * 160 + (screen_x as usize);
 
-            // Se sprite tem prioridade baixa, só desenha sobre cor 0 do BG
-            if bg_priority && self.framebuffer[framebuffer_pos] != 0 {
+            // Se sprite tem prioridade baixa, só desenha sobre BG/window "opaque" pixel
+            if bg_priority && self.bg_priority[framebuffer_pos] {
                 continue;
             }
 
@@ -317,6 +324,8 @@ impl PPU {
             let final_color = self.apply_sprite_palette(color, use_obp1);
 
             self.framebuffer[framebuffer_pos] = final_color;
+            // Sprites overwrite BG priority for this pixel
+            self.bg_priority[framebuffer_pos] = false;
         }
     }
 
@@ -408,6 +417,10 @@ impl PPU {
 
         let line_start = self.ly as usize * 160;
 
+        // Reset BG priority for this scanline
+        for x in 0..160 {
+            self.bg_priority[line_start + x] = false;
+        }
         for screen_x in 0..160 {
             // Calcular posição X no tile map (com scroll)
             let x = (screen_x as u8).wrapping_add(self.scx);
@@ -441,6 +454,8 @@ impl PPU {
             // Aplicar paleta e escrever no framebuffer
             let final_color = self.apply_palette(color);
             self.framebuffer[line_start + screen_x] = final_color;
+            // BG priority: true if BG pixel is opaque (color != 0)
+            self.bg_priority[line_start + screen_x] = color != 0;
         }
     }
 
