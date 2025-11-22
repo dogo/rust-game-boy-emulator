@@ -223,5 +223,4 @@ impl CPU {
         self.cycles += 20;
         self.bus.tick(20);
     }
-
 }

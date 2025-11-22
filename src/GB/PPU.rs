@@ -157,7 +157,11 @@ impl PPU {
         };
 
         // Calcular linha da window (sem scroll)
-        let window_y = if win_line >= 0 { win_line as u8 } else { self.ly - self.wy };
+        let window_y = if win_line >= 0 {
+            win_line as u8
+        } else {
+            self.ly - self.wy
+        };
         let tile_y = (window_y / 8) as usize;
         let pixel_y = (window_y % 8) as usize;
 
@@ -216,29 +220,29 @@ impl PPU {
             return;
         }
 
-        // Coletar sprites visíveis nesta linha (máximo 10 por linha no hardware)
+        // Coletar até 10 sprites visíveis nesta linha
         let mut visible_sprites = Vec::new();
-        let sprite_height = if (self.lcdc & 0x04) != 0 { 16 } else { 8 }; // 8x8 ou 8x16
+        let sprite_height = if (self.lcdc & 0x04) != 0 { 16 } else { 8 };
 
         for sprite_index in 0..40 {
             let sprite = self.get_sprite(sprite_index);
-
-            // Sprite Y é offset por 16, então Y=16 significa linha 0
             let sprite_y = (sprite.y as i16) - 16;
-
-            // Verificar se sprite está visível nesta linha
             if (line as i16) >= sprite_y && (line as i16) < sprite_y + sprite_height as i16 {
                 visible_sprites.push((sprite, sprite_index));
-
-                // Hardware GB limita a 10 sprites por linha
-                if visible_sprites.len() >= 10 {
-                    break;
-                }
             }
         }
-
-        // Renderizar sprites em ordem reversa (últimos tem prioridade)
-        for &(sprite, _sprite_index) in visible_sprites.iter().rev() {
+        // Limita a 10 sprites por linha
+        if visible_sprites.len() > 10 {
+            visible_sprites.truncate(10);
+        }
+        // Ordena por prioridade DMG: x menor primeiro, depois OAM menor
+        visible_sprites.sort_by(|a, b| {
+            let ax = a.0.x;
+            let bx = b.0.x;
+            if ax != bx { ax.cmp(&bx) } else { a.1.cmp(&b.1) }
+        });
+        // Renderiza na ordem
+        for &(sprite, _sprite_index) in visible_sprites.iter() {
             self.render_single_sprite(sprite, line, sprite_height);
         }
     }
@@ -329,7 +333,7 @@ impl PPU {
         (if (self.stat & 0x10) != 0 { 0x10 } else { 0 }) | // Mode 1 enable
         (if (self.stat & 0x08) != 0 { 0x08 } else { 0 }) | // Mode 0 enable
         (if self.ly == self.lyc { 0x04 } else { 0 }) |     // LYC coincidence
-        (self.mode & 0x03)                                 // bits 0-1: modo atual
+        (self.mode & 0x03) // bits 0-1: modo atual
     }
 
     // Escrita de STAT (FF41) - só atualiza bits de enable
@@ -505,13 +509,13 @@ impl PPU {
             0xFF41 => self.write_stat(val),
             0xFF42 => self.scy = val,
             0xFF43 => self.scx = val,
-            0xFF44 => {}, // LY é read-only
+            0xFF44 => {} // LY é read-only
             0xFF45 => {
                 self.lyc = val;
                 // Dispara STAT IRQ se necessário
                 // Precisa de acesso ao iflags, então pode ser ajustado para receber &mut u8 se necessário
                 // Aqui, só marca flag interna, IRQ é disparado em step
-            },
+            }
             0xFF47 => self.bgp = val,
             0xFF48 => self.obp0 = val,
             0xFF49 => self.obp1 = val,
@@ -537,14 +541,22 @@ impl PPU {
 
         if self.ly < 144 {
             if self.mode_clock <= 80 {
-                if self.mode != 2 { self.change_mode(2, iflags); }
+                if self.mode != 2 {
+                    self.change_mode(2, iflags);
+                }
             } else if self.mode_clock <= 252 {
-                if self.mode != 3 { self.change_mode(3, iflags); }
+                if self.mode != 3 {
+                    self.change_mode(3, iflags);
+                }
             } else if self.mode_clock < 456 {
-                if self.mode != 0 { self.change_mode(0, iflags); }
+                if self.mode != 0 {
+                    self.change_mode(0, iflags);
+                }
             }
         } else {
-            if self.mode != 1 { self.change_mode(1, iflags); }
+            if self.mode != 1 {
+                self.change_mode(1, iflags);
+            }
         }
 
         if self.mode_clock >= 456 {
@@ -576,9 +588,7 @@ impl PPU {
                 *iflags |= 0x01;
                 (self.stat & 0x10) != 0
             }
-            2 => {
-                (self.stat & 0x20) != 0
-            }
+            2 => (self.stat & 0x20) != 0,
             3 => {
                 // Window trigger: ativa ao entrar em modo 3 na linha wy
                 if (self.lcdc & 0x20) != 0 && !self.wy_trigger && self.ly == self.wy {
