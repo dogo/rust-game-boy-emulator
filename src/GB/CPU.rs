@@ -1,5 +1,4 @@
 use crate::GB::registers;
-use crate::GB::RAM;
 use crate::GB::instructions;
 
 pub struct CPU {

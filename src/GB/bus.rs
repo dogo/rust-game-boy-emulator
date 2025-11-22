@@ -35,7 +35,7 @@ impl MemoryBus {
             }
         }
     pub fn new(mbc: Box<dyn MBC>) -> Self {
-        let mut joypad = Joypad::new();
+        let joypad = Joypad::new();
         let mut bus = Self {
             mbc,
             wram: [0; 0x2000],
