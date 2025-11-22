@@ -31,6 +31,7 @@ impl MBC for MBC3 {
         match address {
             0x0000..=0x3FFF => self.rom.get(address as usize).copied().unwrap_or(0xFF),
             0x4000..=0x7FFF => {
+                // Banco 0 nunca pode ser selecionado em 0x4000–0x7FFF (hardware substitui por banco 1)
                 let bank = (self.rom_bank as usize).max(1);
                 let idx = bank * 0x4000 + ((address - 0x4000) as usize);
                 self.rom.get(idx).copied().unwrap_or(0xFF)

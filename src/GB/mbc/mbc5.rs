@@ -25,13 +25,15 @@ impl MBC for MBC5 {
         match address {
             0x0000..=0x3FFF => self.rom.get(address as usize).copied().unwrap_or(0xFF),
             0x4000..=0x7FFF => {
-                let bank = self.rom_bank.max(1) as usize;
+                // MBC5 permite banco 0 em 0x4000–0x7FFF (diferente do MBC3)
+                let bank = self.rom_bank as usize;
                 let idx = bank * 0x4000 + ((address - 0x4000) as usize);
                 self.rom.get(idx).copied().unwrap_or(0xFF)
             }
             _ => 0xFF,
         }
     }
+
     fn write_register(&mut self, address: u16, value: u8) {
         match address {
             0x0000..=0x1FFF => self.ram_enabled = (value & 0x0F) == 0x0A,

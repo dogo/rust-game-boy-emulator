@@ -44,7 +44,7 @@ impl MBC for MBC1 {
         match address {
             0x0000..=0x3FFF => {
                 let bank = if self.mode == 1 {
-                    ((self.bank_reg2 & 0x03) as usize) << 5
+                    (self.bank_reg2 as usize & 0x03) << 5
                 } else {
                     0
                 };

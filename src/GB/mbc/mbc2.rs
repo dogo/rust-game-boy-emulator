@@ -37,14 +37,14 @@ impl MBC for MBC2 {
         }
     }
     fn read_ram(&self, address: u16) -> u8 {
-        if !self.ram_enabled || address > 0xA1FF {
+        if !self.ram_enabled || !(0xA000..=0xA1FF).contains(&address) {
             return 0xFF;
         }
         let idx = (address - 0xA000) as usize & 0x1FF;
         self.ram[idx] | 0xF0
     }
     fn write_ram(&mut self, address: u16, value: u8) {
-        if self.ram_enabled && address <= 0xA1FF {
+        if self.ram_enabled && (0xA000..=0xA1FF).contains(&address) {
             let idx = (address - 0xA000) as usize & 0x1FF;
             self.ram[idx] = value & 0x0F;
         }
