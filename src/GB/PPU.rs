@@ -306,6 +306,22 @@ impl PPU {
         self.stat = (self.stat & 0xFC) | (mode & 0x03);
     }
 
+    // Leitura de STAT (FF41) - monta valor conforme modelo RBoy
+    pub fn read_stat(&self) -> u8 {
+        0x80 |
+        (if (self.stat & 0x40) != 0 { 0x40 } else { 0 }) | // LYC=LY enable
+        (if (self.stat & 0x20) != 0 { 0x20 } else { 0 }) | // Mode 2 enable
+        (if (self.stat & 0x10) != 0 { 0x10 } else { 0 }) | // Mode 1 enable
+        (if (self.stat & 0x08) != 0 { 0x08 } else { 0 }) | // Mode 0 enable
+        (if self.ly == self.lyc { 0x04 } else { 0 }) |     // LYC coincidence
+        (self.mode & 0x03)                                 // bits 0-1: modo atual
+    }
+
+    // Escrita de STAT (FF41) - só atualiza bits de enable
+    pub fn write_stat(&mut self, val: u8) {
+        self.stat = (self.stat & 0x07) | (val & 0xF8); // bits 0-2 são read-only
+    }
+
     // Decodifica um tile (16 bytes → 8×8 pixels, 2bpp)
     // Cada linha de pixels = 2 bytes:
     //   byte1: bit baixo da cor (LSB)
@@ -453,7 +469,7 @@ impl PPU {
     pub fn read_register(&self, addr: u16) -> u8 {
         match addr {
             0xFF40 => self.lcdc,
-            0xFF41 => self.stat | 0x80, // Bit 7 sempre 1
+            0xFF41 => self.read_stat(), // Usar função de leitura de STAT
             0xFF42 => self.scy,
             0xFF43 => self.scx,
             0xFF44 => self.ly,
@@ -471,7 +487,7 @@ impl PPU {
     pub fn write_register(&mut self, addr: u16, val: u8) {
         match addr {
             0xFF40 => self.lcdc = val,
-            0xFF41 => self.stat = (self.stat & 0x07) | (val & 0xF8), // Bits 0-2 são read-only
+            0xFF41 => self.write_stat(val), // Usar função de escrita de STAT
             0xFF42 => self.scy = val,
             0xFF43 => self.scx = val,
             0xFF44 => {} // LY é read-only
