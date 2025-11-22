@@ -38,6 +38,10 @@ pub struct PPU {
     // OAM (Object Attribute Memory) - 160 bytes (40 sprites × 4 bytes)
     pub oam: [u8; 160],
 
+    // Controle de window: início e linha da window
+    pub wy_trigger: bool,
+    pub wy_pos: i32,
+
     // Flag para indicar quando um frame foi completado (VBlank)
     pub frame_ready: bool,
 
@@ -66,6 +70,8 @@ impl PPU {
             frame_ready: false,
             mode: 2, // Começa em OAM Search
             mode_clock: 0,
+            wy_trigger: false,
+            wy_pos: -1,
         }
     }
 
@@ -141,8 +147,17 @@ impl PPU {
         // LCDC bit 4: BG/Window tile data select (mesmo que BG)
         let tile_data_mode = (self.lcdc & 0x10) != 0;
 
+        // incrementa wy_pos se window está ativa
+        let wx_trigger = self.wx <= 166;
+        let win_line = if self.wy_trigger && wx_trigger {
+            self.wy_pos += 1;
+            self.wy_pos
+        } else {
+            -1
+        };
+
         // Calcular linha da window (sem scroll)
-        let window_y = self.ly - self.wy;
+        let window_y = if win_line >= 0 { win_line as u8 } else { self.ly - self.wy };
         let tile_y = (window_y / 8) as usize;
         let pixel_y = (window_y % 8) as usize;
 
@@ -306,7 +321,7 @@ impl PPU {
         self.stat = (self.stat & 0xFC) | (mode & 0x03);
     }
 
-    // Leitura de STAT (FF41) - monta valor conforme modelo RBoy
+    // Leitura de STAT (FF41)
     pub fn read_stat(&self) -> u8 {
         0x80 |
         (if (self.stat & 0x40) != 0 { 0x40 } else { 0 }) | // LYC=LY enable
@@ -554,23 +569,22 @@ impl PPU {
                 self.render_bg_scanline();
                 self.render_window_scanline();
                 self.render_sprites_scanline(self.ly);
-                // STAT IRQ Mode 0
                 (self.stat & 0x08) != 0
             }
             1 => {
-                // VBlank: marca frame pronto, dispara VBlank IRQ
                 self.frame_ready = true;
-                *iflags |= 0x01; // VBlank
-                // STAT IRQ Mode 1
+                *iflags |= 0x01;
                 (self.stat & 0x10) != 0
             }
             2 => {
-                // OAM Search: STAT IRQ Mode 2
                 (self.stat & 0x20) != 0
             }
             3 => {
-                // Pixel Transfer: window trigger
-                // (window logic: wy_trigger/wy_pos pode ser implementado aqui)
+                // Window trigger: ativa ao entrar em modo 3 na linha wy
+                if (self.lcdc & 0x20) != 0 && !self.wy_trigger && self.ly == self.wy {
+                    self.wy_trigger = true;
+                    self.wy_pos = -1;
+                }
                 false
             }
             _ => false,
