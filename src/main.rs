@@ -431,7 +431,11 @@ fn main() {
 
     // Carrega save se existir
     if let Err(e) = cpu.bus.load_cart_ram(&sav_path) {
-        eprintln!("⚠️ Erro ao carregar save: {}", e);
+        if format!("{}", e).contains("No such file or directory") {
+            println!("📂 Aviso: Nenhum arquivo de save encontrado, começando novo jogo.");
+        } else {
+            eprintln!("⚠️ Erro ao carregar save: {}", e);
+        }
     }
 
     println!("ROM carregada: {} ({} bytes)", rom_path, data.len());
@@ -444,6 +448,10 @@ fn main() {
 
     // Salva RAM ao sair
     if let Err(e) = cpu.bus.save_cart_ram(&sav_path) {
-        eprintln!("⚠️ Erro ao salvar: {}", e);
+        if format!("{}", e).contains("No RAM to save") {
+            println!("🗃️ Aviso: Este cartucho não possui RAM para salvar progresso.");
+        } else {
+            eprintln!("⚠️ Erro ao salvar: {}", e);
+        }
     }
 }
