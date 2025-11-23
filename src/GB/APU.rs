@@ -160,20 +160,20 @@ impl APU {
             ch4_divisor_code: 0,
             ch4_length_enable: false,
 
-            // Controle geral
-            left_volume: 0,
-            right_volume: 0,
+            // Controle geral – pós-boot
+            left_volume: 7, // NR50
+            right_volume: 7, // NR50
             vin_left_enable: false,
             vin_right_enable: false,
-            ch1_left: false,
-            ch1_right: false,
-            ch2_left: false,
-            ch2_right: false,
-            ch3_left: false,
-            ch3_right: false,
-            ch4_left: false,
-            ch4_right: false,
-            sound_enable: false,
+            ch1_left: true, // NR51
+            ch1_right: true,
+            ch2_left: true,
+            ch2_right: true,
+            ch3_left: true,
+            ch3_right: true,
+            ch4_left: true,
+            ch4_right: true,
+            sound_enable: true, // NR52
 
             // Estado interno
             frame_sequencer: 0,
@@ -286,7 +286,7 @@ impl APU {
 
             let wave_out = if bit != 0 { 1.0 } else { -1.0 };
             let volume = self.ch1_volume as f32 / 15.0;
-            let final_output = wave_out * volume * 0.6;
+            let final_output = wave_out * volume * 0.25;
 
             if self.ch1_left {
                 left_sample += final_output;
@@ -304,7 +304,7 @@ impl APU {
 
             let wave_out = if bit != 0 { 1.0 } else { -1.0 };
             let volume = self.ch2_volume as f32 / 15.0;
-            let final_output = wave_out * volume * 0.6;
+            let final_output = wave_out * volume * 0.25;
 
             if self.ch2_left {
                 left_sample += final_output;
@@ -317,7 +317,7 @@ impl APU {
         // Canal 3: Wave Channel
         if self.ch3_enabled && self.ch3_dac_enable {
             let wave_output = self.generate_wave();
-            let final_output = wave_output * 0.6;
+            let final_output = wave_output * 0.25;
 
             if self.ch3_left {
                 left_sample += final_output;
@@ -331,7 +331,7 @@ impl APU {
         if self.ch4_enabled && self.ch4_volume > 0 {
             let noise_output = self.generate_noise();
             let volume = self.ch4_volume as f32 / 15.0;
-            let final_output = noise_output * volume * 0.6;
+            let final_output = noise_output * volume * 0.25;
 
             if self.ch4_left {
                 left_sample += final_output;
@@ -535,11 +535,6 @@ impl APU {
 
     /// Escreve em um registrador do APU
     pub fn write_register(&mut self, address: u16, value: u8) {
-        // NOTE: Só aceitamos writes em NR10–NR51 quando sound_enable está ON.
-        // Difere levemente do hardware, mas simplifica a implementação.
-        if !self.sound_enable && address != 0xFF26 {
-            return;
-        }
 
         match address {
             // Canal 1
