@@ -124,12 +124,6 @@ impl CPU {
         );
     }
 
-    pub fn load_rom(&mut self) {
-        // Inicializa alguns registradores de IO comuns
-        self.bus.write(0xFF04, 0); // DIV
-        self.bus.write(0xFF0F, 0); // IF
-        self.bus.write(0xFFFF, 0); // IE
-    }
 
     pub fn fetch_next(&mut self) -> u8 {
         let pc_before = self.registers.get_pc();
