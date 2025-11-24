@@ -55,6 +55,37 @@ pub struct PPU {
 }
 
 impl PPU {
+    /// Atualiza LCDC e trata ON/OFF conforme hardware
+    fn set_lcdc(&mut self, new_val: u8, iflags: &mut u8) {
+        let was_on = (self.lcdc & 0x80) != 0;
+        let now_on = (new_val & 0x80) != 0;
+        self.lcdc = new_val;
+
+        // LCD ligado -> desligado
+        if was_on && !now_on {
+            self.mode = 0;
+            self.mode_clock = 0;
+            self.ly = 0;
+            self.frame_ready = false;
+            self.wy_trigger = false;
+            self.wy_pos = -1;
+            self.update_stat_mode(0);
+            self.update_lyc_flag();
+            *iflags &= !0x02; // limpa bit de LCD STAT
+        }
+
+        // LCD desligado -> ligado
+        if !was_on && now_on {
+            self.mode = 2;
+            self.mode_clock = 0;
+            self.ly = 0;
+            self.frame_ready = false;
+            self.wy_trigger = false;
+            self.wy_pos = -1;
+            self.update_stat_mode(2);
+            self.update_lyc_flag();
+        }
+    }
     pub fn new() -> Self {
         let mut rng = rand::thread_rng();
 
@@ -517,7 +548,7 @@ impl PPU {
     // Escreve registrador PPU
     pub fn write_register(&mut self, addr: u16, val: u8, iflags: &mut u8) {
         match addr {
-            0xFF40 => self.lcdc = val,
+            0xFF40 => self.set_lcdc(val, iflags),
             0xFF41 => self.write_stat(val),
             0xFF42 => self.scy = val,
             0xFF43 => self.scx = val,
