@@ -416,6 +416,39 @@ fn get_sav_path(rom_path: &str) -> String {
     }
 }
 
+/// Valida o logo Nintendo e o checksum do header da ROM
+fn validate_rom_header(data: &[u8]) -> Result<(), String> {
+    if data.len() <= 0x014D {
+        return Err("❌ ROM muito pequena para conter um header válido!".to_string());
+    }
+
+    const NINTENDO_LOGO: [u8; 48] = [
+        0xCE, 0xED, 0x66, 0x66, 0xCC, 0x0D, 0x00, 0x0B, 0x03, 0x73, 0x00, 0x83, 0x00, 0x0C, 0x00,
+        0x0D, 0x00, 0x08, 0x11, 0x1F, 0x88, 0x89, 0x00, 0x0E, 0xDC, 0xCC, 0x6E, 0xE6, 0xDD, 0xDD,
+        0xD9, 0x99, 0xBB, 0xBB, 0x67, 0x63, 0x6E, 0x0E, 0xEC, 0xCC, 0xDD, 0xDC, 0x99, 0x9F, 0xBB,
+        0xB9, 0x33, 0x3E,
+    ];
+
+    let logo = &data[0x0104..=0x0133];
+    if logo != NINTENDO_LOGO {
+        return Err("❌ Logo Nintendo inválido no header da ROM!".to_string());
+    }
+
+    let mut x: u8 = 0;
+    for i in 0x0134..=0x014C {
+        x = x.wrapping_sub(data[i]).wrapping_sub(1);
+    }
+    let checksum = data[0x014D];
+    if x != checksum {
+        return Err(format!(
+            "❌ Checksum do header inválido! Calculado: {:02X}, esperado: {:02X}",
+            x, checksum
+        ));
+    }
+
+    Ok(())
+}
+
 fn main() {
     let args: Vec<String> = env::args().collect();
     if args.len() < 2 {
@@ -426,6 +459,13 @@ fn main() {
     let sav_path = get_sav_path(rom_path);
 
     let data = fs::read(rom_path).expect("Falha ao ler ROM");
+
+    // ===== Validação do header da ROM =====
+    if let Err(e) = validate_rom_header(&data) {
+        eprintln!("{}", e);
+        return;
+    }
+
     let mut cpu = GB::CPU::CPU::new(data.clone());
 
     // Carrega boot ROM se existir

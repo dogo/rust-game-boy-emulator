@@ -124,7 +124,6 @@ impl CPU {
         );
     }
 
-
     pub fn fetch_next(&mut self) -> u8 {
         let pc_before = self.registers.get_pc();
 
