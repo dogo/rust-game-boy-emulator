@@ -7,6 +7,7 @@ pub struct CPU {
     pub ime: bool, // Interrupt Master Enable - Quando true habilita e intercepta interrupções
     pub ime_enable_next: bool, // EI habilita IME após a próxima instrução
     pub halted: bool, // CPU está em estado HALT
+    pub halt_bug: bool, // HALT bug flag: se true, PC não incrementa após fetch
     pub opcode: u8, // Opcode da instrução em execução
     pub cycles: u64, // Contagem total de ciclos
 }
@@ -20,6 +21,7 @@ impl CPU {
             ime: false,
             ime_enable_next: false,
             halted: false,
+            halt_bug: false,
             opcode: 0,
             cycles: 0,
         }
@@ -130,8 +132,12 @@ impl CPU {
         // Lê o byte na posição do Program Counter
         let byte = self.bus.read(pc_before);
 
-        // Incrementa o PC para apontar para o próximo byte
-        self.registers.set_pc(pc_before.wrapping_add(1));
+        // HALT bug: se ativo, não incrementa PC após fetch
+        if self.halt_bug {
+            self.halt_bug = false;
+        } else {
+            self.registers.set_pc(pc_before.wrapping_add(1));
+        }
         byte
     }
 
@@ -145,9 +151,8 @@ impl CPU {
             let if_reg = self.bus.read(0xFF0F);
             let ie_reg = self.bus.read(0xFFFF);
             if (if_reg & ie_reg) != 0 {
+                // Acorda da HALT normal
                 self.halted = false;
-                // TODO: Implementar HALT bug (IME=0 com interrupção pendente)
-                // No hardware real, se IME=0 e há interrupção pendente, PC não incrementa corretamente
             } else {
                 // CPU ainda halted, simula 4 ciclos de espera
                 self.bus.tick(4);
@@ -180,7 +185,17 @@ impl CPU {
             }
             0x76 => {
                 // HALT
-                self.halted = true;
+                let if_reg = self.bus.read(0xFF0F);
+                let ie_reg = self.bus.read(0xFFFF);
+                let pending = if_reg & ie_reg;
+
+                if !self.ime && pending != 0 {
+                    // HALT bug: IME=0 e existe interrupção pendente -> NÃO entra em halt, apenas ativa o bug
+                    self.halt_bug = true;
+                } else {
+                    // HALT normal
+                    self.halted = true;
+                }
             }
             0x10 => {
                 // STOP (trata igual HALT por enquanto)
