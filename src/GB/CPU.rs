@@ -8,6 +8,7 @@ pub struct CPU {
     pub ime_enable_next: bool, // EI habilita IME após a próxima instrução
     pub halted: bool, // CPU está em estado HALT
     pub halt_bug: bool, // HALT bug flag: se true, PC não incrementa após fetch
+    pub stopped: bool, // STOP: CPU dormindo até Joypad acordar
     pub opcode: u8, // Opcode da instrução em execução
     pub cycles: u64, // Contagem total de ciclos
 }
@@ -22,6 +23,7 @@ impl CPU {
             ime_enable_next: false,
             halted: false,
             halt_bug: false,
+            stopped: false,
             opcode: 0,
             cycles: 0,
         }
@@ -146,6 +148,18 @@ impl CPU {
     }
 
     pub fn execute_next(&mut self) -> (u64, bool) {
+        // Se CPU está em STOP, só acorda com Joypad
+        if self.stopped {
+            let if_reg = self.bus.get_if();
+            // STOP acorda quando Joypad (bit 4 de IF) é setado, independente de IME/IE
+            if (if_reg & 0x10) != 0 {
+                self.stopped = false;
+            } else {
+                // Continua “dormindo”: PPU/timer/APU seguem rodando
+                self.bus.tick(4);
+                return (4, false);
+            }
+        }
         // Se CPU está em HALT, não executa instruções até uma interrupção acordar
         if self.halted {
             let if_reg = self.bus.read(0xFF0F);
@@ -198,8 +212,8 @@ impl CPU {
                 }
             }
             0x10 => {
-                // STOP (trata igual HALT por enquanto)
-                self.halted = true;
+                // STOP: para a CPU até Joypad acordar
+                self.stopped = true;
             }
             0xD9 => {
                 // RETI
