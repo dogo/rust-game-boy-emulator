@@ -3,6 +3,7 @@ use crate::GB::PPU;
 use crate::GB::joypad::Joypad;
 use crate::GB::mbc::MBC;
 use crate::GB::timer::Timer;
+use rand::Rng;
 
 pub struct MemoryBus {
     mbc: Box<dyn MBC>,
@@ -70,10 +71,15 @@ impl MemoryBus {
     }
 
     pub fn new(mbc: Box<dyn MBC>) -> Self {
+        let mut rng = rand::thread_rng();
+        let mut wram = [0u8; 0x2000];
+        let mut hram = [0u8; 0x7F];
+        rng.fill(&mut wram[..]);
+        rng.fill(&mut hram[..]);
         Self {
             mbc,
-            wram: [0; 0x2000],
-            hram: [0; 0x7F],
+            wram,
+            hram,
             timer: Timer::new(),
             joypad: Joypad::new(),
             ppu: PPU::PPU::new(),

@@ -12,6 +12,7 @@ struct Sprite {
     attributes: u8, // Bit 7=prioridade, 6=flip Y, 5=flip X, 4=paleta, 3-0=unused
 }
 
+use rand::Rng;
 pub struct PPU {
     // VRAM (Video RAM) - 8KB (0x8000-0x9FFF)
     // 0x8000-0x97FF: Tile data (384 tiles × 16 bytes = 6KB)
@@ -55,8 +56,18 @@ pub struct PPU {
 
 impl PPU {
     pub fn new() -> Self {
+        let mut rng = rand::thread_rng();
+
+        // VRAM com lixo de power-on
+        let mut vram = [0u8; 0x2000];
+        rng.fill(&mut vram[..]);
+
+        // OAM com lixo de power-on
+        let mut oam = [0u8; 160];
+        rng.fill(&mut oam[..]);
+
         PPU {
-            vram: [0; 0x2000],
+            vram,
             framebuffer: [0; 160 * 144],
             bg_priority: [false; 160 * 144],
             lcdc: 0x91, // Default pós-boot: LCD on, BG on, 8x8 sprites
@@ -70,7 +81,7 @@ impl PPU {
             obp1: 0xFF,
             wy: 0,
             wx: 0,
-            oam: [0; 160],
+            oam,
             frame_ready: false,
             mode: 2, // Começa em OAM Search
             mode_clock: 0,
