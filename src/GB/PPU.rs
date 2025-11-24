@@ -52,6 +52,9 @@ pub struct PPU {
     // Ciclos acumulados na linha atual (456 ciclos por linha)
     pub mode: u8,        // 0=HBlank, 1=VBlank, 2=OAM, 3=Transfer
     pub mode_clock: u32, // Acumula ciclos para controle de modo
+
+    // Estado interno para STAT/LYC
+    pub ly_eq_lyc_prev: bool,
 }
 
 impl PPU {
@@ -71,6 +74,7 @@ impl PPU {
             self.wy_pos = -1;
             self.update_stat_mode(0);
             self.update_lyc_flag();
+            self.ly_eq_lyc_prev = self.ly == self.lyc;
             *iflags &= !0x02; // limpa bit de LCD STAT
         }
 
@@ -84,6 +88,7 @@ impl PPU {
             self.wy_pos = -1;
             self.update_stat_mode(2);
             self.update_lyc_flag();
+            self.ly_eq_lyc_prev = self.ly == self.lyc;
         }
     }
     pub fn new() -> Self {
@@ -118,6 +123,7 @@ impl PPU {
             mode_clock: 0,
             wy_trigger: false,
             wy_pos: -1,
+            ly_eq_lyc_prev: false,
         }
     }
 
@@ -579,6 +585,7 @@ impl PPU {
             self.frame_ready = false;
             self.wy_trigger = false;
             self.wy_pos = -1;
+            self.ly_eq_lyc_prev = self.ly == self.lyc;
             return;
         }
 
@@ -662,8 +669,12 @@ impl PPU {
     pub fn check_lyc_interrupt(&mut self, iflags: &mut u8) {
         // Bit 6: LYC=LY coincidence interrupt enable
         let lyc_inte = (self.stat & 0x40) != 0;
-        if lyc_inte && self.ly == self.lyc {
+        let now_eq = self.ly == self.lyc;
+        // IRQ na borda de subida: antes era false, agora true
+        if lyc_inte && now_eq && !self.ly_eq_lyc_prev {
             *iflags |= 0x02; // LCD STAT
         }
+        // Atualiza “estado anterior”
+        self.ly_eq_lyc_prev = now_eq;
     }
 }
