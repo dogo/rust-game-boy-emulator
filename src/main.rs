@@ -427,7 +427,16 @@ fn main() {
 
     let data = fs::read(rom_path).expect("Falha ao ler ROM");
     let mut cpu = GB::CPU::CPU::new(data.clone());
-    cpu.init_post_boot();
+
+    // Carrega boot ROM se existir
+    if let Ok(boot_rom) = fs::read("dmg_boot.bin") {
+        cpu.bus.load_boot_rom(boot_rom);
+        // CPU deve iniciar em PC = 0x0000 (boot ROM)
+        cpu.registers.set_pc(0x0000);
+    } else {
+        // Sem boot ROM, inicializa estado pós-boot
+        cpu.init_post_boot();
+    }
 
     // Carrega save se existir
     if let Err(e) = cpu.bus.load_cart_ram(&sav_path) {

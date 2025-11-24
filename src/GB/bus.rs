@@ -12,14 +12,26 @@ pub struct MemoryBus {
     pub joypad: Joypad,
     pub ppu: PPU::PPU,
     pub apu: APU::APU,
-    tima: u8, // FF05
-    tma: u8,  // FF06
-    tac: u8,  // FF07
-    ie: u8,   // 0xFFFF
-    if_: u8,  // 0xFF0F
+    tima: u8,                  // FF05
+    tma: u8,                   // FF06
+    tac: u8,                   // FF07
+    ie: u8,                    // 0xFFFF
+    if_: u8,                   // 0xFF0F
+    boot_rom: Option<Vec<u8>>, // Boot ROM (0x100 bytes)
+    boot_rom_enabled: bool,    // FF50 controle
 }
 
 impl MemoryBus {
+    /// Carrega a boot ROM (256 bytes) e ativa mapeamento.
+    pub fn load_boot_rom(&mut self, data: Vec<u8>) {
+        if data.len() == 0x100 {
+            self.boot_rom = Some(data);
+            self.boot_rom_enabled = true;
+        } else {
+            eprintln!("Boot ROM inválida: esperado 256 bytes");
+        }
+    }
+
     #[inline]
     pub fn get_ie(&self) -> u8 {
         self.ie
@@ -56,6 +68,7 @@ impl MemoryBus {
             Err("No RAM to save".to_string())
         }
     }
+
     pub fn new(mbc: Box<dyn MBC>) -> Self {
         Self {
             mbc,
@@ -70,10 +83,19 @@ impl MemoryBus {
             tac: 0,
             ie: 0,
             if_: 0,
+            boot_rom: None, // Boot ROM (0x100 bytes)
+            boot_rom_enabled: false,
         }
     }
 
     pub fn read(&self, address: u16) -> u8 {
+        // Boot ROM mapeada em 0x0000–0x00FF enquanto boot_rom_enabled
+        if address <= 0x00FF && self.boot_rom_enabled {
+            if let Some(ref rom) = self.boot_rom {
+                return rom[address as usize];
+            }
+        }
+
         match address {
             0x0000..=0x7FFF => self.mbc.read_rom(address),
             0x8000..=0x9FFF => self.ppu.read_vram(address),
@@ -96,6 +118,13 @@ impl MemoryBus {
     }
 
     pub fn write(&mut self, address: u16, value: u8) {
+        if address == 0xFF50 {
+            if self.boot_rom_enabled && (value & 0x01) != 0 {
+                self.boot_rom_enabled = false;
+            }
+            return;
+        }
+
         match address {
             0x0000..=0x7FFF => self.mbc.write_register(address, value),
             0x8000..=0x9FFF => self.ppu.write_vram(address, value),

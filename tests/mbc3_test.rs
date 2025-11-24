@@ -79,7 +79,10 @@ fn test_mbc3_rtc_basic_write_and_latch() {
     // Ler via RTC latched register
     mbc.write_register(0x4000, 0x08);
     let sec = mbc.read_ram(0xA000);
-    assert_eq!(sec, 30, "RTC seconds should match written value after latch");
+    assert_eq!(
+        sec, 30,
+        "RTC seconds should match written value after latch"
+    );
 }
 
 #[test]
@@ -113,8 +116,14 @@ fn test_mbc3_rtc_latch_freezes_time() {
     mbc.write_register(0x4000, 0x09);
     let latched_m = mbc.read_ram(0xA000);
 
-    assert_eq!(latched_s, 10, "Latched RTC seconds should not change after RTC update");
-    assert_eq!(latched_m, 20, "Latched RTC minutes should not change after RTC update");
+    assert_eq!(
+        latched_s, 10,
+        "Latched RTC seconds should not change after RTC update"
+    );
+    assert_eq!(
+        latched_m, 20,
+        "Latched RTC minutes should not change after RTC update"
+    );
 }
 
 #[test]

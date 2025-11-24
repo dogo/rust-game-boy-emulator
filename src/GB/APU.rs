@@ -161,7 +161,7 @@ impl APU {
             ch4_length_enable: false,
 
             // Controle geral – pós-boot
-            left_volume: 7, // NR50
+            left_volume: 7,  // NR50
             right_volume: 7, // NR50
             vin_left_enable: false,
             vin_right_enable: false,
@@ -535,7 +535,6 @@ impl APU {
 
     /// Escreve em um registrador do APU
     pub fn write_register(&mut self, address: u16, value: u8) {
-
         match address {
             // Canal 1
             0xFF10 => {
