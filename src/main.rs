@@ -452,10 +452,11 @@ fn validate_rom_header(data: &[u8]) -> Result<(), String> {
 fn main() {
     let args: Vec<String> = env::args().collect();
     if args.len() < 2 {
-        eprintln!("Uso: cargo run -- <rom.gb> [--trace]");
+        eprintln!("Uso: cargo run -- <rom.gb> [--trace] [--headless]");
         return;
     }
     let rom_path = &args[1];
+    let headless = args.iter().any(|a| a == "--headless");
     let sav_path = get_sav_path(rom_path);
 
     let data = fs::read(rom_path).expect("Falha ao ler ROM");
@@ -489,18 +490,62 @@ fn main() {
 
     println!("ROM carregada: {} ({} bytes)", rom_path, data.len());
 
-    if args.iter().any(|a| a == "--trace") {
+    if headless {
+        run_headless(&mut cpu);
+        return;
+    } else if args.iter().any(|a| a == "--trace") {
         run_trace(&mut cpu);
     } else {
         run_sdl(&mut cpu);
     }
-
     // Salva RAM ao sair
     if let Err(e) = cpu.bus.save_cart_ram(&sav_path) {
         if format!("{}", e).contains("No RAM to save") {
             println!("🗃️ Aviso: Este cartucho não possui RAM para salvar progresso.");
         } else {
             eprintln!("⚠️ Erro ao salvar: {}", e);
+        }
+    }
+}
+
+/// Lê saída da porta serial (FF01/FF02) usada por ROMs de teste (blargg, etc)
+fn poll_serial(cpu: &mut GB::CPU::CPU, log: &mut String) {
+    let sc = cpu.bus.read(0xFF02);
+    // Padrão de muitos testes: escrever 0x81 em SC, dado em SB (FF01)
+    if (sc & 0x81) == 0x81 {
+        let c = cpu.bus.read(0xFF01) as char;
+        log.push(c);
+        // Limpa bit de "transfer complete"
+        cpu.bus.write(0xFF02, sc & !0x80);
+    }
+}
+
+/// Modo headless: roda só CPU/bus e imprime saída serial.
+/// Útil pra rodar ROMs de teste (blargg/mooneye) sem SDL.
+fn run_headless(cpu: &mut GB::CPU::CPU) {
+    let mut serial_log = String::new();
+
+    // ~5 segundos de emulação: 4,194,304 ciclos * 5
+    let max_cycles: u64 = 4_194_304 * 5;
+    let mut executed_cycles: u64 = 0;
+
+    loop {
+        let (cycles, _unknown) = cpu.execute_next();
+        executed_cycles = executed_cycles.wrapping_add(cycles);
+        poll_serial(cpu, &mut serial_log);
+
+        // Se a ROM de teste escrever "Passed" na serial, consideramos sucesso
+        if serial_log.contains("Passed") || serial_log.contains("PASS") {
+            println!("✅ Teste passou!");
+            println!("Serial log:\n{}", serial_log);
+            break;
+        }
+
+        // Se estourar o tempo/ciclos, aborta
+        if executed_cycles >= max_cycles {
+            println!("⏱️ Limite de ciclos atingido ({})", max_cycles);
+            println!("Serial log até agora:\n{}", serial_log);
+            break;
         }
     }
 }
