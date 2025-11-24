@@ -20,6 +20,12 @@ pub struct MemoryBus {
     if_: u8,                   // 0xFF0F
     boot_rom: Option<Vec<u8>>, // Boot ROM (0x100 bytes)
     boot_rom_enabled: bool,    // FF50 controle
+
+    // ===== OAM DMA =====
+    oam_dma_active: bool,
+    oam_dma_src: u16,
+    oam_dma_index: u8,
+    oam_dma_cycles: u32,
 }
 
 impl MemoryBus {
@@ -91,6 +97,10 @@ impl MemoryBus {
             if_: 0,
             boot_rom: None, // Boot ROM (0x100 bytes)
             boot_rom_enabled: false,
+            oam_dma_active: false,
+            oam_dma_src: 0,
+            oam_dma_index: 0,
+            oam_dma_cycles: 0,
         }
     }
 
@@ -131,6 +141,12 @@ impl MemoryBus {
             return;
         }
 
+        // OAM DMA: escrever em FF46 inicia transferência
+        if address == 0xFF46 {
+            self.start_oam_dma(value);
+            return;
+        }
+
         match address {
             0x0000..=0x7FFF => self.mbc.write_register(address, value),
             0x8000..=0x9FFF => self.ppu.write_vram(address, value),
@@ -154,7 +170,6 @@ impl MemoryBus {
                 }
             }
             0xFE00..=0xFE9F => self.ppu.write_oam(address, value),
-            0xFF46 => self.dma_transfer(value),
             0xFF00 => self.joypad.write(value),
             0xFF04 => {
                 let (new_tima, new_if) = self
@@ -182,30 +197,60 @@ impl MemoryBus {
         }
     }
 
-    /// DMA instantâneo, leitura crua sem OAM, echo RAM, e áreas proibidas retornam 0xFF
-    fn dma_transfer(&mut self, value: u8) {
-        let base = (value as u16) << 8;
-        for offset in 0..160u16 {
-            let addr = base + offset;
-            let byte = match addr {
-                0x0000..=0x7FFF => self.mbc.read_rom(addr),
-                0x8000..=0x9FFF => self.ppu.read_vram(addr),
-                0xA000..=0xBFFF => self.mbc.read_ram(addr),
-                0xC000..=0xDFFF => self.wram[(addr - 0xC000) as usize],
-                0xE000..=0xFDFF => self.wram[(addr - 0xE000) as usize], // echo RAM
-                _ => 0xFF, // áreas proibidas retornam 0xFF
-            };
-            self.ppu.write_oam(0xFE00 + offset, byte);
+    /// Inicia uma transferência OAM DMA a partir de `value << 8`
+    pub fn start_oam_dma(&mut self, value: u8) {
+        let src = (value as u16) << 8;
+        self.oam_dma_src = src;
+        self.oam_dma_index = 0;
+        self.oam_dma_cycles = 0;
+        self.oam_dma_active = true;
+    }
+
+    /// Lê um byte da fonte do DMA sem causar efeitos colaterais extras.
+    fn oam_dma_read_source(&self, addr: u16) -> u8 {
+        match addr {
+            0x0000..=0x7FFF => self.mbc.read_rom(addr),
+            0x8000..=0x9FFF => self.ppu.read_vram(addr),
+            0xA000..=0xBFFF => self.mbc.read_ram(addr),
+            0xC000..=0xDFFF => self.wram[(addr - 0xC000) as usize],
+            0xE000..=0xFDFF => {
+                let base = addr - 0x2000;
+                if (0xC000..=0xDDFF).contains(&base) {
+                    self.wram[(base - 0xC000) as usize]
+                } else {
+                    0xFF
+                }
+            }
+            _ => 0xFF,
+        }
+    }
+
+    /// Avança OAM DMA consumindo `cycles` da CPU.
+    fn step_oam_dma(&mut self, cycles: u32) {
+        if !self.oam_dma_active {
+            return;
+        }
+        self.oam_dma_cycles = self.oam_dma_cycles.saturating_add(cycles);
+        while self.oam_dma_cycles >= 4 && self.oam_dma_index < 160 {
+            self.oam_dma_cycles -= 4;
+            let src_addr = self.oam_dma_src.wrapping_add(self.oam_dma_index as u16);
+            let val = self.oam_dma_read_source(src_addr);
+            let dst_addr = 0xFE00u16 + self.oam_dma_index as u16;
+            self.ppu.write_oam(dst_addr, val);
+            self.oam_dma_index = self.oam_dma_index.wrapping_add(1);
+        }
+        if self.oam_dma_index >= 160 {
+            self.oam_dma_active = false;
         }
     }
 
     pub fn tick(&mut self, cycles: u32) {
+        self.step_oam_dma(cycles);
         let (new_tima, new_if) = self
             .timer
             .tick(cycles, self.tima, self.tma, self.tac, self.if_);
         self.tima = new_tima;
         self.if_ = new_if;
-        // Tick do APU por ciclo
         for _ in 0..cycles {
             self.apu.tick();
         }
