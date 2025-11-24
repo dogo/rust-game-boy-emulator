@@ -2,3 +2,5 @@
 *.gb
 *.gbc
 *.sav
+
+!gb-test-roms/**/*.gb
