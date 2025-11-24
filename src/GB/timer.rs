@@ -1,16 +1,16 @@
 /// Emula o timer/divisor do Game Boy
 pub struct Timer {
     div_counter: u16,
-    tima_reload_delay: u8,
     timer_last_signal: bool,
+    pending_overflow: bool,
 }
 
 impl Timer {
     pub fn new() -> Self {
         Timer {
             div_counter: 0,
-            tima_reload_delay: 0,
             timer_last_signal: false,
+            pending_overflow: false,
         }
     }
 
@@ -46,18 +46,16 @@ impl Timer {
     ) -> (u8, u8) {
         for _ in 0..cycles {
             self.div_counter = self.div_counter.wrapping_add(1);
-            if self.tima_reload_delay > 0 {
-                self.tima_reload_delay -= 1;
-                if self.tima_reload_delay == 0 {
-                    tima = tma;
-                    if_reg |= 0x04; // Timer interrupt
-                }
-            }
             let signal = self.current_timer_signal(tac);
             if self.timer_last_signal && !signal {
-                if tima == 0xFF {
+                // Borda 1->0
+                if self.pending_overflow {
+                    tima = tma;
+                    if_reg |= 0x04; // Timer interrupt
+                    self.pending_overflow = false;
+                } else if tima == 0xFF {
                     tima = 0x00;
-                    self.tima_reload_delay = 4;
+                    self.pending_overflow = true;
                 } else {
                     tima = tima.wrapping_add(1);
                 }
@@ -80,13 +78,18 @@ impl Timer {
         let mut if_reg = if_reg;
         // Se houve borda de descida, incrementa TIMA
         if old_signal && !new_signal {
-            if tima == 0xFF {
+            if self.pending_overflow {
                 tima = tma;
-                if_reg |= 0x04; // Timer interrupt
+                if_reg |= 0x04;
+                self.pending_overflow = false;
+            } else if tima == 0xFF {
+                tima = 0x00;
+                self.pending_overflow = true;
             } else {
                 tima = tima.wrapping_add(1);
             }
         }
+        self.timer_last_signal = new_signal;
         (tima, if_reg)
     }
     /// Detecta edge ao escrever em TAC (FF07)
@@ -104,13 +107,18 @@ impl Timer {
         let mut if_reg = if_reg;
         // Se houve borda de descida, incrementa TIMA
         if old_signal && !new_signal {
-            if tima == 0xFF {
+            if self.pending_overflow {
                 tima = tma;
-                if_reg |= 0x04; // Timer interrupt
+                if_reg |= 0x04;
+                self.pending_overflow = false;
+            } else if tima == 0xFF {
+                tima = 0x00;
+                self.pending_overflow = true;
             } else {
                 tima = tima.wrapping_add(1);
             }
         }
+        self.timer_last_signal = new_signal;
         (tima, if_reg)
     }
 }
