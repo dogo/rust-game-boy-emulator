@@ -48,25 +48,57 @@ impl CPU {
     }
 
     pub fn init_post_boot(&mut self) {
-        // Estados típicos pós BIOS (DMG = Dot Matrix Game, Game Boy clássico modelo DMG-01) para permitir pular boot ROM
+        // Estados típicos pós BIOS (DMG)
         self.registers.set_af(0x01B0);
         self.registers.set_bc(0x0013);
         self.registers.set_de(0x00D8);
         self.registers.set_hl(0x014D);
         self.registers.set_sp(0xFFFE);
-        self.registers.set_pc(0x0100); // Entrada no cartucho
+        self.registers.set_pc(0x0100);
 
-        // IO registers pós-boot (valores típicos DMG)
-        self.bus.write(0xFF40, 0x91); // LCDC - LCD ligado, BG habilitado (sprites o jogo habilita depois)
+        // IO registers pós-boot (valores DMG)
+        self.bus.write(0xFF04, 0xAB); // DIV
+        self.bus.write(0xFF05, 0x00); // TIMA
+        self.bus.write(0xFF06, 0x00); // TMA
+        self.bus.write(0xFF07, 0xF8); // TAC
+        self.bus.write(0xFF0F, 0xE1); // IF
+        self.bus.write(0xFFFF, 0x00); // IE
+        self.bus.write(0xFF10, 0x80); // NR10
+        self.bus.write(0xFF11, 0xBF); // NR11
+        self.bus.write(0xFF12, 0xF3); // NR12
+        self.bus.write(0xFF13, 0xFF); // NR13
+        self.bus.write(0xFF14, 0xBF); // NR14
+        self.bus.write(0xFF16, 0x3F); // NR21
+        self.bus.write(0xFF17, 0x00); // NR22
+        self.bus.write(0xFF18, 0xFF); // NR23
+        self.bus.write(0xFF19, 0xBF); // NR24
+        self.bus.write(0xFF1A, 0x7F); // NR30
+        self.bus.write(0xFF1B, 0xFF); // NR31
+        self.bus.write(0xFF1C, 0x9F); // NR32
+        self.bus.write(0xFF1D, 0xFF); // NR33
+        self.bus.write(0xFF1E, 0xBF); // NR34
+        self.bus.write(0xFF20, 0xFF); // NR41
+        self.bus.write(0xFF21, 0x00); // NR42
+        self.bus.write(0xFF22, 0x00); // NR43
+        self.bus.write(0xFF23, 0xBF); // NR44
+        self.bus.write(0xFF24, 0x77); // NR50
+        self.bus.write(0xFF25, 0xF3); // NR51
+        self.bus.write(0xFF26, 0xF1); // NR52
+        for i in 0xFF30..=0xFF3F {
+            self.bus.write(i, 0x00);
+        } // Wave RAM
+        self.bus.write(0xFF40, 0x91); // LCDC
+        self.bus.write(0xFF41, 0x85); // STAT
         self.bus.write(0xFF42, 0x00); // SCY
         self.bus.write(0xFF43, 0x00); // SCX
         self.bus.write(0xFF44, 0x00); // LY
         self.bus.write(0xFF45, 0x00); // LYC
-        self.bus.write(0xFF47, 0xFC); // BGP - paleta background
-        self.bus.write(0xFF48, 0xFF); // OBP0 - paleta sprites 0
-        self.bus.write(0xFF49, 0xFF); // OBP1 - paleta sprites 1
-        self.bus.write(0xFF4A, 0x00); // WY - window Y
-        self.bus.write(0xFF4B, 0x00); // WX - window X
+        self.bus.write(0xFF46, 0xFF); // DMA
+        self.bus.write(0xFF47, 0xFC); // BGP
+        self.bus.write(0xFF48, 0xFF); // OBP0
+        self.bus.write(0xFF49, 0xFF); // OBP1
+        self.bus.write(0xFF4A, 0x00); // WY
+        self.bus.write(0xFF4B, 0x00); // WX
 
         eprintln!("🚀 POST-BOOT STATE 🚀");
         eprintln!(
@@ -79,8 +111,13 @@ impl CPU {
             self.registers.get_pc()
         );
         eprintln!(
-            "IO: LCDC={:02X} BGP={:02X} OBP0={:02X} OBP1={:02X}",
+            "IO: LCDC={:02X} STAT={:02X} DIV={:02X} TIMA={:02X} TMA={:02X} TAC={:02X} BGP={:02X} OBP0={:02X} OBP1={:02X}",
             self.bus.read(0xFF40),
+            self.bus.read(0xFF41),
+            self.bus.read(0xFF04),
+            self.bus.read(0xFF05),
+            self.bus.read(0xFF06),
+            self.bus.read(0xFF07),
             self.bus.read(0xFF47),
             self.bus.read(0xFF48),
             self.bus.read(0xFF49)
