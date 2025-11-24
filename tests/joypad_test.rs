@@ -9,9 +9,6 @@ mod joypad_tests {
     fn test_joypad_basic_operations() {
         let mut cpu = CPU::new(Vec::new());
 
-        // Simula ROM mínima
-        cpu.load_rom();
-
         // Inicialmente, todos os botões devem estar soltos (bits = 1)
         // Seleciona D-pad: bit 4=0, bit 5=1 → escreve 0x20
         cpu.bus.write(0xFF00, 0x20);
@@ -61,7 +58,6 @@ mod joypad_tests {
     #[test]
     fn test_joypad_multiple_buttons() {
         let mut cpu = CPU::new(Vec::new());
-        cpu.load_rom();
 
         // Pressiona múltiplos botões do D-pad
         cpu.bus.joypad.press("UP");
@@ -80,7 +76,6 @@ mod joypad_tests {
     #[test]
     fn test_joypad_mode_switching() {
         let mut cpu = CPU::new(Vec::new());
-        cpu.load_rom();
 
         // Pressiona botões de ambos os grupos
         cpu.bus.joypad.press("DOWN"); // D-pad
