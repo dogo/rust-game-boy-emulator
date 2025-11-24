@@ -513,8 +513,15 @@ fn poll_serial(cpu: &mut GB::CPU::CPU, log: &mut String) {
     let sc = cpu.bus.read(0xFF02);
     // Padrão de muitos testes: escrever 0x81 em SC, dado em SB (FF01)
     if (sc & 0x81) == 0x81 {
-        let c = cpu.bus.read(0xFF01) as char;
-        log.push(c);
+        let byte = cpu.bus.read(0xFF01);
+        // Ignora transferências "vazias" (linha em 1)
+        if byte != 0xFF {
+            if (0x20..=0x7E).contains(&byte) || byte == b'\n' || byte == b'\r' {
+                log.push(byte as char);
+            } else {
+                log.push_str(&format!("<{:02X}>", byte));
+            }
+        }
         // Limpa bit de "transfer complete"
         cpu.bus.write(0xFF02, sc & !0x80);
     }
@@ -525,14 +532,38 @@ fn poll_serial(cpu: &mut GB::CPU::CPU, log: &mut String) {
 fn run_headless(cpu: &mut GB::CPU::CPU) {
     let mut serial_log = String::new();
 
-    // ~5 segundos de emulação: 4,194,304 ciclos * 5
-    let max_cycles: u64 = 4_194_304 * 5;
+    // ~10 segundos de emulação: 4,194,304 ciclos * 10
+    let max_cycles: u64 = 4_194_304 * 10;
     let mut executed_cycles: u64 = 0;
+    let mut steps: u64 = 0;
 
     loop {
         let (cycles, _unknown) = cpu.execute_next();
+        steps += 1;
+
+        // 🚨 Proteção: instrução retornou 0 ciclos → algo errado
+        if cycles == 0 {
+            eprintln!(
+                "⚠ cycles == 0 em step {} | PC={:04X} opcode={:02X}",
+                steps,
+                cpu.registers.get_pc(),
+                cpu.opcode
+            );
+            println!("Serial log até agora:\n{}", serial_log);
+            break;
+        }
+
         executed_cycles = executed_cycles.wrapping_add(cycles);
         poll_serial(cpu, &mut serial_log);
+
+        // Log de progresso a cada ~1M ciclos
+        if executed_cycles / 1_000_000 != (executed_cycles - cycles as u64) / 1_000_000 {
+            eprintln!(
+                "… progresso: {}M ciclos executados (steps={})",
+                executed_cycles / 1_000_000,
+                steps
+            );
+        }
 
         // Se a ROM de teste escrever "Passed" na serial, consideramos sucesso
         if serial_log.contains("Passed") || serial_log.contains("PASS") {
@@ -543,8 +574,11 @@ fn run_headless(cpu: &mut GB::CPU::CPU) {
 
         // Se estourar o tempo/ciclos, aborta
         if executed_cycles >= max_cycles {
-            println!("⏱️ Limite de ciclos atingido ({})", max_cycles);
-            println!("Serial log até agora:\n{}", serial_log);
+            eprintln!(
+                "⏱️ Atingiu limite de ciclos ({}) sem achar 'Passed'/'PASS'",
+                max_cycles
+            );
+            println!("Serial log:\n{}", serial_log);
             break;
         }
     }
