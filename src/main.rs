@@ -511,10 +511,11 @@ fn main() {
 /// Lê saída da porta serial (FF01/FF02) usada por ROMs de teste (blargg, etc)
 fn poll_serial(cpu: &mut GB::CPU::CPU, log: &mut String) {
     let sc = cpu.bus.read(0xFF02);
-    // Padrão de muitos testes: escrever 0x81 em SC, dado em SB (FF01)
+
+    // Padrão dos testes: escrever 0x81 em SC, dado em SB (FF01)
     if (sc & 0x81) == 0x81 {
         let byte = cpu.bus.read(0xFF01);
-        // Ignora transferências "vazias" (linha em 1)
+        // Ignora transferências "vazias"
         if byte != 0xFF {
             if (0x20..=0x7E).contains(&byte) || byte == b'\n' || byte == b'\r' {
                 log.push(byte as char);
@@ -532,8 +533,8 @@ fn poll_serial(cpu: &mut GB::CPU::CPU, log: &mut String) {
 fn run_headless(cpu: &mut GB::CPU::CPU) {
     let mut serial_log = String::new();
 
-    // ~10 segundos de emulação: 4,194,304 ciclos * 10
-    let max_cycles: u64 = 4_194_304 * 10;
+    // ~120 segundos de emulação: 4,194,304 ciclos * 120
+    let max_cycles: u64 = 4_194_304 * 120;
     let mut executed_cycles: u64 = 0;
     let mut steps: u64 = 0;
 
@@ -549,7 +550,6 @@ fn run_headless(cpu: &mut GB::CPU::CPU) {
                 cpu.registers.get_pc(),
                 cpu.opcode
             );
-            println!("Serial log até agora:\n{}", serial_log);
             break;
         }
 
@@ -568,7 +568,6 @@ fn run_headless(cpu: &mut GB::CPU::CPU) {
         // Se a ROM de teste escrever "Passed" na serial, consideramos sucesso
         if serial_log.contains("Passed") || serial_log.contains("PASS") {
             println!("✅ Teste passou!");
-            println!("Serial log:\n{}", serial_log);
             break;
         }
 
@@ -578,8 +577,8 @@ fn run_headless(cpu: &mut GB::CPU::CPU) {
                 "⏱️ Atingiu limite de ciclos ({}) sem achar 'Passed'/'PASS'",
                 max_cycles
             );
-            println!("Serial log:\n{}", serial_log);
             break;
         }
     }
+    println!("Serial log:\n{}", serial_log);
 }

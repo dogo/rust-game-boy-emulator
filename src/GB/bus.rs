@@ -26,6 +26,10 @@ pub struct MemoryBus {
     oam_dma_src: u16,
     oam_dma_index: u8,
     oam_dma_cycles: u32,
+
+    // ===== Serial =====
+    serial_sb: u8, // FF01
+    serial_sc: u8, // FF02
 }
 
 impl MemoryBus {
@@ -101,6 +105,8 @@ impl MemoryBus {
             oam_dma_src: 0,
             oam_dma_index: 0,
             oam_dma_cycles: 0,
+            serial_sb: 0x00,
+            serial_sc: 0x7E, // bits não usados em 1
         }
     }
 
@@ -120,6 +126,8 @@ impl MemoryBus {
             0xE000..=0xFDFF => self.wram[(address - 0xE000) as usize],
             0xFE00..=0xFE9F => self.ppu.read_oam(address),
             0xFF00 => self.joypad.read(),
+            0xFF01 => self.serial_sb,
+            0xFF02 => self.serial_sc | 0b0111_1110,
             0xFF04 => self.timer.read_div(),
             0xFF05 => self.tima,
             0xFF06 => self.tma,
@@ -171,6 +179,8 @@ impl MemoryBus {
             }
             0xFE00..=0xFE9F => self.ppu.write_oam(address, value),
             0xFF00 => self.joypad.write(value),
+            0xFF01 => self.serial_sb = value,
+            0xFF02 => self.serial_sc = value & 0b1000_0001,
             0xFF04 => {
                 let (new_tima, new_if) = self
                     .timer
