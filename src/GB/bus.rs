@@ -33,6 +33,15 @@ pub struct MemoryBus {
 }
 
 impl MemoryBus {
+    /// Durante DMA de OAM, a CPU só pode acessar HRAM (FF80–FFFE) e IE (FFFF)
+    #[inline]
+    fn dma_cpu_can_access(&self, addr: u16) -> bool {
+        (0xFF80..=0xFFFE).contains(&addr) || addr == 0xFFFF
+    }
+    #[inline]
+    fn lcd_on(&self) -> bool {
+        (self.ppu.lcdc & 0x80) != 0
+    }
     /// Carrega a boot ROM (256 bytes) e ativa mapeamento.
     pub fn load_boot_rom(&mut self, data: Vec<u8>) {
         if data.len() == 0x100 {
@@ -111,6 +120,10 @@ impl MemoryBus {
     }
 
     pub fn read(&self, address: u16) -> u8 {
+        // 🔒 Durante DMA de OAM, a CPU só pode acessar HRAM/IE
+        if self.oam_dma_active && !self.dma_cpu_can_access(address) {
+            return 0xFF;
+        }
         // Boot ROM mapeada em 0x0000–0x00FF enquanto boot_rom_enabled
         if address <= 0x00FF && self.boot_rom_enabled {
             if let Some(ref rom) = self.boot_rom {
@@ -120,11 +133,27 @@ impl MemoryBus {
 
         match address {
             0x0000..=0x7FFF => self.mbc.read_rom(address),
-            0x8000..=0x9FFF => self.ppu.read_vram(address),
+            // VRAM: bloqueada em mode 3 se LCD on
+            0x8000..=0x9FFF => {
+                if self.lcd_on() && self.ppu.mode == 3 {
+                    0xFF
+                } else {
+                    self.ppu.read_vram(address)
+                }
+            }
             0xA000..=0xBFFF => self.mbc.read_ram(address),
             0xC000..=0xDFFF => self.wram[(address - 0xC000) as usize],
             0xE000..=0xFDFF => self.wram[(address - 0xE000) as usize],
-            0xFE00..=0xFE9F => self.ppu.read_oam(address),
+            // OAM: bloqueada em mode 2/3 e durante DMA
+            0xFE00..=0xFE9F => {
+                if (self.lcd_on() && (self.ppu.mode == 2 || self.ppu.mode == 3))
+                    || self.oam_dma_active
+                {
+                    0xFF
+                } else {
+                    self.ppu.read_oam(address)
+                }
+            }
             0xFF00 => self.joypad.read(),
             0xFF01 => self.serial_sb,
             0xFF02 => self.serial_sc | 0b0111_1110,
@@ -142,6 +171,11 @@ impl MemoryBus {
     }
 
     pub fn write(&mut self, address: u16, value: u8) {
+        // 🔒 Durante DMA de OAM, a CPU só pode escrever em HRAM/IE
+        if self.oam_dma_active && !self.dma_cpu_can_access(address) {
+            // Escrita ignorada
+            return;
+        }
         if address == 0xFF50 {
             if self.boot_rom_enabled && (value & 0x01) != 0 {
                 self.boot_rom_enabled = false;
@@ -157,7 +191,14 @@ impl MemoryBus {
 
         match address {
             0x0000..=0x7FFF => self.mbc.write_register(address, value),
-            0x8000..=0x9FFF => self.ppu.write_vram(address, value),
+            // VRAM: bloqueada em mode 3 se LCD on
+            0x8000..=0x9FFF => {
+                if self.lcd_on() && self.ppu.mode == 3 {
+                    // escrita ignorada
+                } else {
+                    self.ppu.write_vram(address, value);
+                }
+            }
             0xA000..=0xBFFF => self.mbc.write_ram(address, value),
             0xC000..=0xDFFF => {
                 let idx = (address - 0xC000) as usize;
@@ -177,7 +218,16 @@ impl MemoryBus {
                     self.wram[(main_addr - 0xC000) as usize] = value;
                 }
             }
-            0xFE00..=0xFE9F => self.ppu.write_oam(address, value),
+            // OAM: bloqueada em mode 2/3 e durante DMA
+            0xFE00..=0xFE9F => {
+                if (self.lcd_on() && (self.ppu.mode == 2 || self.ppu.mode == 3))
+                    || self.oam_dma_active
+                {
+                    // escrita ignorada
+                } else {
+                    self.ppu.write_oam(address, value);
+                }
+            }
             0xFF00 => self.joypad.write(value),
             0xFF01 => self.serial_sb = value,
             0xFF02 => self.serial_sc = value & 0b1000_0001,
