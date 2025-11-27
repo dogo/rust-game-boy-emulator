@@ -1,4 +1,5 @@
 use crate::GB::instructions;
+use crate::GB::microcode;
 use crate::GB::registers;
 
 pub struct CPU {
@@ -181,11 +182,22 @@ impl CPU {
 
         // DECODE
         let instr = CPU::decode(opcode, false);
-        let unknown = instr.name == "UNKNOWN";
+        let mut unknown = instr.name == "UNKNOWN";
+        let cycles: u64;
 
-        // EXECUTE
-        let cycles = (instr.execute)(&instr, &mut self.registers, &mut self.bus);
-        self.cycles += cycles as u64;
+        if let Some(program) = microcode::lookup(opcode) {
+            microcode::execute(program, &mut self.registers, &mut self.bus);
+            cycles = self.bus.take_cpu_cycle_log() as u64;
+            unknown = false;
+        } else {
+            let exec_cycles = (instr.execute)(&instr, &mut self.registers, &mut self.bus);
+            let consumed = self.bus.take_cpu_cycle_log();
+            if exec_cycles as u32 > consumed {
+                self.bus.tick(exec_cycles as u32 - consumed);
+            }
+            cycles = exec_cycles;
+        }
+        self.cycles += cycles;
 
         // 🔧 EFEITOS ESPECIAIS NO CPU (fora dos registradores)
         match opcode {
@@ -228,12 +240,6 @@ impl CPU {
         if self.ime_enable_next {
             self.ime = true;
             self.ime_enable_next = false;
-        }
-
-        // Complementa ciclos restantes (caso cpu_read/cpu_write não tenham consumido tudo)
-        let consumed = self.bus.take_cpu_cycle_log();
-        if cycles as u32 > consumed {
-            self.bus.tick(cycles as u32 - consumed);
         }
 
         // Atende interrupções se habilitadas (IME) e pendentes (IF & IE)
