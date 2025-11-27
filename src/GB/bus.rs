@@ -238,7 +238,10 @@ impl MemoryBus {
                 self.tima = new_tima;
                 self.if_ = new_if;
             }
-            0xFF05 => self.tima = value,
+            0xFF05 => {
+                self.timer.notify_tima_write();
+                self.tima = value;
+            }
             0xFF06 => self.tma = value,
             0xFF07 => {
                 let (new_tima, new_if) = self
