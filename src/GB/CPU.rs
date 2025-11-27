@@ -34,18 +34,18 @@ impl CPU {
     pub fn push_u16(&mut self, value: u16) {
         let mut sp = self.registers.get_sp();
         sp = sp.wrapping_sub(1);
-        self.bus.write(sp, (value >> 8) as u8);
+        self.bus.cpu_write(sp, (value >> 8) as u8);
         sp = sp.wrapping_sub(1);
-        self.bus.write(sp, (value & 0xFF) as u8);
+        self.bus.cpu_write(sp, (value & 0xFF) as u8);
         self.registers.set_sp(sp);
     }
 
     #[inline]
     pub fn pop_u16(&mut self) -> u16 {
         let mut sp = self.registers.get_sp();
-        let lo = self.bus.read(sp) as u16;
+        let lo = self.bus.cpu_read(sp) as u16;
         sp = sp.wrapping_add(1);
-        let hi = self.bus.read(sp) as u16;
+        let hi = self.bus.cpu_read(sp) as u16;
         sp = sp.wrapping_add(1);
         self.registers.set_sp(sp);
         (hi << 8) | lo
@@ -132,7 +132,7 @@ impl CPU {
         let pc_before = self.registers.get_pc();
 
         // Lê o byte na posição do Program Counter
-        let byte = self.bus.read(pc_before);
+        let byte = self.bus.cpu_read(pc_before);
 
         // HALT bug: se ativo, não incrementa PC após fetch
         if self.halt_bug {
@@ -175,6 +175,7 @@ impl CPU {
         }
 
         // FETCH
+        self.bus.reset_cpu_cycle_log();
         let opcode = self.fetch_next();
         self.opcode = opcode;
 
@@ -229,8 +230,11 @@ impl CPU {
             self.ime_enable_next = false;
         }
 
-        // Tick do bus depois da execução da instrução
-        self.bus.tick(cycles as u32);
+        // Complementa ciclos restantes (caso cpu_read/cpu_write não tenham consumido tudo)
+        let consumed = self.bus.take_cpu_cycle_log();
+        if cycles as u32 > consumed {
+            self.bus.tick(cycles as u32 - consumed);
+        }
 
         // Atende interrupções se habilitadas (IME) e pendentes (IF & IE)
         self.service_interrupts();

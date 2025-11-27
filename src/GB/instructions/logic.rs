@@ -28,7 +28,7 @@ pub fn and_a_r(opcode: u8) -> Instruction {
 
 pub fn and_a_d8(opcode: u8) -> Instruction {
     fn exec(_instr: &Instruction, regs: &mut Registers, bus: &mut MemoryBus) -> u64 {
-        let imm = bus.read(regs.get_pc());
+        let imm = bus.cpu_read(regs.get_pc());
         regs.set_pc(regs.get_pc().wrapping_add(1));
         let a = regs.get_a();
         let res = a & imm;
@@ -74,7 +74,7 @@ pub fn or_a_r(opcode: u8) -> Instruction {
 
 pub fn or_a_d8(opcode: u8) -> Instruction {
     fn exec(_instr: &Instruction, regs: &mut Registers, bus: &mut MemoryBus) -> u64 {
-        let imm = bus.read(regs.get_pc());
+        let imm = bus.cpu_read(regs.get_pc());
         regs.set_pc(regs.get_pc().wrapping_add(1));
         let a = regs.get_a();
         let res = a | imm;
@@ -120,7 +120,7 @@ pub fn xor_a_r(opcode: u8) -> Instruction {
 
 pub fn xor_a_d8(opcode: u8) -> Instruction {
     fn exec(_instr: &Instruction, regs: &mut Registers, bus: &mut MemoryBus) -> u64 {
-        let imm = bus.read(regs.get_pc());
+        let imm = bus.cpu_read(regs.get_pc());
         regs.set_pc(regs.get_pc().wrapping_add(1));
         let a = regs.get_a();
         let res = a ^ imm;
@@ -171,7 +171,7 @@ pub fn cp_a_r(opcode: u8) -> Instruction {
 
 pub fn cp_a_d8(opcode: u8) -> Instruction {
     fn exec(_instr: &Instruction, regs: &mut Registers, bus: &mut MemoryBus) -> u64 {
-        let imm = bus.read(regs.get_pc());
+        let imm = bus.cpu_read(regs.get_pc());
         regs.set_pc(regs.get_pc().wrapping_add(1));
         let a = regs.get_a();
         sub_set_flags(regs, a, imm, 0);

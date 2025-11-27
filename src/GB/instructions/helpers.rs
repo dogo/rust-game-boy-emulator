@@ -61,7 +61,7 @@ impl Instruction {
 // Helpers para ler/escrever registradores por índice (0-7: B,C,D,E,H,L,(HL),A)
 use crate::GB::bus::MemoryBus;
 
-pub fn read_r(regs: &crate::GB::registers::Registers, bus: &MemoryBus, idx: u8) -> u8 {
+pub fn read_r(regs: &crate::GB::registers::Registers, bus: &mut MemoryBus, idx: u8) -> u8 {
     match idx {
         0 => regs.get_b(),
         1 => regs.get_c(),
@@ -69,7 +69,7 @@ pub fn read_r(regs: &crate::GB::registers::Registers, bus: &MemoryBus, idx: u8) 
         3 => regs.get_e(),
         4 => regs.get_h(),
         5 => regs.get_l(),
-        6 => bus.read(regs.get_hl()),
+        6 => bus.cpu_read(regs.get_hl()),
         7 => regs.get_a(),
         _ => 0,
     }
@@ -83,7 +83,7 @@ pub fn write_r(regs: &mut crate::GB::registers::Registers, bus: &mut MemoryBus, 
         3 => regs.set_e(val),
         4 => regs.set_h(val),
         5 => regs.set_l(val),
-        6 => bus.write(regs.get_hl(), val),
+        6 => bus.cpu_write(regs.get_hl(), val),
         7 => regs.set_a(val),
         _ => {}
     }

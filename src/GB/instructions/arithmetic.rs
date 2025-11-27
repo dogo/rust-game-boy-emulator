@@ -50,7 +50,7 @@ pub fn add_a_d8(opcode: u8) -> Instruction {
         regs: &mut crate::GB::registers::Registers,
         bus: &mut crate::GB::bus::MemoryBus,
     ) -> u64 {
-        let imm = bus.read(regs.get_pc());
+        let imm = bus.cpu_read(regs.get_pc());
         regs.set_pc(regs.get_pc().wrapping_add(1));
         let a = regs.get_a();
         let res = add_set_flags(regs, a, imm, 0);
@@ -97,7 +97,7 @@ pub fn adc_a_d8(opcode: u8) -> Instruction {
         regs: &mut crate::GB::registers::Registers,
         bus: &mut crate::GB::bus::MemoryBus,
     ) -> u64 {
-        let imm = bus.read(regs.get_pc());
+        let imm = bus.cpu_read(regs.get_pc());
         regs.set_pc(regs.get_pc().wrapping_add(1));
         let a = regs.get_a();
         let carry = if regs.get_flag_c() { 1 } else { 0 };
@@ -144,7 +144,7 @@ pub fn sub_a_d8(opcode: u8) -> Instruction {
         regs: &mut crate::GB::registers::Registers,
         bus: &mut crate::GB::bus::MemoryBus,
     ) -> u64 {
-        let imm = bus.read(regs.get_pc());
+        let imm = bus.cpu_read(regs.get_pc());
         regs.set_pc(regs.get_pc().wrapping_add(1));
         let a = regs.get_a();
         let res = sub_set_flags(regs, a, imm, 0);
@@ -191,7 +191,7 @@ pub fn sbc_a_d8(opcode: u8) -> Instruction {
         regs: &mut crate::GB::registers::Registers,
         bus: &mut crate::GB::bus::MemoryBus,
     ) -> u64 {
-        let imm = bus.read(regs.get_pc());
+        let imm = bus.cpu_read(regs.get_pc());
         regs.set_pc(regs.get_pc().wrapping_add(1));
         let a = regs.get_a();
         let carry = if regs.get_flag_c() { 1 } else { 0 };
@@ -386,7 +386,7 @@ pub fn add_sp_r8(opcode: u8) -> Instruction {
         regs: &mut crate::GB::registers::Registers,
         bus: &mut crate::GB::bus::MemoryBus,
     ) -> u64 {
-        let offset = bus.read(regs.get_pc()) as i8;
+        let offset = bus.cpu_read(regs.get_pc()) as i8;
         regs.set_pc(regs.get_pc().wrapping_add(1));
         let sp = regs.get_sp();
         let result = sp.wrapping_add(offset as i16 as u16);

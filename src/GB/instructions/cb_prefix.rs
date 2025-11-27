@@ -4,7 +4,7 @@ use crate::GB::registers::Registers;
 
 pub fn cb(opcode: u8) -> Instruction {
     fn exec(_instr: &Instruction, regs: &mut Registers, bus: &mut MemoryBus) -> u64 {
-        let cb_op = bus.read(regs.get_pc());
+        let cb_op = bus.cpu_read(regs.get_pc());
         regs.set_pc(regs.get_pc().wrapping_add(1));
         match cb_op {
             0x00..=0x07 => exec_rlc(cb_op, regs, bus),

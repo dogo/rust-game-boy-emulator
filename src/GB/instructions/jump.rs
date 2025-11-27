@@ -4,7 +4,7 @@ use crate::GB::registers::Registers;
 
 pub fn jr_r8(opcode: u8) -> Instruction {
     fn exec(_instr: &Instruction, regs: &mut Registers, bus: &mut MemoryBus) -> u64 {
-        let offset = bus.read(regs.get_pc()) as i8;
+        let offset = bus.cpu_read(regs.get_pc()) as i8;
         regs.set_pc(regs.get_pc().wrapping_add(1));
         regs.set_pc(regs.get_pc().wrapping_add(offset as u16));
         12
@@ -21,7 +21,7 @@ pub fn jr_r8(opcode: u8) -> Instruction {
 
 pub fn jr_cc_r8(opcode: u8) -> Instruction {
     fn exec(instr: &Instruction, regs: &mut Registers, bus: &mut MemoryBus) -> u64 {
-        let offset = bus.read(regs.get_pc()) as i8;
+        let offset = bus.cpu_read(regs.get_pc()) as i8;
         regs.set_pc(regs.get_pc().wrapping_add(1));
         let cond = match (instr.opcode >> 3) & 0x03 {
             0 => !regs.get_flag_z(), // NZ
@@ -50,9 +50,9 @@ pub fn jr_cc_r8(opcode: u8) -> Instruction {
 
 pub fn jp_a16(opcode: u8) -> Instruction {
     fn exec(_instr: &Instruction, regs: &mut Registers, bus: &mut MemoryBus) -> u64 {
-        let lo = bus.read(regs.get_pc()) as u16;
+        let lo = bus.cpu_read(regs.get_pc()) as u16;
         regs.set_pc(regs.get_pc().wrapping_add(1));
-        let hi = bus.read(regs.get_pc()) as u16;
+        let hi = bus.cpu_read(regs.get_pc()) as u16;
         regs.set_pc(regs.get_pc().wrapping_add(1));
         regs.set_pc((hi << 8) | lo);
         16
@@ -69,9 +69,9 @@ pub fn jp_a16(opcode: u8) -> Instruction {
 
 pub fn jp_cc_a16(opcode: u8) -> Instruction {
     fn exec(instr: &Instruction, regs: &mut Registers, bus: &mut MemoryBus) -> u64 {
-        let lo = bus.read(regs.get_pc()) as u16;
+        let lo = bus.cpu_read(regs.get_pc()) as u16;
         regs.set_pc(regs.get_pc().wrapping_add(1));
-        let hi = bus.read(regs.get_pc()) as u16;
+        let hi = bus.cpu_read(regs.get_pc()) as u16;
         regs.set_pc(regs.get_pc().wrapping_add(1));
         let addr = (hi << 8) | lo;
         let cond = match (instr.opcode >> 3) & 0x03 {

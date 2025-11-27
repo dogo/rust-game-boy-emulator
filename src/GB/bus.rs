@@ -30,6 +30,9 @@ pub struct MemoryBus {
     // ===== Serial =====
     serial_sb: u8, // FF01
     serial_sc: u8, // FF02
+
+    // Contagem de ciclos consumidos pela CPU nesta instrução
+    cpu_cycle_log: u32,
 }
 
 impl MemoryBus {
@@ -116,6 +119,7 @@ impl MemoryBus {
             oam_dma_cycles: 0,
             serial_sb: 0x00,
             serial_sc: 0x7E, // bits não usados em 1
+            cpu_cycle_log: 0,
         }
     }
 
@@ -318,5 +322,44 @@ impl MemoryBus {
             self.apu.tick();
         }
         self.ppu.step(cycles, &mut self.if_);
+    }
+
+    #[inline]
+    fn consume_cpu_cycles(&mut self, cycles: u32) {
+        if cycles == 0 {
+            return;
+        }
+        self.tick(cycles);
+        self.cpu_cycle_log = self.cpu_cycle_log.saturating_add(cycles);
+    }
+
+    #[inline]
+    pub fn cpu_read(&mut self, address: u16) -> u8 {
+        let value = self.read(address);
+        self.consume_cpu_cycles(4);
+        value
+    }
+
+    #[inline]
+    pub fn cpu_write(&mut self, address: u16, value: u8) {
+        self.write(address, value);
+        self.consume_cpu_cycles(4);
+    }
+
+    #[inline]
+    pub fn cpu_idle(&mut self, cycles: u32) {
+        self.consume_cpu_cycles(cycles);
+    }
+
+    #[inline]
+    pub fn reset_cpu_cycle_log(&mut self) {
+        self.cpu_cycle_log = 0;
+    }
+
+    #[inline]
+    pub fn take_cpu_cycle_log(&mut self) -> u32 {
+        let taken = self.cpu_cycle_log;
+        self.cpu_cycle_log = 0;
+        taken
     }
 }

@@ -4,9 +4,9 @@ use crate::GB::registers::Registers;
 
 pub fn call_a16(opcode: u8) -> Instruction {
     fn exec(_instr: &Instruction, regs: &mut Registers, bus: &mut MemoryBus) -> u64 {
-        let lo = bus.read(regs.get_pc()) as u16;
+        let lo = bus.cpu_read(regs.get_pc()) as u16;
         regs.set_pc(regs.get_pc().wrapping_add(1));
-        let hi = bus.read(regs.get_pc()) as u16;
+        let hi = bus.cpu_read(regs.get_pc()) as u16;
         regs.set_pc(regs.get_pc().wrapping_add(1));
         let addr = (hi << 8) | lo;
         let pc = regs.get_pc();
@@ -26,9 +26,9 @@ pub fn call_a16(opcode: u8) -> Instruction {
 
 pub fn call_cc_a16(opcode: u8) -> Instruction {
     fn exec(instr: &Instruction, regs: &mut Registers, bus: &mut MemoryBus) -> u64 {
-        let lo = bus.read(regs.get_pc()) as u16;
+        let lo = bus.cpu_read(regs.get_pc()) as u16;
         regs.set_pc(regs.get_pc().wrapping_add(1));
-        let hi = bus.read(regs.get_pc()) as u16;
+        let hi = bus.cpu_read(regs.get_pc()) as u16;
         regs.set_pc(regs.get_pc().wrapping_add(1));
         let addr = (hi << 8) | lo;
         let cond = match (instr.opcode >> 3) & 0x03 {
@@ -186,18 +186,18 @@ pub fn rst(opcode: u8) -> Instruction {
 pub fn push_u16(regs: &mut Registers, bus: &mut MemoryBus, val: u16) {
     let mut sp = regs.get_sp();
     sp = sp.wrapping_sub(1);
-    bus.write(sp, (val >> 8) as u8);
+    bus.cpu_write(sp, (val >> 8) as u8);
     sp = sp.wrapping_sub(1);
-    bus.write(sp, (val & 0xFF) as u8);
+    bus.cpu_write(sp, (val & 0xFF) as u8);
     regs.set_sp(sp);
 }
 
 #[inline]
 pub fn pop_u16(regs: &mut Registers, bus: &mut MemoryBus) -> u16 {
     let mut sp = regs.get_sp();
-    let lo = bus.read(sp) as u16;
+    let lo = bus.cpu_read(sp) as u16;
     sp = sp.wrapping_add(1);
-    let hi = bus.read(sp) as u16;
+    let hi = bus.cpu_read(sp) as u16;
     sp = sp.wrapping_add(1);
     regs.set_sp(sp);
     (hi << 8) | lo
