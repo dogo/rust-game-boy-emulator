@@ -2,6 +2,8 @@
 // Microcódigos são sequências de micro-operações que simulam o funcionamento interno das instruções.
 
 mod load;
+mod logic;
+mod jump;
 
 use crate::GB::bus::MemoryBus;
 use crate::GB::registers::Registers;
@@ -65,6 +67,26 @@ pub enum MicroAction {
     ReadFromAddr { addr_src: AddrSrc, dest: Reg8 },
     /// Escreve A na memória no endereço especificado (BC, DE, ou endereço direto)
     WriteAToAddr { addr_src: AddrSrc },
+    /// Busca um byte imediato assinado do PC e salta relativamente (JR r8)
+    JumpRelative,
+    /// Busca dois bytes imediatos (little-endian) e salta para o endereço
+    FetchImm16AndJump,
+    /// Salta para o endereço em HL
+    JumpToHl,
+    /// Executa RLCA (Rotate Left Circular A)
+    ExecuteRLCA,
+    /// Executa RRCA (Rotate Right Circular A)
+    ExecuteRRCA,
+    /// Executa RLA (Rotate Left A through Carry)
+    ExecuteRLA,
+    /// Executa RRA (Rotate Right A through Carry)
+    ExecuteRRA,
+    /// Executa CPL (Complement A)
+    ExecuteCPL,
+    /// Executa SCF (Set Carry Flag)
+    ExecuteSCF,
+    /// Executa CCF (Complement Carry Flag)
+    ExecuteCCF,
 }
 
 /// Fonte de endereço para operações de memória
@@ -157,6 +179,105 @@ pub fn execute(program: &MicroProgram, regs: &mut Registers, bus: &mut MemoryBus
                 let value = regs.get_a();
                 bus.cpu_write(addr, value);
             }
+            MicroAction::JumpRelative => {
+                // JR r8: Lê offset assinado e salta relativamente
+                // Ciclos: 4 fetch opcode (já feito), 4 ler offset, 4 calcular e saltar
+                let offset = bus.cpu_read(regs.get_pc()) as i8;
+                regs.set_pc(regs.get_pc().wrapping_add(1));
+                // Calcula novo PC e consome 4 ciclos adicionais
+                bus.cpu_idle(4);
+                // Usa PC já incrementado para calcular o salto
+                let new_pc = regs.get_pc().wrapping_add(offset as u16);
+                regs.set_pc(new_pc);
+            }
+            MicroAction::FetchImm16AndJump => {
+                // Busca endereço 16-bit e salta (16 ciclos totais: 4 fetch + 4 lo + 4 hi + 4 jump)
+                let pc = regs.get_pc();
+                let lo = bus.cpu_read(pc) as u16; // 4 ciclos
+                regs.set_pc(pc.wrapping_add(1));
+                let hi = bus.cpu_read(regs.get_pc()) as u16; // 4 ciclos
+                regs.set_pc(regs.get_pc().wrapping_add(1));
+                let addr = (hi << 8) | lo;
+                bus.cpu_idle(4); // 4 ciclos para executar o salto
+                regs.set_pc(addr);
+            }
+            MicroAction::JumpToHl => {
+                // Salta para o endereço em HL (4 ciclos totais, fetch já foi contado)
+                regs.set_pc(regs.get_hl());
+                // Não adiciona ciclos, o fetch já consumiu os 4 ciclos totais
+            }
+            MicroAction::ExecuteRLCA => {
+                // RLCA: Rotate Left Circular A (4 ciclos totais, fetch já foi contado)
+                let a = regs.get_a();
+                let carry = (a & 0x80) != 0;
+                let res = (a << 1) | (if carry { 1 } else { 0 });
+                regs.set_a(res);
+                regs.set_flag_z(false);
+                regs.set_flag_n(false);
+                regs.set_flag_h(false);
+                regs.set_flag_c(carry);
+                // Não adiciona ciclos, o fetch já consumiu os 4 ciclos totais
+            }
+            MicroAction::ExecuteRRCA => {
+                // RRCA: Rotate Right Circular A (4 ciclos totais, fetch já foi contado)
+                let a = regs.get_a();
+                let carry = (a & 0x01) != 0;
+                let res = (a >> 1) | (if carry { 0x80 } else { 0 });
+                regs.set_a(res);
+                regs.set_flag_z(false);
+                regs.set_flag_n(false);
+                regs.set_flag_h(false);
+                regs.set_flag_c(carry);
+                // Não adiciona ciclos, o fetch já consumiu os 4 ciclos totais
+            }
+            MicroAction::ExecuteRLA => {
+                // RLA: Rotate Left A through Carry (4 ciclos totais, fetch já foi contado)
+                let a = regs.get_a();
+                let old_c = regs.get_flag_c();
+                let carry = (a & 0x80) != 0;
+                let res = (a << 1) | (if old_c { 1 } else { 0 });
+                regs.set_a(res);
+                regs.set_flag_z(false);
+                regs.set_flag_n(false);
+                regs.set_flag_h(false);
+                regs.set_flag_c(carry);
+                // Não adiciona ciclos, o fetch já consumiu os 4 ciclos totais
+            }
+            MicroAction::ExecuteRRA => {
+                // RRA: Rotate Right A through Carry (4 ciclos totais, fetch já foi contado)
+                let a = regs.get_a();
+                let old_c = regs.get_flag_c();
+                let carry = (a & 0x01) != 0;
+                let res = ((if old_c { 1 } else { 0 }) << 7) | (a >> 1);
+                regs.set_a(res);
+                regs.set_flag_z(false);
+                regs.set_flag_n(false);
+                regs.set_flag_h(false);
+                regs.set_flag_c(carry);
+                // Não adiciona ciclos, o fetch já consumiu os 4 ciclos totais
+            }
+            MicroAction::ExecuteCPL => {
+                // CPL: Complement A (4 ciclos totais, fetch já foi contado)
+                regs.set_a(!regs.get_a());
+                regs.set_flag_n(true);
+                regs.set_flag_h(true);
+                // Não adiciona ciclos, o fetch já consumiu os 4 ciclos totais
+            }
+            MicroAction::ExecuteSCF => {
+                // SCF: Set Carry Flag (4 ciclos totais, fetch já foi contado)
+                regs.set_flag_n(false);
+                regs.set_flag_h(false);
+                regs.set_flag_c(true);
+                // Não adiciona ciclos, o fetch já consumiu os 4 ciclos totais
+            }
+            MicroAction::ExecuteCCF => {
+                // CCF: Complement Carry Flag (4 ciclos totais, fetch já foi contado)
+                let c = regs.get_flag_c();
+                regs.set_flag_n(false);
+                regs.set_flag_h(false);
+                regs.set_flag_c(!c);
+                // Não adiciona ciclos, o fetch já consumiu os 4 ciclos totais
+            }
         }
     }
 }
@@ -164,6 +285,8 @@ pub fn execute(program: &MicroProgram, regs: &mut Registers, bus: &mut MemoryBus
 /// Retorna o microprograma associado ao opcode, se existir.
 /// Orquestra a busca em todos os submódulos de instruções.
 pub fn lookup(opcode: u8) -> Option<&'static MicroProgram> {
-    // Tenta encontrar na categoria de instruções de carga (LOAD)
+    // Tenta encontrar em cada categoria de instruções
     load::lookup(opcode)
+        .or_else(|| logic::lookup(opcode))
+        .or_else(|| jump::lookup(opcode))
 }
