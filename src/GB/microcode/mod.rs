@@ -1,8 +1,10 @@
-use crate::GB::bus::MemoryBus;
-use crate::GB::registers::Registers;
-
 // Este módulo implementa microcódigos para instruções da CPU do Game Boy.
 // Microcódigos são sequências de micro-operações que simulam o funcionamento interno das instruções.
+
+mod load;
+
+use crate::GB::bus::MemoryBus;
+use crate::GB::registers::Registers;
 
 /// Representa um registrador de 8 bits da CPU para operações de leitura/escrita no microcódigo.
 #[derive(Clone, Copy)]
@@ -18,7 +20,7 @@ pub enum Reg8 {
 
 impl Reg8 {
     // Lê o valor do registrador especificado.
-    fn read(self, regs: &Registers) -> u8 {
+    pub(crate) fn read(self, regs: &Registers) -> u8 {
         match self {
             Reg8::A => regs.get_a(),
             Reg8::B => regs.get_b(),
@@ -31,7 +33,7 @@ impl Reg8 {
     }
 
     // Escreve um valor no registrador especificado.
-    fn write(self, regs: &mut Registers, value: u8) {
+    pub(crate) fn write(self, regs: &mut Registers, value: u8) {
         match self {
             Reg8::A => regs.set_a(value),
             Reg8::B => regs.set_b(value),
@@ -53,6 +55,24 @@ pub enum MicroAction {
     ReadFromHl { dest: Reg8 },
     /// Escreve o valor do registrador de origem na memória no endereço contido em HL.
     WriteToHl { src: Reg8 },
+    /// Transfere valor entre dois registradores (dest = src)
+    CopyReg { dest: Reg8, src: Reg8 },
+    /// Busca um byte imediato do PC e armazena no registrador de destino
+    FetchImm8 { dest: Reg8 },
+    /// Busca um byte imediato do PC e escreve na memória em HL
+    FetchImm8ToHl,
+    /// Lê da memória no endereço especificado (BC, DE, ou endereço direto) e armazena em A
+    ReadFromAddr { addr_src: AddrSrc, dest: Reg8 },
+    /// Escreve A na memória no endereço especificado (BC, DE, ou endereço direto)
+    WriteAToAddr { addr_src: AddrSrc },
+}
+
+/// Fonte de endereço para operações de memória
+#[derive(Clone, Copy)]
+pub enum AddrSrc {
+    BC,
+    DE,
+    Hl,
 }
 
 /// Estrutura que representa um microprograma, ou seja, uma sequência de micro-operações para uma instrução.
@@ -95,32 +115,55 @@ pub fn execute(program: &MicroProgram, regs: &mut Registers, bus: &mut MemoryBus
                 let value = src.read(regs);
                 bus.cpu_write(addr, value);
             }
+            MicroAction::CopyReg { dest, src } => {
+                // Transfere valor entre registradores (sem acesso à memória)
+                let value = src.read(regs);
+                dest.write(regs, value);
+                // Transferência entre registradores não acessa memória, apenas espera ciclos
+                bus.cpu_idle(4);
+            }
+            MicroAction::FetchImm8 { dest } => {
+                // Busca byte imediato do PC e armazena no registrador
+                let pc = regs.get_pc();
+                let value = bus.cpu_read(pc);
+                regs.set_pc(pc.wrapping_add(1));
+                dest.write(regs, value);
+            }
+            MicroAction::FetchImm8ToHl => {
+                // Busca byte imediato do PC e escreve em HL
+                let pc = regs.get_pc();
+                let value = bus.cpu_read(pc);
+                regs.set_pc(pc.wrapping_add(1));
+                let addr = regs.get_hl();
+                bus.cpu_write(addr, value);
+            }
+            MicroAction::ReadFromAddr { addr_src, dest } => {
+                // Lê da memória no endereço especificado (BC, DE, ou HL)
+                let addr = match addr_src {
+                    AddrSrc::BC => regs.get_bc(),
+                    AddrSrc::DE => regs.get_de(),
+                    AddrSrc::Hl => regs.get_hl(),
+                };
+                let value = bus.cpu_read(addr);
+                dest.write(regs, value);
+            }
+            MicroAction::WriteAToAddr { addr_src } => {
+                // Escreve A na memória no endereço especificado
+                let addr = match addr_src {
+                    AddrSrc::BC => regs.get_bc(),
+                    AddrSrc::DE => regs.get_de(),
+                    AddrSrc::Hl => regs.get_hl(),
+                };
+                let value = regs.get_a();
+                bus.cpu_write(addr, value);
+            }
         }
     }
 }
 
-// === Definições de microcódigos ===
-// Microprograma para a instrução NOP (No Operation)
-const NOP_PROGRAM: MicroProgram = MicroProgram::new(0x00, "NOP", &[]);
-// Microprograma para carregar o valor da memória (HL) em A
-const LD_A_FROM_HL: MicroProgram = MicroProgram::new(
-    0x7E,
-    "LD A,(HL)",
-    &[MicroAction::ReadFromHl { dest: Reg8::A }],
-);
-// Microprograma para armazenar o valor de A na memória (HL)
-const LD_HL_FROM_A: MicroProgram = MicroProgram::new(
-    0x77,
-    "LD (HL),A",
-    &[MicroAction::WriteToHl { src: Reg8::A }],
-);
-
 /// Retorna o microprograma associado ao opcode, se existir.
+/// Orquestra a busca em todos os submódulos de instruções.
 pub fn lookup(opcode: u8) -> Option<&'static MicroProgram> {
-    match opcode {
-        0x00 => Some(&NOP_PROGRAM),
-        0x7E => Some(&LD_A_FROM_HL),
-        0x77 => Some(&LD_HL_FROM_A),
-        _ => None,
-    }
+    // Tenta encontrar na categoria de instruções de carga (LOAD)
+    load::lookup(opcode)
 }
