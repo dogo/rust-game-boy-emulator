@@ -18,18 +18,16 @@ pub fn decode(opcode: u8) -> Instruction {
     match opcode {
         0x00 => Instruction::nop(),
 
-        // LD r,d8 (B,C,D,E,H,L,(HL),A)
+        // LD r,d8 (B,C,D,E,H,L,(HL),A) - MIGRADO para microcode::load
         0x06 | 0x0E | 0x16 | 0x1E | 0x26 | 0x2E | 0x3E => load::ld_r_d8(opcode),
         0x36 => load::ld_hl_d8(opcode),
 
-        // LD r,r (0x40-0x7F exceto 0x76 que é HALT)
+        // LD r,r (0x40-0x7F exceto 0x76 que é HALT) - MIGRADO para microcode::load
         0x40..=0x75 | 0x77..=0x7F => load::ld_r_r(opcode),
 
-        // LD A,(BC/DE)
+        // LD A,(BC/DE) e LD (BC/DE),A - MIGRADO para microcode::load
         0x0A => load::ld_a_bc(opcode),
         0x1A => load::ld_a_de(opcode),
-
-        // LD (BC/DE),A
         0x02 => load::ld_bc_a(opcode),
         0x12 => load::ld_de_a(opcode),
 
@@ -55,7 +53,7 @@ pub fn decode(opcode: u8) -> Instruction {
         0xF9 => load::ld_sp_hl(opcode),
         0xF8 => load::ld_hl_sp_r8(opcode),
 
-        // Arithmetic 8-bit
+        // Arithmetic 8-bit - MIGRADO para microcode::arithmetic (mantido como fallback)
         // INC r (registradores) e (HL)
         0x04 | 0x0C | 0x14 | 0x1C | 0x24 | 0x2C | 0x34 | 0x3C => arithmetic::inc_r(opcode),
         // DEC r (registradores) e (HL)
@@ -69,7 +67,7 @@ pub fn decode(opcode: u8) -> Instruction {
         0x98..=0x9F => arithmetic::sbc_a_r(opcode),
         0xDE => arithmetic::sbc_a_d8(opcode),
 
-        // Logic
+        // Logic - MIGRADO para microcode::logic (mantido como fallback)
         // Rotates simples sem CB
         0x07 => logic::rlca(opcode),
         0x0F => logic::rrca(opcode),
@@ -88,20 +86,22 @@ pub fn decode(opcode: u8) -> Instruction {
         0xB8..=0xBF => logic::cp_a_r(opcode),
         0xFE => logic::cp_a_d8(opcode),
 
-        // 16-bit arithmetic
+        // 16-bit arithmetic - MIGRADO para microcode::arithmetic (mantido como fallback)
         0x03 | 0x13 | 0x23 | 0x33 => arithmetic::inc_rr(opcode),
         0x0B | 0x1B | 0x2B | 0x3B => arithmetic::dec_rr(opcode),
         0x09 | 0x19 | 0x29 | 0x39 => arithmetic::add_hl_rr(opcode),
         0xE8 => arithmetic::add_sp_r8(opcode),
 
-        // DAA (ajuste decimal)
+        // DAA (ajuste decimal) - MIGRADO para microcode::arithmetic
         0x27 => arithmetic::daa(opcode),
 
-        // Jumps
+        // Jumps - PARCIALMENTE MIGRADO
+        // JP a16, JP (HL), JR r8 - agora em microcode::jump (estes não são mais executados)
         0xC3 => jump::jp_a16(opcode),
-        0xC2 | 0xCA | 0xD2 | 0xDA => jump::jp_cc_a16(opcode),
         0xE9 => jump::jp_hl(opcode),
         0x18 => jump::jr_r8(opcode),
+        // Ainda faltam migrar:
+        0xC2 | 0xCA | 0xD2 | 0xDA => jump::jp_cc_a16(opcode),
         0x20 | 0x28 | 0x30 | 0x38 => jump::jr_cc_r8(opcode),
 
         // Stack
