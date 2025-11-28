@@ -4,6 +4,7 @@
 mod load;
 mod logic;
 mod jump;
+mod arithmetic;
 
 use crate::GB::bus::MemoryBus;
 use crate::GB::registers::Registers;
@@ -87,6 +88,54 @@ pub enum MicroAction {
     ExecuteSCF,
     /// Executa CCF (Complement Carry Flag)
     ExecuteCCF,
+    /// Executa ADD A,src (com flags)
+    AddAToReg { src: Reg8 },
+    /// Executa ADD A,d8
+    AddAToImm8,
+    /// Executa ADC A,src (com carry)
+    AddAWithCarryToReg { src: Reg8 },
+    /// Executa ADC A,d8
+    AddAWithCarryToImm8,
+    /// Executa SUB A,src (com flags)
+    SubAFromReg { src: Reg8 },
+    /// Executa SUB A,d8
+    SubAFromImm8,
+    /// Executa SBC A,src (com borrow)
+    SubAWithBorrowFromReg { src: Reg8 },
+    /// Executa SBC A,d8
+    SubAWithBorrowFromImm8,
+    /// Executa AND A,src
+    AndAToReg { src: Reg8 },
+    /// Executa AND A,d8
+    AndAToImm8,
+    /// Executa OR A,src
+    OrAToReg { src: Reg8 },
+    /// Executa OR A,d8
+    OrAToImm8,
+    /// Executa XOR A,src
+    XorAToReg { src: Reg8 },
+    /// Executa XOR A,d8
+    XorAToImm8,
+    /// Executa CP A,src (compare, não altera A)
+    CompareAToReg { src: Reg8 },
+    /// Executa CP A,d8
+    CompareAToImm8,
+    /// Lê de (HL) e executa ADD A,valor
+    AddAToHlValue,
+    /// Lê de (HL) e executa ADC A,valor
+    AddAWithCarryToHlValue,
+    /// Lê de (HL) e executa SUB A,valor
+    SubAFromHlValue,
+    /// Lê de (HL) e executa SBC A,valor
+    SubAWithBorrowFromHlValue,
+    /// Lê de (HL) e executa AND A,valor
+    AndAToHlValue,
+    /// Lê de (HL) e executa OR A,valor
+    OrAToHlValue,
+    /// Lê de (HL) e executa XOR A,valor
+    XorAToHlValue,
+    /// Lê de (HL) e executa CP A,valor
+    CompareAToHlValue,
 }
 
 /// Fonte de endereço para operações de memória
@@ -278,6 +327,336 @@ pub fn execute(program: &MicroProgram, regs: &mut Registers, bus: &mut MemoryBus
                 regs.set_flag_c(!c);
                 // Não adiciona ciclos, o fetch já consumiu os 4 ciclos totais
             }
+            MicroAction::AddAToReg { src } => {
+                // ADD A,src: Adiciona registrador a A
+                let a = regs.get_a();
+                let val = src.read(regs);
+                let sum = a as u16 + val as u16;
+                let res = (sum & 0xFF) as u8;
+                regs.set_a(res);
+                regs.set_flag_z(res == 0);
+                regs.set_flag_n(false);
+                regs.set_flag_h(((a & 0x0F) + (val & 0x0F)) > 0x0F);
+                regs.set_flag_c(sum > 0xFF);
+                // 4 ciclos totais, fetch já foi contado
+            }
+            MicroAction::AddAToImm8 => {
+                // ADD A,d8: Adiciona imediato a A
+                let pc = regs.get_pc();
+                let imm = bus.cpu_read(pc);
+                regs.set_pc(pc.wrapping_add(1));
+                let a = regs.get_a();
+                let sum = a as u16 + imm as u16;
+                let res = (sum & 0xFF) as u8;
+                regs.set_a(res);
+                regs.set_flag_z(res == 0);
+                regs.set_flag_n(false);
+                regs.set_flag_h(((a & 0x0F) + (imm & 0x0F)) > 0x0F);
+                regs.set_flag_c(sum > 0xFF);
+                // 8 ciclos totais: 4 fetch + 4 ler imm
+            }
+            MicroAction::AddAWithCarryToReg { src } => {
+                // ADC A,src: Adiciona com carry
+                let a = regs.get_a();
+                let val = src.read(regs);
+                let carry = if regs.get_flag_c() { 1 } else { 0 };
+                let sum = a as u16 + val as u16 + carry as u16;
+                let res = (sum & 0xFF) as u8;
+                regs.set_a(res);
+                regs.set_flag_z(res == 0);
+                regs.set_flag_n(false);
+                regs.set_flag_h(((a & 0x0F) + (val & 0x0F) + carry) > 0x0F);
+                regs.set_flag_c(sum > 0xFF);
+                // 4 ciclos totais, fetch já foi contado
+            }
+            MicroAction::AddAWithCarryToImm8 => {
+                // ADC A,d8: Adiciona imediato com carry
+                let pc = regs.get_pc();
+                let imm = bus.cpu_read(pc);
+                regs.set_pc(pc.wrapping_add(1));
+                let a = regs.get_a();
+                let carry = if regs.get_flag_c() { 1 } else { 0 };
+                let sum = a as u16 + imm as u16 + carry as u16;
+                let res = (sum & 0xFF) as u8;
+                regs.set_a(res);
+                regs.set_flag_z(res == 0);
+                regs.set_flag_n(false);
+                regs.set_flag_h(((a & 0x0F) + (imm & 0x0F) + carry) > 0x0F);
+                regs.set_flag_c(sum > 0xFF);
+                // 8 ciclos totais: 4 fetch + 4 ler imm
+            }
+            MicroAction::SubAFromReg { src } => {
+                // SUB A,src: Subtrai registrador de A
+                let a = regs.get_a();
+                let val = src.read(regs);
+                let diff = a as i16 - val as i16;
+                let res = (diff & 0xFF) as u8;
+                regs.set_a(res);
+                regs.set_flag_z(res == 0);
+                regs.set_flag_n(true);
+                regs.set_flag_h(((a & 0x0F) as i16 - (val & 0x0F) as i16) < 0);
+                regs.set_flag_c(diff < 0);
+                // 4 ciclos totais, fetch já foi contado
+            }
+            MicroAction::SubAFromImm8 => {
+                // SUB A,d8: Subtrai imediato de A
+                let pc = regs.get_pc();
+                let imm = bus.cpu_read(pc);
+                regs.set_pc(pc.wrapping_add(1));
+                let a = regs.get_a();
+                let diff = a as i16 - imm as i16;
+                let res = (diff & 0xFF) as u8;
+                regs.set_a(res);
+                regs.set_flag_z(res == 0);
+                regs.set_flag_n(true);
+                regs.set_flag_h(((a & 0x0F) as i16 - (imm & 0x0F) as i16) < 0);
+                regs.set_flag_c(diff < 0);
+                // 8 ciclos totais: 4 fetch + 4 ler imm
+            }
+            MicroAction::SubAWithBorrowFromReg { src } => {
+                // SBC A,src: Subtrai com borrow
+                let a = regs.get_a();
+                let val = src.read(regs);
+                let borrow = if regs.get_flag_c() { 1 } else { 0 };
+                let diff = a as i16 - val as i16 - borrow as i16;
+                let res = (diff & 0xFF) as u8;
+                regs.set_a(res);
+                regs.set_flag_z(res == 0);
+                regs.set_flag_n(true);
+                regs.set_flag_h(((a & 0x0F) as i16 - (val & 0x0F) as i16 - borrow as i16) < 0);
+                regs.set_flag_c(diff < 0);
+                // 4 ciclos totais, fetch já foi contado
+            }
+            MicroAction::SubAWithBorrowFromImm8 => {
+                // SBC A,d8: Subtrai imediato com borrow
+                let pc = regs.get_pc();
+                let imm = bus.cpu_read(pc);
+                regs.set_pc(pc.wrapping_add(1));
+                let a = regs.get_a();
+                let borrow = if regs.get_flag_c() { 1 } else { 0 };
+                let diff = a as i16 - imm as i16 - borrow as i16;
+                let res = (diff & 0xFF) as u8;
+                regs.set_a(res);
+                regs.set_flag_z(res == 0);
+                regs.set_flag_n(true);
+                regs.set_flag_h(((a & 0x0F) as i16 - (imm & 0x0F) as i16 - borrow as i16) < 0);
+                regs.set_flag_c(diff < 0);
+                // 8 ciclos totais: 4 fetch + 4 ler imm
+            }
+            MicroAction::AndAToReg { src } => {
+                // AND A,src: AND lógico
+                let a = regs.get_a();
+                let val = src.read(regs);
+                let res = a & val;
+                regs.set_a(res);
+                regs.set_flag_z(res == 0);
+                regs.set_flag_n(false);
+                regs.set_flag_h(true);
+                regs.set_flag_c(false);
+                // 4 ciclos totais, fetch já foi contado
+            }
+            MicroAction::AndAToImm8 => {
+                // AND A,d8: AND com imediato
+                let pc = regs.get_pc();
+                let imm = bus.cpu_read(pc);
+                regs.set_pc(pc.wrapping_add(1));
+                let a = regs.get_a();
+                let res = a & imm;
+                regs.set_a(res);
+                regs.set_flag_z(res == 0);
+                regs.set_flag_n(false);
+                regs.set_flag_h(true);
+                regs.set_flag_c(false);
+                // 8 ciclos totais: 4 fetch + 4 ler imm
+            }
+            MicroAction::OrAToReg { src } => {
+                // OR A,src: OR lógico
+                let a = regs.get_a();
+                let val = src.read(regs);
+                let res = a | val;
+                regs.set_a(res);
+                regs.set_flag_z(res == 0);
+                regs.set_flag_n(false);
+                regs.set_flag_h(false);
+                regs.set_flag_c(false);
+                // 4 ciclos totais, fetch já foi contado
+            }
+            MicroAction::OrAToImm8 => {
+                // OR A,d8: OR com imediato
+                let pc = regs.get_pc();
+                let imm = bus.cpu_read(pc);
+                regs.set_pc(pc.wrapping_add(1));
+                let a = regs.get_a();
+                let res = a | imm;
+                regs.set_a(res);
+                regs.set_flag_z(res == 0);
+                regs.set_flag_n(false);
+                regs.set_flag_h(false);
+                regs.set_flag_c(false);
+                // 8 ciclos totais: 4 fetch + 4 ler imm
+            }
+            MicroAction::XorAToReg { src } => {
+                // XOR A,src: XOR lógico
+                let a = regs.get_a();
+                let val = src.read(regs);
+                let res = a ^ val;
+                regs.set_a(res);
+                regs.set_flag_z(res == 0);
+                regs.set_flag_n(false);
+                regs.set_flag_h(false);
+                regs.set_flag_c(false);
+                // 4 ciclos totais, fetch já foi contado
+            }
+            MicroAction::XorAToImm8 => {
+                // XOR A,d8: XOR com imediato
+                let pc = regs.get_pc();
+                let imm = bus.cpu_read(pc);
+                regs.set_pc(pc.wrapping_add(1));
+                let a = regs.get_a();
+                let res = a ^ imm;
+                regs.set_a(res);
+                regs.set_flag_z(res == 0);
+                regs.set_flag_n(false);
+                regs.set_flag_h(false);
+                regs.set_flag_c(false);
+                // 8 ciclos totais: 4 fetch + 4 ler imm
+            }
+            MicroAction::CompareAToReg { src } => {
+                // CP A,src: Compara (não altera A)
+                let a = regs.get_a();
+                let val = src.read(regs);
+                let diff = a as i16 - val as i16;
+                let res = (diff & 0xFF) as u8;
+                regs.set_flag_z(res == 0);
+                regs.set_flag_n(true);
+                regs.set_flag_h(((a & 0x0F) as i16 - (val & 0x0F) as i16) < 0);
+                regs.set_flag_c(diff < 0);
+                // 4 ciclos totais, fetch já foi contado
+            }
+            MicroAction::CompareAToImm8 => {
+                // CP A,d8: Compara com imediato
+                let pc = regs.get_pc();
+                let imm = bus.cpu_read(pc);
+                regs.set_pc(pc.wrapping_add(1));
+                let a = regs.get_a();
+                let diff = a as i16 - imm as i16;
+                let res = (diff & 0xFF) as u8;
+                regs.set_flag_z(res == 0);
+                regs.set_flag_n(true);
+                regs.set_flag_h(((a & 0x0F) as i16 - (imm & 0x0F) as i16) < 0);
+                regs.set_flag_c(diff < 0);
+                // 8 ciclos totais: 4 fetch + 4 ler imm
+            }
+            MicroAction::AddAToHlValue => {
+                // ADD A,(HL): Lê de (HL) e adiciona
+                let addr = regs.get_hl();
+                let val = bus.cpu_read(addr);
+                let a = regs.get_a();
+                let sum = a as u16 + val as u16;
+                let res = (sum & 0xFF) as u8;
+                regs.set_a(res);
+                regs.set_flag_z(res == 0);
+                regs.set_flag_n(false);
+                regs.set_flag_h(((a & 0x0F) + (val & 0x0F)) > 0x0F);
+                regs.set_flag_c(sum > 0xFF);
+                // 8 ciclos totais: 4 fetch + 4 ler (HL)
+            }
+            MicroAction::AddAWithCarryToHlValue => {
+                // ADC A,(HL)
+                let addr = regs.get_hl();
+                let val = bus.cpu_read(addr);
+                let a = regs.get_a();
+                let carry = if regs.get_flag_c() { 1 } else { 0 };
+                let sum = a as u16 + val as u16 + carry as u16;
+                let res = (sum & 0xFF) as u8;
+                regs.set_a(res);
+                regs.set_flag_z(res == 0);
+                regs.set_flag_n(false);
+                regs.set_flag_h(((a & 0x0F) + (val & 0x0F) + carry) > 0x0F);
+                regs.set_flag_c(sum > 0xFF);
+                // 8 ciclos totais
+            }
+            MicroAction::SubAFromHlValue => {
+                // SUB A,(HL)
+                let addr = regs.get_hl();
+                let val = bus.cpu_read(addr);
+                let a = regs.get_a();
+                let diff = a as i16 - val as i16;
+                let res = (diff & 0xFF) as u8;
+                regs.set_a(res);
+                regs.set_flag_z(res == 0);
+                regs.set_flag_n(true);
+                regs.set_flag_h(((a & 0x0F) as i16 - (val & 0x0F) as i16) < 0);
+                regs.set_flag_c(diff < 0);
+                // 8 ciclos totais
+            }
+            MicroAction::SubAWithBorrowFromHlValue => {
+                // SBC A,(HL)
+                let addr = regs.get_hl();
+                let val = bus.cpu_read(addr);
+                let a = regs.get_a();
+                let borrow = if regs.get_flag_c() { 1 } else { 0 };
+                let diff = a as i16 - val as i16 - borrow as i16;
+                let res = (diff & 0xFF) as u8;
+                regs.set_a(res);
+                regs.set_flag_z(res == 0);
+                regs.set_flag_n(true);
+                regs.set_flag_h(((a & 0x0F) as i16 - (val & 0x0F) as i16 - borrow as i16) < 0);
+                regs.set_flag_c(diff < 0);
+                // 8 ciclos totais
+            }
+            MicroAction::AndAToHlValue => {
+                // AND A,(HL)
+                let addr = regs.get_hl();
+                let val = bus.cpu_read(addr);
+                let a = regs.get_a();
+                let res = a & val;
+                regs.set_a(res);
+                regs.set_flag_z(res == 0);
+                regs.set_flag_n(false);
+                regs.set_flag_h(true);
+                regs.set_flag_c(false);
+                // 8 ciclos totais
+            }
+            MicroAction::OrAToHlValue => {
+                // OR A,(HL)
+                let addr = regs.get_hl();
+                let val = bus.cpu_read(addr);
+                let a = regs.get_a();
+                let res = a | val;
+                regs.set_a(res);
+                regs.set_flag_z(res == 0);
+                regs.set_flag_n(false);
+                regs.set_flag_h(false);
+                regs.set_flag_c(false);
+                // 8 ciclos totais
+            }
+            MicroAction::XorAToHlValue => {
+                // XOR A,(HL)
+                let addr = regs.get_hl();
+                let val = bus.cpu_read(addr);
+                let a = regs.get_a();
+                let res = a ^ val;
+                regs.set_a(res);
+                regs.set_flag_z(res == 0);
+                regs.set_flag_n(false);
+                regs.set_flag_h(false);
+                regs.set_flag_c(false);
+                // 8 ciclos totais
+            }
+            MicroAction::CompareAToHlValue => {
+                // CP A,(HL)
+                let addr = regs.get_hl();
+                let val = bus.cpu_read(addr);
+                let a = regs.get_a();
+                let diff = a as i16 - val as i16;
+                let res = (diff & 0xFF) as u8;
+                regs.set_flag_z(res == 0);
+                regs.set_flag_n(true);
+                regs.set_flag_h(((a & 0x0F) as i16 - (val & 0x0F) as i16) < 0);
+                regs.set_flag_c(diff < 0);
+                // 8 ciclos totais
+            }
         }
     }
 }
@@ -289,4 +668,5 @@ pub fn lookup(opcode: u8) -> Option<&'static MicroProgram> {
     load::lookup(opcode)
         .or_else(|| logic::lookup(opcode))
         .or_else(|| jump::lookup(opcode))
+        .or_else(|| arithmetic::lookup(opcode))
 }
