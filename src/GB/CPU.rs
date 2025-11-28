@@ -151,9 +151,7 @@ impl CPU {
     pub fn execute_next(&mut self) -> (u64, bool) {
         // Se CPU está em STOP, só acorda com Joypad
         if self.stopped {
-            let if_reg = self.bus.get_if();
-            // STOP acorda quando Joypad (bit 4 de IF) é setado, independente de IME/IE
-            if (if_reg & 0x10) != 0 {
+            if self.bus.joypad_should_wake_from_stop() {
                 self.stopped = false;
             } else {
                 // Continua “dormindo”: PPU/timer/APU seguem rodando

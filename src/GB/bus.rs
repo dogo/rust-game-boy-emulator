@@ -36,6 +36,10 @@ pub struct MemoryBus {
 }
 
 impl MemoryBus {
+    /// Retorna true se Joypad deve acordar do STOP (detecta novo botão pressionado)
+    pub fn joypad_should_wake_from_stop(&mut self) -> bool {
+        self.joypad.has_new_press()
+    }
     /// Durante DMA de OAM, a CPU só pode acessar HRAM (FF80–FFFE) e IE (FFFF)
     #[inline]
     fn dma_cpu_can_access(&self, addr: u16) -> bool {

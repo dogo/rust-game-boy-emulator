@@ -57,15 +57,19 @@ pub enum MicroAction {
 
 /// Estrutura que representa um microprograma, ou seja, uma sequência de micro-operações para uma instrução.
 pub struct MicroProgram {
-    pub opcode: u8, // Código da instrução
-    pub name: &'static str, // Nome da instrução
+    pub opcode: u8,                    // Código da instrução
+    pub name: &'static str,            // Nome da instrução
     pub steps: &'static [MicroAction], // Passos do microcódigo
 }
 
 impl MicroProgram {
     /// Cria um novo microprograma.
     pub const fn new(opcode: u8, name: &'static str, steps: &'static [MicroAction]) -> Self {
-        Self { opcode, name, steps }
+        Self {
+            opcode,
+            name,
+            steps,
+        }
     }
 }
 
