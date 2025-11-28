@@ -120,6 +120,24 @@ pub enum MicroAction {
     CompareAToReg { src: Reg8 },
     /// Executa CP A,d8
     CompareAToImm8,
+    /// Incrementa registrador 8-bit
+    IncReg { reg: Reg8 },
+    /// Decrementa registrador 8-bit
+    DecReg { reg: Reg8 },
+    /// Incrementa valor em (HL) - read-modify-write
+    IncHlValue,
+    /// Decrementa valor em (HL) - read-modify-write
+    DecHlValue,
+    /// Executa DAA (Decimal Adjust Accumulator)
+    ExecuteDAA,
+    /// Incrementa registrador de 16 bits (BC, DE, HL, SP)
+    IncReg16 { idx: u8 },
+    /// Decrementa registrador de 16 bits (BC, DE, HL, SP)
+    DecReg16 { idx: u8 },
+    /// Adiciona registrador 16-bit a HL
+    AddHlToReg16 { idx: u8 },
+    /// Adiciona byte assinado a SP
+    AddSpToSignedImm8,
     /// Lê de (HL) e executa ADD A,valor
     AddAToHlValue,
     /// Lê de (HL) e executa ADC A,valor
@@ -656,6 +674,153 @@ pub fn execute(program: &MicroProgram, regs: &mut Registers, bus: &mut MemoryBus
                 regs.set_flag_h(((a & 0x0F) as i16 - (val & 0x0F) as i16) < 0);
                 regs.set_flag_c(diff < 0);
                 // 8 ciclos totais
+            }
+            MicroAction::IncReg { reg } => {
+                // INC reg: Incrementa registrador
+                let val = reg.read(regs);
+                let res = val.wrapping_add(1);
+                reg.write(regs, res);
+                regs.set_flag_z(res == 0);
+                regs.set_flag_n(false);
+                regs.set_flag_h((val & 0x0F) + 1 > 0x0F);
+                // 4 ciclos totais, fetch já foi contado
+            }
+            MicroAction::DecReg { reg } => {
+                // DEC reg: Decrementa registrador
+                let val = reg.read(regs);
+                let res = val.wrapping_sub(1);
+                reg.write(regs, res);
+                regs.set_flag_z(res == 0);
+                regs.set_flag_n(true);
+                regs.set_flag_h((val & 0x0F) == 0);
+                // 4 ciclos totais, fetch já foi contado
+            }
+            MicroAction::IncHlValue => {
+                // INC (HL): Read-modify-write (12 ciclos: 4 fetch + 4 read + 4 write)
+                let addr = regs.get_hl();
+                let val = bus.cpu_read(addr);
+                let res = val.wrapping_add(1);
+                bus.cpu_write(addr, res);
+                regs.set_flag_z(res == 0);
+                regs.set_flag_n(false);
+                regs.set_flag_h((val & 0x0F) + 1 > 0x0F);
+                // Total: 12 ciclos (4 fetch já feito + 4 read + 4 write)
+            }
+            MicroAction::DecHlValue => {
+                // DEC (HL): Read-modify-write (12 ciclos)
+                let addr = regs.get_hl();
+                let val = bus.cpu_read(addr);
+                let res = val.wrapping_sub(1);
+                bus.cpu_write(addr, res);
+                regs.set_flag_z(res == 0);
+                regs.set_flag_n(true);
+                regs.set_flag_h((val & 0x0F) == 0);
+                // Total: 12 ciclos
+            }
+            MicroAction::ExecuteDAA => {
+                // DAA: Decimal Adjust Accumulator
+                let mut a = regs.get_a();
+                let n = regs.get_flag_n();
+                let mut c = regs.get_flag_c();
+                let h = regs.get_flag_h();
+
+                let mut adjust: u8 = 0;
+                if !n {
+                    if c || a > 0x99 {
+                        adjust |= 0x60;
+                        c = true;
+                    }
+                    if h || (a & 0x0F) > 0x09 {
+                        adjust |= 0x06;
+                    }
+                    a = a.wrapping_add(adjust);
+                } else {
+                    if c {
+                        adjust |= 0x60;
+                    }
+                    if h {
+                        adjust |= 0x06;
+                    }
+                    a = a.wrapping_sub(adjust);
+                }
+
+                regs.set_a(a);
+                regs.set_flag_z(a == 0);
+                // N permanece como está
+                regs.set_flag_h(false);
+                regs.set_flag_c(c);
+                // 4 ciclos totais, fetch já foi contado
+            }
+            MicroAction::IncReg16 { idx } => {
+                // INC rr: Incrementa registrador 16-bit (BC, DE, HL, SP)
+                // idx: 0=BC, 1=DE, 2=HL, 3=SP
+                let val = match idx {
+                    0 => regs.get_bc(),
+                    1 => regs.get_de(),
+                    2 => regs.get_hl(),
+                    3 => regs.get_sp(),
+                    _ => 0,
+                };
+                let res = val.wrapping_add(1);
+                match idx {
+                    0 => regs.set_bc(res),
+                    1 => regs.set_de(res),
+                    2 => regs.set_hl(res),
+                    3 => regs.set_sp(res),
+                    _ => {}
+                }
+                bus.cpu_idle(4); // 8 ciclos totais: 4 fetch + 4 operação
+            }
+            MicroAction::DecReg16 { idx } => {
+                // DEC rr: Decrementa registrador 16-bit
+                let val = match idx {
+                    0 => regs.get_bc(),
+                    1 => regs.get_de(),
+                    2 => regs.get_hl(),
+                    3 => regs.get_sp(),
+                    _ => 0,
+                };
+                let res = val.wrapping_sub(1);
+                match idx {
+                    0 => regs.set_bc(res),
+                    1 => regs.set_de(res),
+                    2 => regs.set_hl(res),
+                    3 => regs.set_sp(res),
+                    _ => {}
+                }
+                bus.cpu_idle(4); // 8 ciclos totais
+            }
+            MicroAction::AddHlToReg16 { idx } => {
+                // ADD HL,rr: Adiciona registrador 16-bit a HL
+                let hl = regs.get_hl();
+                let rr = match idx {
+                    0 => regs.get_bc(),
+                    1 => regs.get_de(),
+                    2 => regs.get_hl(),
+                    3 => regs.get_sp(),
+                    _ => 0,
+                };
+                let res = hl.wrapping_add(rr);
+                regs.set_hl(res);
+                regs.set_flag_n(false);
+                regs.set_flag_h(((hl & 0x0FFF) + (rr & 0x0FFF)) > 0x0FFF);
+                regs.set_flag_c((hl as u32 + rr as u32) > 0xFFFF);
+                bus.cpu_idle(4); // 8 ciclos totais
+            }
+            MicroAction::AddSpToSignedImm8 => {
+                // ADD SP,r8: Adiciona byte assinado a SP
+                let pc = regs.get_pc();
+                let offset = bus.cpu_read(pc) as i8;
+                regs.set_pc(pc.wrapping_add(1));
+                let sp = regs.get_sp();
+                let res = sp.wrapping_add(offset as u16);
+                regs.set_sp(res);
+                regs.set_flag_z(false);
+                regs.set_flag_n(false);
+                // Half-carry e carry são calculados nos 4 bits baixos
+                regs.set_flag_h(((sp & 0x0F) as u16 + (offset as u8 & 0x0F) as u16) > 0x0F);
+                regs.set_flag_c(((sp & 0xFF) as u16 + (offset as u8 as u16)) > 0xFF);
+                bus.cpu_idle(4); // 16 ciclos totais: 4 fetch + 4 ler imm + 4 calcular + 4 idle
             }
         }
     }
