@@ -1025,7 +1025,8 @@ pub fn execute(program: &MicroProgram, regs: &mut Registers, bus: &mut MemoryBus
                 }
             }
             MicroAction::CallAbsolute => {
-                // CALL a16: Empilha PC e salta (24 ciclos: 4 fetch + 4 lo + 4 hi + 4 push hi + 4 push lo + 4 idle)
+                // CALL a16: Empilha PC e salta (24 ciclos)
+                // TODO: OAM Bug para CALL (timing precisa ser ajustado)
                 let pc = regs.get_pc();
                 let lo = bus.cpu_read(pc) as u16;
                 regs.set_pc(pc.wrapping_add(1));
@@ -1040,7 +1041,7 @@ pub fn execute(program: &MicroProgram, regs: &mut Registers, bus: &mut MemoryBus
                 sp = sp.wrapping_sub(1);
                 bus.cpu_write(sp, (pc_to_push & 0xFF) as u8);
                 regs.set_sp(sp);
-                bus.cpu_idle(4); // 4 ciclos adicionais
+                bus.cpu_idle(4);
                 regs.set_pc(addr);
             }
             MicroAction::CallAbsoluteConditional { cond } => {
@@ -1059,20 +1060,19 @@ pub fn execute(program: &MicroProgram, regs: &mut Registers, bus: &mut MemoryBus
                 };
                 if cond_true {
                     let pc_to_push = regs.get_pc();
-                    // Empilha PC
                     let mut sp = regs.get_sp();
                     sp = sp.wrapping_sub(1);
                     bus.cpu_write(sp, (pc_to_push >> 8) as u8);
                     sp = sp.wrapping_sub(1);
                     bus.cpu_write(sp, (pc_to_push & 0xFF) as u8);
                     regs.set_sp(sp);
-                    bus.cpu_idle(4); // 4 ciclos adicionais
+                    bus.cpu_idle(4);
                     regs.set_pc(addr);
                 }
-                // Se condição falsa, 12 ciclos totais (4 fetch + 4 lo + 4 hi)
             }
             MicroAction::Return => {
-                // RET: Desempilha PC (16 ciclos: 4 fetch + 4 ler lo + 4 ler hi + 4 idle)
+                // RET: Desempilha PC (16 ciclos)
+                // TODO: OAM Bug para RET (timing precisa ser ajustado)
                 let mut sp = regs.get_sp();
                 let lo = bus.cpu_read(sp) as u16;
                 sp = sp.wrapping_add(1);
@@ -1080,7 +1080,7 @@ pub fn execute(program: &MicroProgram, regs: &mut Registers, bus: &mut MemoryBus
                 sp = sp.wrapping_add(1);
                 regs.set_sp(sp);
                 let addr = (hi << 8) | lo;
-                bus.cpu_idle(4); // 4 ciclos adicionais
+                bus.cpu_idle(4);
                 regs.set_pc(addr);
             }
             MicroAction::ReturnConditional { cond } => {
@@ -1099,23 +1099,22 @@ pub fn execute(program: &MicroProgram, regs: &mut Registers, bus: &mut MemoryBus
                     sp = sp.wrapping_add(1);
                     regs.set_sp(sp);
                     let addr = (hi << 8) | lo;
-                    bus.cpu_idle(4); // 4 ciclos adicionais
+                    bus.cpu_idle(4);
                     regs.set_pc(addr);
                 }
-                // Se condição falsa, 8 ciclos totais (4 fetch + 4 idle interno)
                 bus.cpu_idle(4);
             }
             MicroAction::Reset { addr } => {
                 // RST addr: Empilha PC e salta para endereço (16 ciclos)
+                // TODO: OAM Bug para RST (timing precisa ser ajustado)
                 let pc = regs.get_pc();
-                // Empilha PC
                 let mut sp = regs.get_sp();
                 sp = sp.wrapping_sub(1);
                 bus.cpu_write(sp, (pc >> 8) as u8);
                 sp = sp.wrapping_sub(1);
                 bus.cpu_write(sp, (pc & 0xFF) as u8);
                 regs.set_sp(sp);
-                bus.cpu_idle(4); // 4 ciclos adicionais
+                bus.cpu_idle(4);
                 regs.set_pc(addr);
             }
             MicroAction::FetchImm16ToReg16 { idx } => {
