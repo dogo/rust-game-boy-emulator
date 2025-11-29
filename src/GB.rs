@@ -6,6 +6,7 @@ pub mod PPU;
 pub mod RAM;
 pub mod bus;
 pub mod cartridge;
+pub mod debugger;
 pub mod instructions;
 pub mod joypad;
 pub mod mbc;

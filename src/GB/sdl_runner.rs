@@ -1,6 +1,7 @@
 //! Módulo para execução com interface gráfica SDL3
 
 use crate::GB::CPU::CPU;
+use crate::GB::debugger::Debugger;
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -18,10 +19,18 @@ const SAMPLE_RATE: u32 = 44_100;
 
 struct AudioCallbackData {
     buffer: Arc<Mutex<VecDeque<(f32, f32)>>>,
+    paused: Arc<std::sync::atomic::AtomicBool>,
 }
 
 impl AudioCallback<f32> for AudioCallbackData {
     fn callback(&mut self, stream: &mut AudioStream, requested: i32) {
+        // Se pausado (debugger ativo), retorna silêncio sem warnings
+        if self.paused.load(std::sync::atomic::Ordering::Relaxed) {
+            let silence = vec![0.0f32; (requested * 2) as usize];
+            let _ = stream.put_data_f32(&silence);
+            return;
+        }
+
         let mut audio_buffer = self.buffer.lock().unwrap();
         let mut out = Vec::<f32>::with_capacity((requested * 2) as usize);
         let mut underflow_count = 0;
@@ -71,6 +80,7 @@ fn setup_audio(
 ) -> (
     sdl3::audio::AudioStreamWithCallback<AudioCallbackData>,
     Arc<Mutex<VecDeque<(f32, f32)>>>,
+    Arc<std::sync::atomic::AtomicBool>,
 ) {
     let audio_subsystem = sdl_ctx.audio().expect("Falha subsistema de áudio");
     let desired_spec = AudioSpec {
@@ -80,6 +90,7 @@ fn setup_audio(
     };
 
     let audio_buffer: Arc<Mutex<VecDeque<(f32, f32)>>> = Arc::new(Mutex::new(VecDeque::new()));
+    let audio_paused = Arc::new(std::sync::atomic::AtomicBool::new(false));
 
     // Pré-buffer de silêncio
     {
@@ -99,22 +110,35 @@ fn setup_audio(
             &desired_spec,
             AudioCallbackData {
                 buffer: audio_buffer.clone(),
+                paused: audio_paused.clone(),
             },
         )
         .expect("Falha ao abrir dispositivo de áudio");
 
     audio_device.resume().expect("Falha ao iniciar áudio");
 
-    (audio_device, audio_buffer)
+    (audio_device, audio_buffer, audio_paused)
 }
 
-fn handle_input(cpu: &mut CPU, event: &Event) -> bool {
+/// Resultado do handle de input
+enum InputResult {
+    Continue,
+    Quit,
+    Debug,
+}
+
+fn handle_input(cpu: &mut CPU, event: &Event) -> InputResult {
     match event {
-        Event::Quit { .. } => return true,
+        Event::Quit { .. } => return InputResult::Quit,
         Event::KeyDown {
             keycode: Some(Keycode::Escape),
             ..
-        } => return true,
+        } => return InputResult::Quit,
+        Event::KeyDown {
+            keycode: Some(Keycode::F12),
+            repeat: false,
+            ..
+        } => return InputResult::Debug,
         Event::KeyDown {
             keycode: Some(k),
             repeat: false,
@@ -160,16 +184,19 @@ fn handle_input(cpu: &mut CPU, event: &Event) -> bool {
         }
         _ => {}
     }
-    false
+    InputResult::Continue
 }
 
 /// Executa o emulador com interface gráfica SDL3
 pub fn run(cpu: &mut CPU) {
-    println!("Iniciando modo gráfico SDL3 (ESC para sair)");
+    println!("Iniciando modo gráfico SDL3 (ESC para sair, F12 para debugger)");
 
     let sdl_ctx = init_sdl().expect("Falha ao inicializar SDL3");
     let video = sdl_ctx.video().expect("Falha subsistema de vídeo");
-    let (_audio_device, audio_buffer) = setup_audio(&sdl_ctx);
+    let (_audio_device, audio_buffer, audio_paused) = setup_audio(&sdl_ctx);
+
+    // Debugger
+    let mut debugger = Debugger::new();
 
     // Vídeo
     let scale = 3u32;
@@ -213,10 +240,47 @@ pub fn run(cpu: &mut CPU) {
     loop {
         // Eventos
         for event in event_pump.poll_iter() {
-            if handle_input(cpu, &event) {
-                println!("Encerrando SDL3 após {} frames", frame_counter);
+            match handle_input(cpu, &event) {
+                InputResult::Quit => {
+                    println!("Encerrando SDL3 após {} frames", frame_counter);
+                    return;
+                }
+                InputResult::Debug => {
+                    debugger.set_debugging(true);
+                }
+                InputResult::Continue => {}
+            }
+        }
+
+        // Modo debugger interativo (no terminal)
+        if debugger.is_debugging() {
+            // Pausa o áudio enquanto no debugger
+            audio_paused.store(true, std::sync::atomic::Ordering::Relaxed);
+
+            debugger.print_info();
+            if debugger.debugloop(cpu) {
+                println!("Saindo via debugger após {} frames", frame_counter);
                 return;
             }
+
+            // Resume o áudio ao sair do debugger
+            audio_paused.store(false, std::sync::atomic::Ordering::Relaxed);
+
+            // Preenche buffer com silêncio para evitar underflows iniciais
+            {
+                let mut buf = audio_buffer.lock().unwrap();
+                buf.clear();
+                for _ in 0..2048 {
+                    buf.push_back((0.0, 0.0));
+                }
+            }
+
+            // Reseta timing após retornar do debugger para evitar catch-up
+            last_time = Instant::now();
+            pending_cycles = 0.0;
+            // Reseta timer de debug print para não spammar após sair
+            debug_print_timer = 0;
+            continue;
         }
 
         // Timing
@@ -228,6 +292,14 @@ pub fn run(cpu: &mut CPU) {
 
         // CPU/APU
         while pending_cycles >= 1.0 {
+            // Verifica breakpoints antes de executar
+            debugger.check_breakpoints(cpu.registers.get_pc());
+            if debugger.is_debugging() {
+                // Não continua executando, volta pro loop principal para entrar no debugger
+                pending_cycles = 0.0;
+                break;
+            }
+
             let (instruction_cycles, _) = cpu.execute_next();
             let c = instruction_cycles as u64;
 
@@ -251,7 +323,8 @@ pub fn run(cpu: &mut CPU) {
                 frame_counter += 1;
                 debug_print_timer += 1;
 
-                if debug_print_timer >= 60 {
+                // Log de status a cada 60 frames (mas não quando debugger está ativo)
+                if debug_print_timer >= 60 && !debugger.is_debugging() {
                     debug_print_timer = 0;
                     let buffer_size = audio_buffer.lock().unwrap().len();
                     println!(
