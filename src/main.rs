@@ -4,10 +4,10 @@ use gb_emu::GB;
 use std::env;
 use std::fs;
 
-fn print_cart_info(cpu: &GB::CPU::CPU) {
+fn print_cart_info(rom_data: &[u8]) {
     let mut title = String::new();
     for addr in 0x0134..=0x0143 {
-        let ch = cpu.bus.read(addr);
+        let ch = rom_data.get(addr).copied().unwrap_or(0);
         if ch == 0 {
             break;
         }
@@ -16,9 +16,9 @@ fn print_cart_info(cpu: &GB::CPU::CPU) {
         }
     }
     println!("Título: {}", title);
-    let cart_type = cpu.bus.read(0x0147);
-    let rom_size_code = cpu.bus.read(0x0148);
-    let ram_size_code = cpu.bus.read(0x0149);
+    let cart_type = rom_data.get(0x0147).copied().unwrap_or(0xFF);
+    let rom_size_code = rom_data.get(0x0148).copied().unwrap_or(0xFF);
+    let ram_size_code = rom_data.get(0x0149).copied().unwrap_or(0xFF);
     let cart_str = match cart_type {
         0x00 => "ROM ONLY",
         0x01 | 0x02 | 0x03 => "MBC1",
@@ -53,7 +53,7 @@ fn print_cart_info(cpu: &GB::CPU::CPU) {
     };
     println!(
         "Cart: {:02X} ({}) | ROM code {:02X} (~{} KB) | RAM code {:02X} (~{} KB)",
-        cpu.bus.read(0x0147),
+        cart_type,
         cart_str,
         rom_size_code,
         rom_kb / 1024,
@@ -62,8 +62,8 @@ fn print_cart_info(cpu: &GB::CPU::CPU) {
     );
 }
 
-fn run_trace(cpu: &mut GB::CPU::CPU) {
-    print_cart_info(&cpu);
+fn run_trace(cpu: &mut GB::CPU::CPU, rom_data: &[u8]) {
+    print_cart_info(rom_data);
     println!("Trace iniciado (CTRL+C para interromper)");
     GB::trace::run_with_trace(cpu, usize::MAX);
     println!("Trace encerrado");
@@ -75,8 +75,8 @@ fn try_init_sdl() -> Result<sdl3::Sdl, String> {
     sdl3::init().map_err(|e| format!("{:?}", e))
 }
 
-fn run_sdl(cpu: &mut GB::CPU::CPU) {
-    print_cart_info(&cpu);
+fn run_sdl(cpu: &mut GB::CPU::CPU, rom_data: &[u8]) {
+    print_cart_info(rom_data);
     println!("Iniciando modo gráfico SDL3 (ESC para sair)");
 
     let sdl_ctx = try_init_sdl().expect("Falha ao inicializar SDL3");
@@ -494,9 +494,9 @@ fn main() {
         run_headless(&mut cpu);
         return;
     } else if args.iter().any(|a| a == "--trace") {
-        run_trace(&mut cpu);
+        run_trace(&mut cpu, &data);
     } else {
-        run_sdl(&mut cpu);
+        run_sdl(&mut cpu, &data);
     }
     // Salva RAM ao sair
     if let Err(e) = cpu.bus.save_cart_ram(&sav_path) {
