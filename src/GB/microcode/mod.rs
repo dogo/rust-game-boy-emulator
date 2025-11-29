@@ -5,6 +5,7 @@ mod load;
 mod logic;
 mod jump;
 mod arithmetic;
+mod stack;
 
 use crate::GB::bus::MemoryBus;
 use crate::GB::registers::Registers;
@@ -74,6 +75,24 @@ pub enum MicroAction {
     FetchImm16AndJump,
     /// Salta para o endereço em HL
     JumpToHl,
+    /// Busca byte assinado e salta relativamente se condição for verdadeira
+    JumpRelativeConditional { cond: JumpCondition },
+    /// Busca endereço 16-bit e salta se condição for verdadeira
+    JumpAbsoluteConditional { cond: JumpCondition },
+    /// Empilha registrador 16-bit (BC, DE, HL, AF)
+    PushReg16 { idx: u8 },
+    /// Desempilha para registrador 16-bit
+    PopReg16 { idx: u8 },
+    /// Empilha PC e salta para endereço 16-bit (CALL)
+    CallAbsolute,
+    /// Empilha PC e salta para endereço 16-bit se condição verdadeira (CALL cc)
+    CallAbsoluteConditional { cond: JumpCondition },
+    /// Desempilha PC (RET)
+    Return,
+    /// Desempilha PC se condição verdadeira (RET cc)
+    ReturnConditional { cond: JumpCondition },
+    /// Empilha PC e salta para endereço RST (0x00, 0x08, 0x10, etc)
+    Reset { addr: u16 },
     /// Executa RLCA (Rotate Left Circular A)
     ExecuteRLCA,
     /// Executa RRCA (Rotate Right Circular A)
@@ -162,6 +181,15 @@ pub enum AddrSrc {
     BC,
     DE,
     Hl,
+}
+
+/// Condições para jumps condicionais
+#[derive(Clone, Copy)]
+pub enum JumpCondition {
+    NZ, // Não zero (!Z)
+    Z,  // Zero
+    NC, // Não carry (!C)
+    C,  // Carry
 }
 
 /// Estrutura que representa um microprograma, ou seja, uma sequência de micro-operações para uma instrução.
@@ -256,6 +284,45 @@ pub fn execute(program: &MicroProgram, regs: &mut Registers, bus: &mut MemoryBus
                 // Usa PC já incrementado para calcular o salto
                 let new_pc = regs.get_pc().wrapping_add(offset as u16);
                 regs.set_pc(new_pc);
+            }
+            MicroAction::JumpRelativeConditional { cond } => {
+                // JR cc,r8: Salta relativamente se condição verdadeira
+                // 8 ciclos se não saltar, 12 ciclos se saltar
+                let offset = bus.cpu_read(regs.get_pc()) as i8;
+                regs.set_pc(regs.get_pc().wrapping_add(1));
+                let cond_true = match cond {
+                    JumpCondition::NZ => !regs.get_flag_z(),
+                    JumpCondition::Z => regs.get_flag_z(),
+                    JumpCondition::NC => !regs.get_flag_c(),
+                    JumpCondition::C => regs.get_flag_c(),
+                };
+                if cond_true {
+                    bus.cpu_idle(4); // 4 ciclos adicionais para calcular e saltar
+                    let new_pc = regs.get_pc().wrapping_add(offset as u16);
+                    regs.set_pc(new_pc);
+                }
+                // Se condição falsa, apenas 8 ciclos totais (4 fetch + 4 ler offset)
+            }
+            MicroAction::JumpAbsoluteConditional { cond } => {
+                // JP cc,a16: Salta absolutamente se condição verdadeira
+                // 12 ciclos se não saltar, 16 ciclos se saltar
+                let pc = regs.get_pc();
+                let lo = bus.cpu_read(pc) as u16;
+                regs.set_pc(pc.wrapping_add(1));
+                let hi = bus.cpu_read(regs.get_pc()) as u16;
+                regs.set_pc(regs.get_pc().wrapping_add(1));
+                let addr = (hi << 8) | lo;
+                let cond_true = match cond {
+                    JumpCondition::NZ => !regs.get_flag_z(),
+                    JumpCondition::Z => regs.get_flag_z(),
+                    JumpCondition::NC => !regs.get_flag_c(),
+                    JumpCondition::C => regs.get_flag_c(),
+                };
+                if cond_true {
+                    bus.cpu_idle(4); // 4 ciclos adicionais para saltar
+                    regs.set_pc(addr);
+                }
+                // Se condição falsa, 12 ciclos totais (4 fetch + 4 lo + 4 hi)
             }
             MicroAction::FetchImm16AndJump => {
                 // Busca endereço 16-bit e salta (16 ciclos totais: 4 fetch + 4 lo + 4 hi + 4 jump)
@@ -822,6 +889,137 @@ pub fn execute(program: &MicroProgram, regs: &mut Registers, bus: &mut MemoryBus
                 regs.set_flag_c(((sp & 0xFF) as u16 + (offset as u8 as u16)) > 0xFF);
                 bus.cpu_idle(4); // 16 ciclos totais: 4 fetch + 4 ler imm + 4 calcular + 4 idle
             }
+            MicroAction::PushReg16 { idx } => {
+                // PUSH rr: Empilha registrador 16-bit (16 ciclos: 4 fetch + 4 decrement SP + write hi + 4 decrement SP + write lo + 4 idle)
+                // idx: 0=BC, 1=DE, 2=HL, 3=AF
+                let val = match idx {
+                    0 => regs.get_bc(),
+                    1 => regs.get_de(),
+                    2 => regs.get_hl(),
+                    3 => regs.get_af(),
+                    _ => 0,
+                };
+                let mut sp = regs.get_sp();
+                sp = sp.wrapping_sub(1);
+                bus.cpu_write(sp, (val >> 8) as u8); // Byte alto
+                sp = sp.wrapping_sub(1);
+                bus.cpu_write(sp, (val & 0xFF) as u8); // Byte baixo
+                regs.set_sp(sp);
+                bus.cpu_idle(4); // 4 ciclos adicionais para completar
+            }
+            MicroAction::PopReg16 { idx } => {
+                // POP rr: Desempilha para registrador 16-bit (12 ciclos: 4 fetch + 4 ler lo + 4 ler hi)
+                // idx: 0=BC, 1=DE, 2=HL, 3=AF
+                let mut sp = regs.get_sp();
+                let lo = bus.cpu_read(sp) as u16;
+                sp = sp.wrapping_add(1);
+                let hi = bus.cpu_read(sp) as u16;
+                sp = sp.wrapping_add(1);
+                regs.set_sp(sp);
+                let val = (hi << 8) | lo;
+                match idx {
+                    0 => regs.set_bc(val),
+                    1 => regs.set_de(val),
+                    2 => regs.set_hl(val),
+                    3 => regs.set_af(val & 0xFFF0), // Lower 4 bits of F always 0
+                    _ => {}
+                }
+                // Total: 12 ciclos (4 fetch já feito + 4 ler lo + 4 ler hi)
+            }
+            MicroAction::CallAbsolute => {
+                // CALL a16: Empilha PC e salta (24 ciclos: 4 fetch + 4 lo + 4 hi + 4 push hi + 4 push lo + 4 idle)
+                let pc = regs.get_pc();
+                let lo = bus.cpu_read(pc) as u16;
+                regs.set_pc(pc.wrapping_add(1));
+                let hi = bus.cpu_read(regs.get_pc()) as u16;
+                regs.set_pc(regs.get_pc().wrapping_add(1));
+                let addr = (hi << 8) | lo;
+                let pc_to_push = regs.get_pc();
+                // Empilha PC
+                let mut sp = regs.get_sp();
+                sp = sp.wrapping_sub(1);
+                bus.cpu_write(sp, (pc_to_push >> 8) as u8);
+                sp = sp.wrapping_sub(1);
+                bus.cpu_write(sp, (pc_to_push & 0xFF) as u8);
+                regs.set_sp(sp);
+                bus.cpu_idle(4); // 4 ciclos adicionais
+                regs.set_pc(addr);
+            }
+            MicroAction::CallAbsoluteConditional { cond } => {
+                // CALL cc,a16: Condicional (12 ciclos se não chamar, 24 se chamar)
+                let pc = regs.get_pc();
+                let lo = bus.cpu_read(pc) as u16;
+                regs.set_pc(pc.wrapping_add(1));
+                let hi = bus.cpu_read(regs.get_pc()) as u16;
+                regs.set_pc(regs.get_pc().wrapping_add(1));
+                let addr = (hi << 8) | lo;
+                let cond_true = match cond {
+                    JumpCondition::NZ => !regs.get_flag_z(),
+                    JumpCondition::Z => regs.get_flag_z(),
+                    JumpCondition::NC => !regs.get_flag_c(),
+                    JumpCondition::C => regs.get_flag_c(),
+                };
+                if cond_true {
+                    let pc_to_push = regs.get_pc();
+                    // Empilha PC
+                    let mut sp = regs.get_sp();
+                    sp = sp.wrapping_sub(1);
+                    bus.cpu_write(sp, (pc_to_push >> 8) as u8);
+                    sp = sp.wrapping_sub(1);
+                    bus.cpu_write(sp, (pc_to_push & 0xFF) as u8);
+                    regs.set_sp(sp);
+                    bus.cpu_idle(4); // 4 ciclos adicionais
+                    regs.set_pc(addr);
+                }
+                // Se condição falsa, 12 ciclos totais (4 fetch + 4 lo + 4 hi)
+            }
+            MicroAction::Return => {
+                // RET: Desempilha PC (16 ciclos: 4 fetch + 4 ler lo + 4 ler hi + 4 idle)
+                let mut sp = regs.get_sp();
+                let lo = bus.cpu_read(sp) as u16;
+                sp = sp.wrapping_add(1);
+                let hi = bus.cpu_read(sp) as u16;
+                sp = sp.wrapping_add(1);
+                regs.set_sp(sp);
+                let addr = (hi << 8) | lo;
+                bus.cpu_idle(4); // 4 ciclos adicionais
+                regs.set_pc(addr);
+            }
+            MicroAction::ReturnConditional { cond } => {
+                // RET cc: Condicional (8 ciclos se não retornar, 20 se retornar)
+                let cond_true = match cond {
+                    JumpCondition::NZ => !regs.get_flag_z(),
+                    JumpCondition::Z => regs.get_flag_z(),
+                    JumpCondition::NC => !regs.get_flag_c(),
+                    JumpCondition::C => regs.get_flag_c(),
+                };
+                if cond_true {
+                    let mut sp = regs.get_sp();
+                    let lo = bus.cpu_read(sp) as u16;
+                    sp = sp.wrapping_add(1);
+                    let hi = bus.cpu_read(sp) as u16;
+                    sp = sp.wrapping_add(1);
+                    regs.set_sp(sp);
+                    let addr = (hi << 8) | lo;
+                    bus.cpu_idle(4); // 4 ciclos adicionais
+                    regs.set_pc(addr);
+                }
+                // Se condição falsa, 8 ciclos totais (4 fetch + 4 idle interno)
+                bus.cpu_idle(4);
+            }
+            MicroAction::Reset { addr } => {
+                // RST addr: Empilha PC e salta para endereço (16 ciclos)
+                let pc = regs.get_pc();
+                // Empilha PC
+                let mut sp = regs.get_sp();
+                sp = sp.wrapping_sub(1);
+                bus.cpu_write(sp, (pc >> 8) as u8);
+                sp = sp.wrapping_sub(1);
+                bus.cpu_write(sp, (pc & 0xFF) as u8);
+                regs.set_sp(sp);
+                bus.cpu_idle(4); // 4 ciclos adicionais
+                regs.set_pc(addr);
+            }
         }
     }
 }
@@ -834,4 +1032,5 @@ pub fn lookup(opcode: u8) -> Option<&'static MicroProgram> {
         .or_else(|| logic::lookup(opcode))
         .or_else(|| jump::lookup(opcode))
         .or_else(|| arithmetic::lookup(opcode))
+        .or_else(|| stack::lookup(opcode))
 }
