@@ -66,7 +66,7 @@ impl CPU {
         self.bus.write(0xFF05, 0x00); // TIMA
         self.bus.write(0xFF06, 0x00); // TMA
         self.bus.write(0xFF07, 0xF8); // TAC
-        self.bus.write(0xFF0F, 0xE1); // IF
+        self.bus.write(0xFF0F, 0x00); // IF - sem interrupções pendentes
         self.bus.write(0xFFFF, 0x00); // IE
         self.bus.write(0xFF10, 0x80); // NR10
         self.bus.write(0xFF11, 0xBF); // NR11
@@ -98,7 +98,8 @@ impl CPU {
         self.bus.write(0xFF43, 0x00); // SCX
         self.bus.write(0xFF44, 0x00); // LY
         self.bus.write(0xFF45, 0x00); // LYC
-        self.bus.write(0xFF46, 0xFF); // DMA
+        // NÃO escreve 0xFF46 (DMA) - isso iniciaria uma transferência DMA!
+        // O registrador DMA não deve ser inicializado com valor que cause DMA ativo
         self.bus.write(0xFF47, 0xFC); // BGP
         self.bus.write(0xFF48, 0xFF); // OBP0
         self.bus.write(0xFF49, 0xFF); // OBP1
