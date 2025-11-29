@@ -67,7 +67,7 @@ impl PPU {
         // LCD ligado -> desligado
         if was_on && !now_on {
             self.mode = 0;
-            self.mode_clock = 0;
+            self.mode_clock = 4;
             self.ly = 0;
             self.frame_ready = false;
             self.wy_trigger = false;
@@ -581,7 +581,7 @@ impl PPU {
         if (self.lcdc & 0x80) == 0 {
             // LCD off: reset PPU state
             self.mode = 0;
-            self.mode_clock = 0;
+            self.mode_clock = 4;
             self.ly = 0;
             self.frame_ready = false;
             self.wy_trigger = false;
@@ -593,11 +593,13 @@ impl PPU {
         self.mode_clock += cycles;
 
         if self.ly < 144 {
-            if self.mode_clock <= 80 {
+            // Mode 2: OAM scan = 80 dots (0-79)
+            if self.mode_clock < 80 {
                 if self.mode != 2 {
                     self.change_mode(2, iflags);
                 }
-            } else if self.mode_clock <= 252 {
+            // Mode 3: Drawing = ~172 dots (80-251)
+            } else if self.mode_clock < 252 {
                 if self.mode != 3 {
                     self.change_mode(3, iflags);
                 }
