@@ -54,42 +54,59 @@ pub fn lookup(opcode: u8) -> Option<&'static MicroProgram> {
 
 // === PUSH rr ===
 // idx: 0=BC, 1=DE, 2=HL, 3=AF
-const PUSH_BC_PROGRAM: MicroProgram = MicroProgram::new(0xC5, "PUSH BC", &[MicroAction::PushReg16 { idx: 0 }]);
-const PUSH_DE_PROGRAM: MicroProgram = MicroProgram::new(0xD5, "PUSH DE", &[MicroAction::PushReg16 { idx: 1 }]);
-const PUSH_HL_PROGRAM: MicroProgram = MicroProgram::new(0xE5, "PUSH HL", &[MicroAction::PushReg16 { idx: 2 }]);
-const PUSH_AF_PROGRAM: MicroProgram = MicroProgram::new(0xF5, "PUSH AF", &[MicroAction::PushReg16 { idx: 3 }]);
+const PUSH_BC_PROGRAM: MicroProgram =
+    MicroProgram::new(0xC5, "PUSH BC", &[MicroAction::PushReg16 { idx: 0 }]);
+const PUSH_DE_PROGRAM: MicroProgram =
+    MicroProgram::new(0xD5, "PUSH DE", &[MicroAction::PushReg16 { idx: 1 }]);
+const PUSH_HL_PROGRAM: MicroProgram =
+    MicroProgram::new(0xE5, "PUSH HL", &[MicroAction::PushReg16 { idx: 2 }]);
+const PUSH_AF_PROGRAM: MicroProgram =
+    MicroProgram::new(0xF5, "PUSH AF", &[MicroAction::PushReg16 { idx: 3 }]);
 
 // === POP rr ===
-const POP_BC_PROGRAM: MicroProgram = MicroProgram::new(0xC1, "POP BC", &[MicroAction::PopReg16 { idx: 0 }]);
-const POP_DE_PROGRAM: MicroProgram = MicroProgram::new(0xD1, "POP DE", &[MicroAction::PopReg16 { idx: 1 }]);
-const POP_HL_PROGRAM: MicroProgram = MicroProgram::new(0xE1, "POP HL", &[MicroAction::PopReg16 { idx: 2 }]);
-const POP_AF_PROGRAM: MicroProgram = MicroProgram::new(0xF1, "POP AF", &[MicroAction::PopReg16 { idx: 3 }]);
+const POP_BC_PROGRAM: MicroProgram =
+    MicroProgram::new(0xC1, "POP BC", &[MicroAction::PopReg16 { idx: 0 }]);
+const POP_DE_PROGRAM: MicroProgram =
+    MicroProgram::new(0xD1, "POP DE", &[MicroAction::PopReg16 { idx: 1 }]);
+const POP_HL_PROGRAM: MicroProgram =
+    MicroProgram::new(0xE1, "POP HL", &[MicroAction::PopReg16 { idx: 2 }]);
+const POP_AF_PROGRAM: MicroProgram =
+    MicroProgram::new(0xF1, "POP AF", &[MicroAction::PopReg16 { idx: 3 }]);
 
 // === CALL ===
-const CALL_A16_PROGRAM: MicroProgram = MicroProgram::new(0xCD, "CALL a16", &[MicroAction::CallAbsolute]);
+const CALL_A16_PROGRAM: MicroProgram =
+    MicroProgram::new(0xCD, "CALL a16", &[MicroAction::CallAbsolute]);
 
 const CALL_NZ_A16_PROGRAM: MicroProgram = MicroProgram::new(
     0xC4,
     "CALL NZ,a16",
-    &[MicroAction::CallAbsoluteConditional { cond: JumpCondition::NZ }],
+    &[MicroAction::CallAbsoluteConditional {
+        cond: JumpCondition::NZ,
+    }],
 );
 
 const CALL_Z_A16_PROGRAM: MicroProgram = MicroProgram::new(
     0xCC,
     "CALL Z,a16",
-    &[MicroAction::CallAbsoluteConditional { cond: JumpCondition::Z }],
+    &[MicroAction::CallAbsoluteConditional {
+        cond: JumpCondition::Z,
+    }],
 );
 
 const CALL_NC_A16_PROGRAM: MicroProgram = MicroProgram::new(
     0xD4,
     "CALL NC,a16",
-    &[MicroAction::CallAbsoluteConditional { cond: JumpCondition::NC }],
+    &[MicroAction::CallAbsoluteConditional {
+        cond: JumpCondition::NC,
+    }],
 );
 
 const CALL_C_A16_PROGRAM: MicroProgram = MicroProgram::new(
     0xDC,
     "CALL C,a16",
-    &[MicroAction::CallAbsoluteConditional { cond: JumpCondition::C }],
+    &[MicroAction::CallAbsoluteConditional {
+        cond: JumpCondition::C,
+    }],
 );
 
 // === RET ===
@@ -98,35 +115,51 @@ const RET_PROGRAM: MicroProgram = MicroProgram::new(0xC9, "RET", &[MicroAction::
 const RET_NZ_PROGRAM: MicroProgram = MicroProgram::new(
     0xC0,
     "RET NZ",
-    &[MicroAction::ReturnConditional { cond: JumpCondition::NZ }],
+    &[MicroAction::ReturnConditional {
+        cond: JumpCondition::NZ,
+    }],
 );
 
 const RET_Z_PROGRAM: MicroProgram = MicroProgram::new(
     0xC8,
     "RET Z",
-    &[MicroAction::ReturnConditional { cond: JumpCondition::Z }],
+    &[MicroAction::ReturnConditional {
+        cond: JumpCondition::Z,
+    }],
 );
 
 const RET_NC_PROGRAM: MicroProgram = MicroProgram::new(
     0xD0,
     "RET NC",
-    &[MicroAction::ReturnConditional { cond: JumpCondition::NC }],
+    &[MicroAction::ReturnConditional {
+        cond: JumpCondition::NC,
+    }],
 );
 
 const RET_C_PROGRAM: MicroProgram = MicroProgram::new(
     0xD8,
     "RET C",
-    &[MicroAction::ReturnConditional { cond: JumpCondition::C }],
+    &[MicroAction::ReturnConditional {
+        cond: JumpCondition::C,
+    }],
 );
 
 const RETI_PROGRAM: MicroProgram = MicroProgram::new(0xD9, "RETI", &[MicroAction::Return]); // IME será habilitado no CPU.rs
 
 // === RST ===
-const RST_00_PROGRAM: MicroProgram = MicroProgram::new(0xC7, "RST 00H", &[MicroAction::Reset { addr: 0x00 }]);
-const RST_08_PROGRAM: MicroProgram = MicroProgram::new(0xCF, "RST 08H", &[MicroAction::Reset { addr: 0x08 }]);
-const RST_10_PROGRAM: MicroProgram = MicroProgram::new(0xD7, "RST 10H", &[MicroAction::Reset { addr: 0x10 }]);
-const RST_18_PROGRAM: MicroProgram = MicroProgram::new(0xDF, "RST 18H", &[MicroAction::Reset { addr: 0x18 }]);
-const RST_20_PROGRAM: MicroProgram = MicroProgram::new(0xE7, "RST 20H", &[MicroAction::Reset { addr: 0x20 }]);
-const RST_28_PROGRAM: MicroProgram = MicroProgram::new(0xEF, "RST 28H", &[MicroAction::Reset { addr: 0x28 }]);
-const RST_30_PROGRAM: MicroProgram = MicroProgram::new(0xF7, "RST 30H", &[MicroAction::Reset { addr: 0x30 }]);
-const RST_38_PROGRAM: MicroProgram = MicroProgram::new(0xFF, "RST 38H", &[MicroAction::Reset { addr: 0x38 }]);
+const RST_00_PROGRAM: MicroProgram =
+    MicroProgram::new(0xC7, "RST 00H", &[MicroAction::Reset { addr: 0x00 }]);
+const RST_08_PROGRAM: MicroProgram =
+    MicroProgram::new(0xCF, "RST 08H", &[MicroAction::Reset { addr: 0x08 }]);
+const RST_10_PROGRAM: MicroProgram =
+    MicroProgram::new(0xD7, "RST 10H", &[MicroAction::Reset { addr: 0x10 }]);
+const RST_18_PROGRAM: MicroProgram =
+    MicroProgram::new(0xDF, "RST 18H", &[MicroAction::Reset { addr: 0x18 }]);
+const RST_20_PROGRAM: MicroProgram =
+    MicroProgram::new(0xE7, "RST 20H", &[MicroAction::Reset { addr: 0x20 }]);
+const RST_28_PROGRAM: MicroProgram =
+    MicroProgram::new(0xEF, "RST 28H", &[MicroAction::Reset { addr: 0x28 }]);
+const RST_30_PROGRAM: MicroProgram =
+    MicroProgram::new(0xF7, "RST 30H", &[MicroAction::Reset { addr: 0x30 }]);
+const RST_38_PROGRAM: MicroProgram =
+    MicroProgram::new(0xFF, "RST 38H", &[MicroAction::Reset { addr: 0x38 }]);

@@ -188,7 +188,8 @@ impl CPU {
         if opcode == 0xCB {
             // Busca o segundo byte (opcode CB real)
             let cb_opcode = self.bus.cpu_read(self.registers.get_pc());
-            self.registers.set_pc(self.registers.get_pc().wrapping_add(1));
+            self.registers
+                .set_pc(self.registers.get_pc().wrapping_add(1));
 
             if let Some(program) = microcode::cb_prefix::lookup(cb_opcode) {
                 microcode::execute(program, &mut self.registers, &mut self.bus);

@@ -1,12 +1,12 @@
 // Este módulo implementa microcódigos para instruções da CPU do Game Boy.
 // Microcódigos são sequências de micro-operações que simulam o funcionamento interno das instruções.
 
+mod arithmetic;
+pub mod cb_prefix;
+mod jump;
 mod load;
 mod logic;
-mod jump;
-mod arithmetic;
 mod stack;
-pub mod cb_prefix;
 
 use crate::GB::bus::MemoryBus;
 use crate::GB::registers::Registers;

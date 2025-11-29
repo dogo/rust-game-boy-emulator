@@ -68,7 +68,10 @@ fn init_sdl() -> Result<sdl3::Sdl, String> {
 
 fn setup_audio(
     sdl_ctx: &sdl3::Sdl,
-) -> (sdl3::audio::AudioStreamWithCallback<AudioCallbackData>, Arc<Mutex<VecDeque<(f32, f32)>>>) {
+) -> (
+    sdl3::audio::AudioStreamWithCallback<AudioCallbackData>,
+    Arc<Mutex<VecDeque<(f32, f32)>>>,
+) {
     let audio_subsystem = sdl_ctx.audio().expect("Falha subsistema de áudio");
     let desired_spec = AudioSpec {
         freq: Some(44100),
@@ -85,7 +88,10 @@ fn setup_audio(
         for _ in 0..prefill_samples {
             buf.push_back((0.0, 0.0));
         }
-        println!("🔇 Pré-buffer de áudio: {} samples (~120ms)", prefill_samples);
+        println!(
+            "🔇 Pré-buffer de áudio: {} samples (~120ms)",
+            prefill_samples
+        );
     }
 
     let audio_device = audio_subsystem
@@ -284,7 +290,11 @@ pub fn run(cpu: &mut CPU) {
 
             canvas.clear();
             canvas
-                .copy(&texture, None, Some(Rect::new(0, 0, 160 * scale, 144 * scale).into()))
+                .copy(
+                    &texture,
+                    None,
+                    Some(Rect::new(0, 0, 160 * scale, 144 * scale).into()),
+                )
                 .unwrap();
             canvas.present();
         }
