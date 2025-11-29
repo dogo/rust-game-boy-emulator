@@ -904,11 +904,10 @@ pub fn execute(program: &MicroProgram, regs: &mut Registers, bus: &mut MemoryBus
                     3 => regs.get_sp(),
                     _ => 0,
                 };
-                // OAM Bug acontece durante o M-cycle 2 (T4-T7)
-                // Tick 2 ciclos primeiro, depois check, depois mais 2 ciclos
-                bus.cpu_idle(2);
+                // OAM Bug acontece no início do M-cycle 2 (T4)
+                // O valor é colocado no barramento de endereços imediatamente
                 bus.oam_bug_inc_dec(val);
-                bus.cpu_idle(2);
+                bus.cpu_idle(4);
                 let res = val.wrapping_add(1);
                 match idx {
                     0 => regs.set_bc(res),
@@ -928,10 +927,9 @@ pub fn execute(program: &MicroProgram, regs: &mut Registers, bus: &mut MemoryBus
                     3 => regs.get_sp(),
                     _ => 0,
                 };
-                // OAM Bug acontece durante o M-cycle 2 (T4-T7)
-                bus.cpu_idle(2);
+                // OAM Bug acontece no início do M-cycle 2 (T4)
                 bus.oam_bug_inc_dec(val);
-                bus.cpu_idle(2);
+                bus.cpu_idle(4);
                 let res = val.wrapping_sub(1);
                 match idx {
                     0 => regs.set_bc(res),

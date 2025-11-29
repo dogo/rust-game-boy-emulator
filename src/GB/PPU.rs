@@ -79,10 +79,10 @@ impl PPU {
         }
 
         // LCD desligado -> ligado
-        // Há um pequeno atraso antes do modo 2 começar (4 ciclos)
+        // Há um atraso de 4 ciclos antes do OAM scan realmente começar
         if !was_on && now_on {
             self.mode = 2;
-            self.mode_clock = 4; // Atraso de inicialização
+            self.mode_clock = 4;
             self.ly = 0;
             self.frame_ready = false;
             self.wy_trigger = false;
@@ -687,7 +687,6 @@ impl PPU {
     pub fn is_oam_scan_mode(&self) -> bool {
         let lcd_on = (self.lcdc & 0x80) != 0;
         // Mode 2 dura 80 T-cycles, mas o OAM bug só acontece nas primeiras 76
-        // Os últimos 4 ciclos são de transição para o modo 3
         lcd_on && self.mode == 2 && self.mode_clock < 76
     }
 
