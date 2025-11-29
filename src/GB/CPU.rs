@@ -62,7 +62,7 @@ impl CPU {
         self.registers.set_pc(0x0100);
 
         // IO registers pós-boot (valores DMG)
-        self.bus.set_div(0xAB); // DIV - usa set_div pois write zera o contador
+        // DIV deve ser setado POR ÚLTIMO pois writes consomem ciclos
         self.bus.write(0xFF05, 0x00); // TIMA
         self.bus.write(0xFF06, 0x00); // TMA
         self.bus.write(0xFF07, 0xF8); // TAC
@@ -105,6 +105,9 @@ impl CPU {
         self.bus.write(0xFF49, 0xFF); // OBP1
         self.bus.write(0xFF4A, 0x00); // WY
         self.bus.write(0xFF4B, 0x00); // WX
+
+        // DIV é setado por último pois os writes acima consomem ciclos
+        self.bus.set_div(0xAB);
 
         eprintln!("🚀 POST-BOOT STATE 🚀");
         eprintln!(

@@ -50,10 +50,12 @@ impl Timer {
     }
 
     /// Incrementa TIMA, gerenciando overflow
-    fn increase_tima(&mut self, tima: &mut u8, tma: u8) {
+    fn increase_tima(&mut self, tima: &mut u8, _tma: u8) {
         *tima = tima.wrapping_add(1);
         if *tima == 0 {
-            *tima = tma;
+            // TIMA overflow! Fica 0 por um M-cycle, depois é recarregado
+            // NÃO recarregamos aqui - isso acontece no próximo M-cycle
+            // via advance_tima_state_machine
             self.tima_reload_state = TimaReloadState::Reloading;
         }
     }
@@ -71,9 +73,12 @@ impl Timer {
     ) -> (u8, u8, TimerEvents) {
         let mut events = TimerEvents::default();
 
-        // Avança state machine uma vez por chamada (M-cycle)
-        // No SameBoy isso acontece uma vez por M-cycle
-        self.advance_tima_state_machine(&mut tima, tma, &mut if_reg);
+        // Avança state machine uma vez por M-cycle (4 T-cycles)
+        // Isso é importante para o delay correto do TIMA reload
+        let m_cycles = (cycles + 3) / 4; // Arredonda para cima
+        for _ in 0..m_cycles {
+            self.advance_tima_state_machine(&mut tima, tma, &mut if_reg);
+        }
 
         for _ in 0..cycles {
             let old_div = self.div_counter;
