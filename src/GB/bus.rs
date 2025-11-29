@@ -65,6 +65,11 @@ impl MemoryBus {
         self.ie
     }
 
+    /// Inicializa o DIV para um valor específico (estado pós-boot)
+    pub fn set_div(&mut self, value: u8) {
+        self.timer.set_div(value);
+    }
+
     #[inline]
     pub fn get_if(&self) -> u8 {
         self.if_
@@ -170,7 +175,7 @@ impl MemoryBus {
             0xFF04 => self.timer.read_div(),
             0xFF05 => self.tima,
             0xFF06 => self.tma,
-            0xFF07 => self.tac,
+            0xFF07 => self.tac | 0xF8, // bits 3-7 não usados, leem como 1
             0xFF0F => self.if_,
             0xFF10..=0xFF3F => self.apu.read_register(address),
             0xFF40..=0xFF45 => self.ppu.read_register(address),

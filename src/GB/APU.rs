@@ -399,12 +399,8 @@ impl APU {
         match address {
             // Canal 1
             0xFF10 => {
-                // NR10: Sweep
-                (if self.ch1_sweep_period > 0 {
-                    0x80
-                } else {
-                    0x00
-                }) | (self.ch1_sweep_period << 4)
+                // NR10: Sweep (bit 7 não usado, sempre 1)
+                0x80 | (self.ch1_sweep_period << 4)
                     | (if self.ch1_sweep_direction { 0x08 } else { 0x00 })
                     | self.ch1_sweep_shift
             }
@@ -535,6 +531,12 @@ impl APU {
 
     /// Escreve em um registrador do APU
     pub fn write_register(&mut self, address: u16, value: u8) {
+        // No DMG, quando o som está desabilitado (NR52 bit 7 = 0),
+        // escritas em NR10-NR51 são ignoradas (exceto NR52 e Wave RAM)
+        if !self.sound_enable && address != 0xFF26 && !(0xFF30..=0xFF3F).contains(&address) {
+            return;
+        }
+
         match address {
             // Canal 1
             0xFF10 => {

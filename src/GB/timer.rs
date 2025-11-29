@@ -100,6 +100,12 @@ impl Timer {
         (self.div_counter >> 8) as u8
     }
 
+    /// Inicializa o div_counter para um valor específico (usado no estado pós-boot)
+    /// O valor visível de DIV são os 8 bits superiores do contador de 16 bits
+    pub fn set_div(&mut self, value: u8) {
+        self.div_counter = (value as u16) << 8;
+    }
+
     /// Zera o DIV e faz edge detect, incrementando TIMA se necessário
     pub fn reset_div(&mut self, tima: u8, _tma: u8, tac: u8, if_reg: u8) -> (u8, u8) {
         let old_signal = self.current_timer_signal(tac);

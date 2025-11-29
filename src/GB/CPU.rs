@@ -62,7 +62,7 @@ impl CPU {
         self.registers.set_pc(0x0100);
 
         // IO registers pós-boot (valores DMG)
-        self.bus.write(0xFF04, 0xAB); // DIV
+        self.bus.set_div(0xAB); // DIV - usa set_div pois write zera o contador
         self.bus.write(0xFF05, 0x00); // TIMA
         self.bus.write(0xFF06, 0x00); // TMA
         self.bus.write(0xFF07, 0xF8); // TAC

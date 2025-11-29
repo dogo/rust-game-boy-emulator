@@ -528,6 +528,33 @@ fn poll_serial(cpu: &mut GB::CPU::CPU, log: &mut String) {
     }
 }
 
+/// Verifica resultado na memória $A000 (formato Blargg)
+/// $A000 = status (0x80 = rodando, outro = resultado final)
+/// $A001-$A003 = assinatura $DE $B0 $61
+/// $A004+ = string de texto
+fn check_memory_result(cpu: &GB::CPU::CPU) -> Option<(u8, String)> {
+    let sig1 = cpu.bus.read(0xA001);
+    let sig2 = cpu.bus.read(0xA002);
+    let sig3 = cpu.bus.read(0xA003);
+
+    if sig1 == 0xDE && sig2 == 0xB0 && sig3 == 0x61 {
+        let status = cpu.bus.read(0xA000);
+        let mut text = String::new();
+        for i in 0..1024 {
+            let ch = cpu.bus.read(0xA004 + i);
+            if ch == 0 {
+                break;
+            }
+            if ch.is_ascii() {
+                text.push(ch as char);
+            }
+        }
+        Some((status, text))
+    } else {
+        None
+    }
+}
+
 /// Modo headless: roda só CPU/bus e imprime saída serial.
 /// Útil pra rodar ROMs de teste (blargg/mooneye) sem SDL.
 fn run_headless(cpu: &mut GB::CPU::CPU) {
@@ -563,6 +590,22 @@ fn run_headless(cpu: &mut GB::CPU::CPU) {
                 executed_cycles / 1_000_000,
                 steps
             );
+
+            // Verifica resultado na memória periodicamente
+            if let Some((status, text)) = check_memory_result(cpu) {
+                if status != 0x80 {
+                    // Teste terminou
+                    if status == 0 {
+                        println!("✅ Teste passou! (via memória)");
+                    } else {
+                        println!("❌ Teste falhou com código {} (via memória)", status);
+                    }
+                    if !text.is_empty() {
+                        println!("Resultado: {}", text);
+                    }
+                    break;
+                }
+            }
         }
 
         // Se a ROM de teste escrever "Passed" na serial, consideramos sucesso
@@ -577,6 +620,19 @@ fn run_headless(cpu: &mut GB::CPU::CPU) {
                 "⏱️ Atingiu limite de ciclos ({}) sem achar 'Passed'/'PASS'",
                 max_cycles
             );
+            // Verifica resultado final na memória
+            if let Some((status, text)) = check_memory_result(cpu) {
+                if status == 0x80 {
+                    println!("Teste ainda rodando (status=0x80)");
+                } else if status == 0 {
+                    println!("✅ Teste passou! (via memória)");
+                } else {
+                    println!("❌ Teste falhou com código {} (via memória)", status);
+                }
+                if !text.is_empty() {
+                    println!("Resultado: {}", text);
+                }
+            }
             break;
         }
     }
