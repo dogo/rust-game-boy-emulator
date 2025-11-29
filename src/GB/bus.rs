@@ -26,6 +26,7 @@ pub struct MemoryBus {
     oam_dma_src: u16,
     oam_dma_index: u8,
     oam_dma_cycles: u32,
+    oam_dma_value: u8, // Último valor escrito em FF46
 
     // ===== Serial =====
     serial_sb: u8, // FF01
@@ -121,6 +122,7 @@ impl MemoryBus {
             oam_dma_src: 0,
             oam_dma_index: 0,
             oam_dma_cycles: 0,
+            oam_dma_value: 0,
             serial_sb: 0x00,
             serial_sc: 0x7E, // bits não usados em 1
             cpu_cycle_log: 0,
@@ -171,7 +173,9 @@ impl MemoryBus {
             0xFF07 => self.tac,
             0xFF0F => self.if_,
             0xFF10..=0xFF3F => self.apu.read_register(address),
-            0xFF40..=0xFF4B => self.ppu.read_register(address),
+            0xFF40..=0xFF45 => self.ppu.read_register(address),
+            0xFF46 => self.oam_dma_value,
+            0xFF47..=0xFF4B => self.ppu.read_register(address),
             0xFF80..=0xFFFE => self.hram[(address - 0xFF80) as usize],
             0xFFFF => self.ie,
             _ => 0xFF,
@@ -193,6 +197,7 @@ impl MemoryBus {
 
         // OAM DMA: escrever em FF46 inicia transferência
         if address == 0xFF46 {
+            self.oam_dma_value = value;
             self.start_oam_dma(value);
             return;
         }
