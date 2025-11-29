@@ -74,8 +74,9 @@ pub struct APU {
     ch1_wave_position: u8,     // Posição na wave duty
     ch1_envelope_timer: u8,    // Timer do envelope
     ch1_length_counter: u8,    // Contador de length
-    ch1_sweep_timer: u8,       // Timer do sweep
-    ch1_sweep_enabled: bool,   // Sweep habilitado
+    ch1_sweep_timer: u8,        // Timer do sweep
+    ch1_sweep_enabled: bool,    // Sweep habilitado
+    ch1_sweep_negate_used: bool, // True se negate foi usado em cálculo (quirk)
 
     ch2_volume: u8,         // Volume atual do canal 2
     ch2_wave_position: u8,  // Posição na wave duty
@@ -185,6 +186,7 @@ impl APU {
             ch1_length_counter: 0,
             ch1_sweep_timer: 0,
             ch1_sweep_enabled: false,
+            ch1_sweep_negate_used: false,
             ch2_volume: 0,
             ch2_wave_position: 0,
             ch2_envelope_timer: 0,
@@ -550,9 +552,15 @@ impl APU {
             // Canal 1
             0xFF10 => {
                 // NR10: Sweep
+                let old_negate = self.ch1_sweep_direction;
                 self.ch1_sweep_period = (value >> 4) & 0x07;
                 self.ch1_sweep_direction = (value & 0x08) != 0;
                 self.ch1_sweep_shift = value & 0x07;
+
+                // Quirk: se estava em negate, fez cálculo, e agora mudou para add -> desabilita
+                if old_negate && !self.ch1_sweep_direction && self.ch1_sweep_negate_used {
+                    self.ch1_enabled = false;
+                }
             }
             0xFF11 => {
                 // NR11: Wave duty + length timer
@@ -784,8 +792,21 @@ impl APU {
 
         // Inicializar sweep
         self.ch1_frequency_shadow = self.ch1_frequency;
-        self.ch1_sweep_timer = self.ch1_sweep_period;
+        self.ch1_sweep_timer = if self.ch1_sweep_period > 0 {
+            self.ch1_sweep_period
+        } else {
+            8
+        };
         self.ch1_sweep_enabled = self.ch1_sweep_period > 0 || self.ch1_sweep_shift > 0;
+        self.ch1_sweep_negate_used = false; // Reset da flag no trigger
+
+        // Se shift > 0, calcula frequência imediatamente (overflow check)
+        if self.ch1_sweep_shift > 0 {
+            let new_freq = self.calculate_sweep_frequency();
+            if new_freq > 2047 {
+                self.ch1_enabled = false;
+            }
+        }
 
         // Inicializar timer de frequência
         self.ch1_frequency_timer = 2048 - self.ch1_frequency as u32;
@@ -1056,10 +1077,12 @@ impl APU {
     }
 
     /// Calcula nova frequência para sweep com hardware precision
-    fn calculate_sweep_frequency(&self) -> u16 {
+    fn calculate_sweep_frequency(&mut self) -> u16 {
         let freq_change = self.ch1_frequency_shadow >> self.ch1_sweep_shift;
         if self.ch1_sweep_direction {
             // HARDWARE PRECISION: subtração usa complemento de um
+            // Marca que negate foi usado (quirk do hardware)
+            self.ch1_sweep_negate_used = true;
             self.ch1_frequency_shadow.wrapping_sub(freq_change)
         } else {
             // HARDWARE PRECISION: pode overflow além de 2047
