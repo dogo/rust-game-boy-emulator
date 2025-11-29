@@ -215,9 +215,9 @@ impl APU {
         let div_bit = (div_counter >> 12) & 1 != 0;
         if self.frame_sequencer_div_bit && !div_bit {
             // Falling edge do bit 13 - clocka frame sequencer
-            if self.sound_enable {
-                self.step_frame_sequencer();
-            }
+            // Frame sequencer roda SEMPRE, mesmo com APU desligada
+            // Os length counters continuam decrementando
+            self.step_frame_sequencer();
         }
         self.frame_sequencer_div_bit = div_bit;
 
@@ -244,39 +244,25 @@ impl APU {
     fn step_frame_sequencer(&mut self) {
         self.frame_sequencer = (self.frame_sequencer + 1) % 8;
 
+        // Length counters rodam SEMPRE (mesmo com APU desligada)
         match self.frame_sequencer {
-            0 => {
-                // Step 0: Length
+            0 | 2 | 4 | 6 => {
                 self.step_length_counters();
-            }
-            1 => {
-                // Step 1: Nada
-            }
-            2 => {
-                // Step 2: Length e Sweep
-                self.step_length_counters();
-                self.step_sweep();
-            }
-            3 => {
-                // Step 3: Nada
-            }
-            4 => {
-                // Step 4: Length
-                self.step_length_counters();
-            }
-            5 => {
-                // Step 5: Nada
-            }
-            6 => {
-                // Step 6: Length e Sweep
-                self.step_length_counters();
-                self.step_sweep();
-            }
-            7 => {
-                // Step 7: Envelope
-                self.step_envelopes();
             }
             _ => {}
+        }
+
+        // Sweep e envelopes só rodam com APU ligada
+        if self.sound_enable {
+            match self.frame_sequencer {
+                2 | 6 => {
+                    self.step_sweep();
+                }
+                7 => {
+                    self.step_envelopes();
+                }
+                _ => {}
+            }
         }
     }
 
@@ -526,10 +512,10 @@ impl APU {
                 (if self.ch1_enabled { 0x01 } else { 0x00 })
             }
 
-            // Wave RAM - HARDWARE QUIRK: inacessível durante playback
+            // Wave RAM - HARDWARE QUIRK: durante playback, retorna byte sendo acessado
             0xFF30..=0xFF3F => {
                 if self.ch3_enabled && self.ch3_dac_enable {
-                    // Durante playback, retorna o sample atual sendo lido
+                    // Durante playback, retorna o byte que o canal está acessando
                     let byte_index = (self.ch3_wave_position / 2) as usize;
                     self.ch3_wave_ram[byte_index]
                 } else {
