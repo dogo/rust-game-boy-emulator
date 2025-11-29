@@ -18,3 +18,4 @@ I'm following the excellent guide at [https://aquova.net/emudev/gb/index.html](h
 ## Resources
 
 - [Game Boy Emulation Guide](https://aquova.net/emudev/gb/index.html)
+- [Pandocs - Game Boy Technical Reference](https://gbdev.io/pandocs/) — comprehensive and up-to-date documentation on Game Boy hardware, instructions, quirks, and details.
