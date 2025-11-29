@@ -69,6 +69,34 @@ pub enum MicroAction {
     ReadFromAddr { addr_src: AddrSrc, dest: Reg8 },
     /// Escreve A na memória no endereço especificado (BC, DE, ou endereço direto)
     WriteAToAddr { addr_src: AddrSrc },
+    /// Busca dois bytes imediatos (little-endian) e carrega em registrador 16-bit
+    FetchImm16ToReg16 { idx: u8 },
+    /// Busca dois bytes imediatos, lê da memória e armazena em A
+    FetchImm16AndReadToA,
+    /// Busca dois bytes imediatos e escreve A na memória
+    FetchImm16AndWriteA,
+    /// Busca dois bytes imediatos e escreve SP na memória (little-endian)
+    FetchImm16AndWriteSP,
+    /// Carrega HL com SP (LD SP,HL)
+    LoadSpFromHl,
+    /// Carrega HL com SP + byte assinado (LD HL,SP+r8)
+    LoadHlFromSpPlusSignedImm8,
+    /// LDH: Escreve A em 0xFF00 + offset
+    WriteAToFF00PlusImm8,
+    /// LDH: Lê de 0xFF00 + offset para A
+    ReadFromFF00PlusImm8ToA,
+    /// LDH: Escreve A em 0xFF00 + C
+    WriteAToFF00PlusC,
+    /// LDH: Lê de 0xFF00 + C para A
+    ReadFromFF00PlusCToA,
+    /// LDI: Escreve A em (HL) e incrementa HL
+    WriteAToHlAndIncrement,
+    /// LDI: Lê de (HL) para A e incrementa HL
+    ReadFromHlToAAndIncrement,
+    /// LDD: Escreve A em (HL) e decrementa HL
+    WriteAToHlAndDecrement,
+    /// LDD: Lê de (HL) para A e decrementa HL
+    ReadFromHlToAAndDecrement,
     /// Busca um byte imediato assinado do PC e salta relativamente (JR r8)
     JumpRelative,
     /// Busca dois bytes imediatos (little-endian) e salta para o endereço
@@ -1019,6 +1047,138 @@ pub fn execute(program: &MicroProgram, regs: &mut Registers, bus: &mut MemoryBus
                 regs.set_sp(sp);
                 bus.cpu_idle(4); // 4 ciclos adicionais
                 regs.set_pc(addr);
+            }
+            MicroAction::FetchImm16ToReg16 { idx } => {
+                // LD rr,d16: Carrega registrador 16-bit com valor imediato (12 ciclos: 4 fetch + 4 lo + 4 hi)
+                let pc = regs.get_pc();
+                let lo = bus.cpu_read(pc) as u16;
+                regs.set_pc(pc.wrapping_add(1));
+                let hi = bus.cpu_read(regs.get_pc()) as u16;
+                regs.set_pc(regs.get_pc().wrapping_add(1));
+                let val = (hi << 8) | lo;
+                match idx {
+                    0 => regs.set_bc(val),
+                    1 => regs.set_de(val),
+                    2 => regs.set_hl(val),
+                    3 => regs.set_sp(val),
+                    _ => {}
+                }
+                // Total: 12 ciclos (4 fetch já feito + 4 lo + 4 hi)
+            }
+            MicroAction::FetchImm16AndReadToA => {
+                // LD A,(a16): Lê de endereço absoluto para A (16 ciclos: 4 fetch + 4 lo + 4 hi + 4 read)
+                let pc = regs.get_pc();
+                let lo = bus.cpu_read(pc) as u16;
+                regs.set_pc(pc.wrapping_add(1));
+                let hi = bus.cpu_read(regs.get_pc()) as u16;
+                regs.set_pc(regs.get_pc().wrapping_add(1));
+                let addr = (hi << 8) | lo;
+                let val = bus.cpu_read(addr);
+                regs.set_a(val);
+                // Total: 16 ciclos
+            }
+            MicroAction::FetchImm16AndWriteA => {
+                // LD (a16),A: Escreve A em endereço absoluto (16 ciclos: 4 fetch + 4 lo + 4 hi + 4 write)
+                let pc = regs.get_pc();
+                let lo = bus.cpu_read(pc) as u16;
+                regs.set_pc(pc.wrapping_add(1));
+                let hi = bus.cpu_read(regs.get_pc()) as u16;
+                regs.set_pc(regs.get_pc().wrapping_add(1));
+                let addr = (hi << 8) | lo;
+                bus.cpu_write(addr, regs.get_a());
+                // Total: 16 ciclos
+            }
+            MicroAction::FetchImm16AndWriteSP => {
+                // LD (a16),SP: Escreve SP em endereço absoluto (20 ciclos: 4 fetch + 4 lo + 4 hi + 4 write lo + 4 write hi)
+                let pc = regs.get_pc();
+                let lo = bus.cpu_read(pc) as u16;
+                regs.set_pc(pc.wrapping_add(1));
+                let hi = bus.cpu_read(regs.get_pc()) as u16;
+                regs.set_pc(regs.get_pc().wrapping_add(1));
+                let addr = (hi << 8) | lo;
+                let sp = regs.get_sp();
+                bus.cpu_write(addr, (sp & 0xFF) as u8);
+                bus.cpu_write(addr.wrapping_add(1), (sp >> 8) as u8);
+                // Total: 20 ciclos
+            }
+            MicroAction::LoadSpFromHl => {
+                // LD SP,HL: Carrega SP com HL (8 ciclos: 4 fetch + 4 operação)
+                regs.set_sp(regs.get_hl());
+                bus.cpu_idle(4); // 8 ciclos totais
+            }
+            MicroAction::LoadHlFromSpPlusSignedImm8 => {
+                // LD HL,SP+r8: Carrega HL com SP + byte assinado (12 ciclos: 4 fetch + 4 ler offset + 4 calcular)
+                let pc = regs.get_pc();
+                let offset = bus.cpu_read(pc) as i8;
+                regs.set_pc(pc.wrapping_add(1));
+                let sp = regs.get_sp();
+                let result = sp.wrapping_add(offset as i16 as u16);
+                regs.set_flag_z(false);
+                regs.set_flag_n(false);
+                regs.set_flag_h(((sp & 0x0F) + ((offset as u8 as u16) & 0x0F)) > 0x0F);
+                regs.set_flag_c(((sp & 0xFF) + (offset as u8 as u16)) > 0xFF);
+                regs.set_hl(result);
+                bus.cpu_idle(4); // 12 ciclos totais
+            }
+            MicroAction::WriteAToFF00PlusImm8 => {
+                // LDH (n),A: Escreve A em 0xFF00 + offset (12 ciclos: 4 fetch + 4 ler offset + 4 write)
+                let pc = regs.get_pc();
+                let offset = bus.cpu_read(pc) as u16;
+                regs.set_pc(pc.wrapping_add(1));
+                bus.cpu_write(0xFF00 + offset, regs.get_a());
+                // Total: 12 ciclos
+            }
+            MicroAction::ReadFromFF00PlusImm8ToA => {
+                // LDH A,(n): Lê de 0xFF00 + offset para A (12 ciclos)
+                let pc = regs.get_pc();
+                let offset = bus.cpu_read(pc) as u16;
+                regs.set_pc(pc.wrapping_add(1));
+                let val = bus.cpu_read(0xFF00 + offset);
+                regs.set_a(val);
+                // Total: 12 ciclos
+            }
+            MicroAction::WriteAToFF00PlusC => {
+                // LD (C),A: Escreve A em 0xFF00 + C (8 ciclos: 4 fetch + 4 write)
+                let c = regs.get_c() as u16;
+                bus.cpu_write(0xFF00 + c, regs.get_a());
+                // Total: 8 ciclos
+            }
+            MicroAction::ReadFromFF00PlusCToA => {
+                // LD A,(C): Lê de 0xFF00 + C para A (8 ciclos)
+                let c = regs.get_c() as u16;
+                let val = bus.cpu_read(0xFF00 + c);
+                regs.set_a(val);
+                // Total: 8 ciclos
+            }
+            MicroAction::WriteAToHlAndIncrement => {
+                // LDI (HL),A: Escreve A em (HL) e incrementa HL (8 ciclos: 4 fetch + 4 write)
+                let hl = regs.get_hl();
+                bus.cpu_write(hl, regs.get_a());
+                regs.set_hl(hl.wrapping_add(1));
+                // Total: 8 ciclos
+            }
+            MicroAction::ReadFromHlToAAndIncrement => {
+                // LDI A,(HL): Lê de (HL) para A e incrementa HL (8 ciclos)
+                let hl = regs.get_hl();
+                let val = bus.cpu_read(hl);
+                regs.set_a(val);
+                regs.set_hl(hl.wrapping_add(1));
+                // Total: 8 ciclos
+            }
+            MicroAction::WriteAToHlAndDecrement => {
+                // LDD (HL),A: Escreve A em (HL) e decrementa HL (8 ciclos)
+                let hl = regs.get_hl();
+                bus.cpu_write(hl, regs.get_a());
+                regs.set_hl(hl.wrapping_sub(1));
+                // Total: 8 ciclos
+            }
+            MicroAction::ReadFromHlToAAndDecrement => {
+                // LDD A,(HL): Lê de (HL) para A e decrementa HL (8 ciclos)
+                let hl = regs.get_hl();
+                let val = bus.cpu_read(hl);
+                regs.set_a(val);
+                regs.set_hl(hl.wrapping_sub(1));
+                // Total: 8 ciclos
             }
         }
     }

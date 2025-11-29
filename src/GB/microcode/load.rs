@@ -98,6 +98,37 @@ const LD_A_H: MicroProgram = MicroProgram::new(0x7C, "LD A,H", &[MicroAction::Co
 const LD_A_L: MicroProgram = MicroProgram::new(0x7D, "LD A,L", &[MicroAction::CopyReg { dest: Reg8::A, src: Reg8::L }]);
 const LD_A_A: MicroProgram = MicroProgram::new(0x7F, "LD A,A", &[MicroAction::CopyReg { dest: Reg8::A, src: Reg8::A }]);
 
+// === LD rr,d16 ===
+const LD_BC_D16_PROGRAM: MicroProgram = MicroProgram::new(0x01, "LD BC,d16", &[MicroAction::FetchImm16ToReg16 { idx: 0 }]);
+const LD_DE_D16_PROGRAM: MicroProgram = MicroProgram::new(0x11, "LD DE,d16", &[MicroAction::FetchImm16ToReg16 { idx: 1 }]);
+const LD_HL_D16_PROGRAM: MicroProgram = MicroProgram::new(0x21, "LD HL,d16", &[MicroAction::FetchImm16ToReg16 { idx: 2 }]);
+const LD_SP_D16_PROGRAM: MicroProgram = MicroProgram::new(0x31, "LD SP,d16", &[MicroAction::FetchImm16ToReg16 { idx: 3 }]);
+
+// === LD A,(a16) e LD (a16),A ===
+const LD_A_A16_PROGRAM: MicroProgram = MicroProgram::new(0xFA, "LD A,(a16)", &[MicroAction::FetchImm16AndReadToA]);
+const LD_A16_A_PROGRAM: MicroProgram = MicroProgram::new(0xEA, "LD (a16),A", &[MicroAction::FetchImm16AndWriteA]);
+
+// === LD (a16),SP ===
+const LD_A16_SP_PROGRAM: MicroProgram = MicroProgram::new(0x08, "LD (a16),SP", &[MicroAction::FetchImm16AndWriteSP]);
+
+// === LD SP,HL ===
+const LD_SP_HL_PROGRAM: MicroProgram = MicroProgram::new(0xF9, "LD SP,HL", &[MicroAction::LoadSpFromHl]);
+
+// === LD HL,SP+r8 ===
+const LD_HL_SP_R8_PROGRAM: MicroProgram = MicroProgram::new(0xF8, "LD HL,SP+r8", &[MicroAction::LoadHlFromSpPlusSignedImm8]);
+
+// === LDH ===
+const LDH_N_A_PROGRAM: MicroProgram = MicroProgram::new(0xE0, "LDH (n),A", &[MicroAction::WriteAToFF00PlusImm8]);
+const LDH_A_N_PROGRAM: MicroProgram = MicroProgram::new(0xF0, "LDH A,(n)", &[MicroAction::ReadFromFF00PlusImm8ToA]);
+const LD_C_A_PROGRAM: MicroProgram = MicroProgram::new(0xE2, "LD (C),A", &[MicroAction::WriteAToFF00PlusC]);
+const LD_A_C_PROGRAM: MicroProgram = MicroProgram::new(0xF2, "LD A,(C)", &[MicroAction::ReadFromFF00PlusCToA]);
+
+// === LDI/LDD ===
+const LDI_HL_A_PROGRAM: MicroProgram = MicroProgram::new(0x22, "LDI (HL),A", &[MicroAction::WriteAToHlAndIncrement]);
+const LDI_A_HL_PROGRAM: MicroProgram = MicroProgram::new(0x2A, "LDI A,(HL)", &[MicroAction::ReadFromHlToAAndIncrement]);
+const LDD_HL_A_PROGRAM: MicroProgram = MicroProgram::new(0x32, "LDD (HL),A", &[MicroAction::WriteAToHlAndDecrement]);
+const LDD_A_HL_PROGRAM: MicroProgram = MicroProgram::new(0x3A, "LDD A,(HL)", &[MicroAction::ReadFromHlToAAndDecrement]);
+
 /// Retorna o microprograma de LOAD associado ao opcode, se existir.
 pub fn lookup(opcode: u8) -> Option<&'static MicroProgram> {
     match opcode {
@@ -153,6 +184,37 @@ pub fn lookup(opcode: u8) -> Option<&'static MicroProgram> {
         0x6C => Some(&LD_L_H), 0x6D => Some(&LD_L_L), 0x6F => Some(&LD_L_A),
         0x78 => Some(&LD_A_B), 0x79 => Some(&LD_A_C), 0x7A => Some(&LD_A_D), 0x7B => Some(&LD_A_E),
         0x7C => Some(&LD_A_H), 0x7D => Some(&LD_A_L), 0x7F => Some(&LD_A_A),
+
+        // LD rr,d16
+        0x01 => Some(&LD_BC_D16_PROGRAM),
+        0x11 => Some(&LD_DE_D16_PROGRAM),
+        0x21 => Some(&LD_HL_D16_PROGRAM),
+        0x31 => Some(&LD_SP_D16_PROGRAM),
+
+        // LD A,(a16) e LD (a16),A
+        0xFA => Some(&LD_A_A16_PROGRAM),
+        0xEA => Some(&LD_A16_A_PROGRAM),
+
+        // LD (a16),SP
+        0x08 => Some(&LD_A16_SP_PROGRAM),
+
+        // LD SP,HL
+        0xF9 => Some(&LD_SP_HL_PROGRAM),
+
+        // LD HL,SP+r8
+        0xF8 => Some(&LD_HL_SP_R8_PROGRAM),
+
+        // LDH
+        0xE0 => Some(&LDH_N_A_PROGRAM),
+        0xF0 => Some(&LDH_A_N_PROGRAM),
+        0xE2 => Some(&LD_C_A_PROGRAM),
+        0xF2 => Some(&LD_A_C_PROGRAM),
+
+        // LDI/LDD
+        0x22 => Some(&LDI_HL_A_PROGRAM),
+        0x2A => Some(&LDI_A_HL_PROGRAM),
+        0x32 => Some(&LDD_HL_A_PROGRAM),
+        0x3A => Some(&LDD_A_HL_PROGRAM),
 
         _ => None,
     }
