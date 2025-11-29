@@ -343,6 +343,19 @@ impl MemoryBus {
         self.ppu.step(1, &mut self.if_);
     }
 
+    /// Executa 1 T-cycle e verifica OAM bug se o valor está no range OAM
+    /// Usado para emulação sub-cycle do OAM bug
+    /// O check é feito ANTES do tick (no estado atual do PPU)
+    #[inline]
+    pub fn tick_with_oam_check(&mut self, reg_value: u16) {
+        // Verifica OAM bug no estado ATUAL do PPU (antes do tick)
+        if Self::is_oam_range(reg_value) {
+            self.ppu.trigger_oam_bug_write();
+        }
+        // Depois faz o tick
+        self.tick_single();
+    }
+
     pub fn tick(&mut self, cycles: u32) {
         self.step_oam_dma(cycles);
         // Tick todos os componentes ciclo a ciclo para timing preciso
@@ -401,6 +414,11 @@ impl MemoryBus {
         let taken = self.cpu_cycle_log;
         self.cpu_cycle_log = 0;
         taken
+    }
+
+    #[inline]
+    pub fn add_cpu_cycles(&mut self, cycles: u32) {
+        self.cpu_cycle_log = self.cpu_cycle_log.saturating_add(cycles);
     }
 
     // ========== OAM CORRUPTION BUG ==========

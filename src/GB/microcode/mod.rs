@@ -895,7 +895,7 @@ pub fn execute(program: &MicroProgram, regs: &mut Registers, bus: &mut MemoryBus
             }
             MicroAction::IncReg16 { idx } => {
                 // INC rr: Incrementa registrador 16-bit (BC, DE, HL, SP)
-                // 8 ciclos totais: 4 fetch + 4 operação
+                // 8 ciclos totais: 4 fetch + 4 operação (M-cycle 2)
                 // idx: 0=BC, 1=DE, 2=HL, 3=SP
                 let val = match idx {
                     0 => regs.get_bc(),
@@ -904,10 +904,13 @@ pub fn execute(program: &MicroProgram, regs: &mut Registers, bus: &mut MemoryBus
                     3 => regs.get_sp(),
                     _ => 0,
                 };
-                // OAM Bug acontece no início do M-cycle 2 (T4)
-                // O valor é colocado no barramento de endereços imediatamente
-                bus.oam_bug_inc_dec(val);
-                bus.cpu_idle(4);
+                // OAM Bug: sub-cycle - a IDU coloca valor no barramento durante todo M-cycle 2
+                // Verificamos em cada T-cycle para máxima precisão
+                bus.tick_with_oam_check(val); // T4
+                bus.tick_with_oam_check(val); // T5
+                bus.tick_with_oam_check(val); // T6
+                bus.tick_with_oam_check(val); // T7
+                bus.add_cpu_cycles(4);
                 let res = val.wrapping_add(1);
                 match idx {
                     0 => regs.set_bc(res),
@@ -919,7 +922,7 @@ pub fn execute(program: &MicroProgram, regs: &mut Registers, bus: &mut MemoryBus
             }
             MicroAction::DecReg16 { idx } => {
                 // DEC rr: Decrementa registrador 16-bit
-                // 8 ciclos totais: 4 fetch + 4 operação
+                // 8 ciclos totais: 4 fetch + 4 operação (M-cycle 2)
                 let val = match idx {
                     0 => regs.get_bc(),
                     1 => regs.get_de(),
@@ -927,9 +930,12 @@ pub fn execute(program: &MicroProgram, regs: &mut Registers, bus: &mut MemoryBus
                     3 => regs.get_sp(),
                     _ => 0,
                 };
-                // OAM Bug acontece no início do M-cycle 2 (T4)
-                bus.oam_bug_inc_dec(val);
-                bus.cpu_idle(4);
+                // OAM Bug: sub-cycle - a IDU coloca valor no barramento durante todo M-cycle 2
+                bus.tick_with_oam_check(val); // T4
+                bus.tick_with_oam_check(val); // T5
+                bus.tick_with_oam_check(val); // T6
+                bus.tick_with_oam_check(val); // T7
+                bus.add_cpu_cycles(4);
                 let res = val.wrapping_sub(1);
                 match idx {
                     0 => regs.set_bc(res),
