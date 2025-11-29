@@ -895,7 +895,7 @@ pub fn execute(program: &MicroProgram, regs: &mut Registers, bus: &mut MemoryBus
             }
             MicroAction::IncReg16 { idx } => {
                 // INC rr: Incrementa registrador 16-bit (BC, DE, HL, SP)
-                // 8 ciclos totais: 4 fetch + 4 operação (M-cycle 2)
+                // OAM Bug: triggera se BC/DE/HL está no range OAM
                 // idx: 0=BC, 1=DE, 2=HL, 3=SP
                 let val = match idx {
                     0 => regs.get_bc(),
@@ -904,13 +904,7 @@ pub fn execute(program: &MicroProgram, regs: &mut Registers, bus: &mut MemoryBus
                     3 => regs.get_sp(),
                     _ => 0,
                 };
-                // OAM Bug: sub-cycle - a IDU coloca valor no barramento durante todo M-cycle 2
-                // Verificamos em cada T-cycle para máxima precisão
-                bus.tick_with_oam_check(val); // T4
-                bus.tick_with_oam_check(val); // T5
-                bus.tick_with_oam_check(val); // T6
-                bus.tick_with_oam_check(val); // T7
-                bus.add_cpu_cycles(4);
+                bus.oam_bug_inc_dec(val);
                 let res = val.wrapping_add(1);
                 match idx {
                     0 => regs.set_bc(res),
@@ -919,10 +913,11 @@ pub fn execute(program: &MicroProgram, regs: &mut Registers, bus: &mut MemoryBus
                     3 => regs.set_sp(res),
                     _ => {}
                 }
+                bus.cpu_idle(4); // 8 ciclos totais: 4 fetch + 4 operação
             }
             MicroAction::DecReg16 { idx } => {
                 // DEC rr: Decrementa registrador 16-bit
-                // 8 ciclos totais: 4 fetch + 4 operação (M-cycle 2)
+                // OAM Bug: triggera se BC/DE/HL está no range OAM
                 let val = match idx {
                     0 => regs.get_bc(),
                     1 => regs.get_de(),
@@ -930,12 +925,7 @@ pub fn execute(program: &MicroProgram, regs: &mut Registers, bus: &mut MemoryBus
                     3 => regs.get_sp(),
                     _ => 0,
                 };
-                // OAM Bug: sub-cycle - a IDU coloca valor no barramento durante todo M-cycle 2
-                bus.tick_with_oam_check(val); // T4
-                bus.tick_with_oam_check(val); // T5
-                bus.tick_with_oam_check(val); // T6
-                bus.tick_with_oam_check(val); // T7
-                bus.add_cpu_cycles(4);
+                bus.oam_bug_inc_dec(val);
                 let res = val.wrapping_sub(1);
                 match idx {
                     0 => regs.set_bc(res),
@@ -944,6 +934,7 @@ pub fn execute(program: &MicroProgram, regs: &mut Registers, bus: &mut MemoryBus
                     3 => regs.set_sp(res),
                     _ => {}
                 }
+                bus.cpu_idle(4); // 8 ciclos totais
             }
             MicroAction::AddHlToReg16 { idx } => {
                 // ADD HL,rr: Adiciona registrador 16-bit a HL
@@ -1029,8 +1020,7 @@ pub fn execute(program: &MicroProgram, regs: &mut Registers, bus: &mut MemoryBus
                 }
             }
             MicroAction::CallAbsolute => {
-                // CALL a16: Empilha PC e salta (24 ciclos)
-                // TODO: OAM Bug para CALL (timing precisa ser ajustado)
+                // CALL a16: Empilha PC e salta (24 ciclos: 4 fetch + 4 lo + 4 hi + 4 push hi + 4 push lo + 4 idle)
                 let pc = regs.get_pc();
                 let lo = bus.cpu_read(pc) as u16;
                 regs.set_pc(pc.wrapping_add(1));
@@ -1045,7 +1035,7 @@ pub fn execute(program: &MicroProgram, regs: &mut Registers, bus: &mut MemoryBus
                 sp = sp.wrapping_sub(1);
                 bus.cpu_write(sp, (pc_to_push & 0xFF) as u8);
                 regs.set_sp(sp);
-                bus.cpu_idle(4);
+                bus.cpu_idle(4); // 4 ciclos adicionais
                 regs.set_pc(addr);
             }
             MicroAction::CallAbsoluteConditional { cond } => {
@@ -1064,19 +1054,20 @@ pub fn execute(program: &MicroProgram, regs: &mut Registers, bus: &mut MemoryBus
                 };
                 if cond_true {
                     let pc_to_push = regs.get_pc();
+                    // Empilha PC
                     let mut sp = regs.get_sp();
                     sp = sp.wrapping_sub(1);
                     bus.cpu_write(sp, (pc_to_push >> 8) as u8);
                     sp = sp.wrapping_sub(1);
                     bus.cpu_write(sp, (pc_to_push & 0xFF) as u8);
                     regs.set_sp(sp);
-                    bus.cpu_idle(4);
+                    bus.cpu_idle(4); // 4 ciclos adicionais
                     regs.set_pc(addr);
                 }
+                // Se condição falsa, 12 ciclos totais (4 fetch + 4 lo + 4 hi)
             }
             MicroAction::Return => {
-                // RET: Desempilha PC (16 ciclos)
-                // TODO: OAM Bug para RET (timing precisa ser ajustado)
+                // RET: Desempilha PC (16 ciclos: 4 fetch + 4 ler lo + 4 ler hi + 4 idle)
                 let mut sp = regs.get_sp();
                 let lo = bus.cpu_read(sp) as u16;
                 sp = sp.wrapping_add(1);
@@ -1084,7 +1075,7 @@ pub fn execute(program: &MicroProgram, regs: &mut Registers, bus: &mut MemoryBus
                 sp = sp.wrapping_add(1);
                 regs.set_sp(sp);
                 let addr = (hi << 8) | lo;
-                bus.cpu_idle(4);
+                bus.cpu_idle(4); // 4 ciclos adicionais
                 regs.set_pc(addr);
             }
             MicroAction::ReturnConditional { cond } => {
@@ -1103,22 +1094,23 @@ pub fn execute(program: &MicroProgram, regs: &mut Registers, bus: &mut MemoryBus
                     sp = sp.wrapping_add(1);
                     regs.set_sp(sp);
                     let addr = (hi << 8) | lo;
-                    bus.cpu_idle(4);
+                    bus.cpu_idle(4); // 4 ciclos adicionais
                     regs.set_pc(addr);
                 }
+                // Se condição falsa, 8 ciclos totais (4 fetch + 4 idle interno)
                 bus.cpu_idle(4);
             }
             MicroAction::Reset { addr } => {
                 // RST addr: Empilha PC e salta para endereço (16 ciclos)
-                // TODO: OAM Bug para RST (timing precisa ser ajustado)
                 let pc = regs.get_pc();
+                // Empilha PC
                 let mut sp = regs.get_sp();
                 sp = sp.wrapping_sub(1);
                 bus.cpu_write(sp, (pc >> 8) as u8);
                 sp = sp.wrapping_sub(1);
                 bus.cpu_write(sp, (pc & 0xFF) as u8);
                 regs.set_sp(sp);
-                bus.cpu_idle(4);
+                bus.cpu_idle(4); // 4 ciclos adicionais
                 regs.set_pc(addr);
             }
             MicroAction::FetchImm16ToReg16 { idx } => {
@@ -1224,42 +1216,38 @@ pub fn execute(program: &MicroProgram, regs: &mut Registers, bus: &mut MemoryBus
                 // Total: 8 ciclos
             }
             MicroAction::WriteAToHlAndIncrement => {
-                // LDI (HL),A: Escreve A em (HL) e incrementa HL (8 ciclos: 4 fetch + 4 write)
+                // LDI (HL),A: Escreve A em (HL) e incrementa HL (8 ciclos)
+                // OAM Bug: write + inc triggera corrupção
                 let hl = regs.get_hl();
-                // OAM Bug: write + inc triggera corrupção (se comporta como uma única write)
                 bus.oam_bug_write_inc_dec(hl);
                 bus.cpu_write(hl, regs.get_a());
                 regs.set_hl(hl.wrapping_add(1));
-                // Total: 8 ciclos
             }
             MicroAction::ReadFromHlToAAndIncrement => {
                 // LDI A,(HL): Lê de (HL) para A e incrementa HL (8 ciclos)
-                let hl = regs.get_hl();
                 // OAM Bug: read + inc triggera corrupção complexa
+                let hl = regs.get_hl();
                 bus.oam_bug_read_inc_dec(hl);
                 let val = bus.cpu_read(hl);
                 regs.set_a(val);
                 regs.set_hl(hl.wrapping_add(1));
-                // Total: 8 ciclos
             }
             MicroAction::WriteAToHlAndDecrement => {
                 // LDD (HL),A: Escreve A em (HL) e decrementa HL (8 ciclos)
+                // OAM Bug: write + dec triggera corrupção
                 let hl = regs.get_hl();
-                // OAM Bug: write + dec triggera corrupção (se comporta como uma única write)
                 bus.oam_bug_write_inc_dec(hl);
                 bus.cpu_write(hl, regs.get_a());
                 regs.set_hl(hl.wrapping_sub(1));
-                // Total: 8 ciclos
             }
             MicroAction::ReadFromHlToAAndDecrement => {
                 // LDD A,(HL): Lê de (HL) para A e decrementa HL (8 ciclos)
-                let hl = regs.get_hl();
                 // OAM Bug: read + dec triggera corrupção complexa
+                let hl = regs.get_hl();
                 bus.oam_bug_read_inc_dec(hl);
                 let val = bus.cpu_read(hl);
                 regs.set_a(val);
                 regs.set_hl(hl.wrapping_sub(1));
-                // Total: 8 ciclos
             }
             // === CB-prefix operations ===
             // Nota: CB prefix é tratado de forma especial no CPU.rs antes de chamar execute()

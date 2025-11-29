@@ -325,83 +325,46 @@ impl MemoryBus {
         }
     }
 
-    /// Executa exatamente 1 T-cycle de todos os componentes
-    /// Isso permite verificação cycle-accurate do estado do hardware
-    #[inline]
-    pub fn tick_single(&mut self) {
-        // Timer - 1 ciclo
-        let (new_tima, new_if) = self
-            .timer
-            .tick(1, self.tima, self.tma, self.tac, self.if_);
-        self.tima = new_tima;
-        self.if_ = new_if;
-
-        // APU - 1 ciclo
-        self.apu.tick(self.timer.get_div_counter());
-
-        // PPU - 1 ciclo (cycle-accurate!)
-        self.ppu.step(1, &mut self.if_);
-    }
-
-    /// Executa 1 T-cycle e verifica OAM bug se o valor está no range OAM
-    /// Usado para emulação sub-cycle do OAM bug
-    /// O check é feito ANTES do tick (no estado atual do PPU)
-    #[inline]
-    pub fn tick_with_oam_check(&mut self, reg_value: u16) {
-        // Verifica OAM bug no estado ATUAL do PPU (antes do tick)
-        if Self::is_oam_range(reg_value) {
-            self.ppu.trigger_oam_bug_write();
-        }
-        // Depois faz o tick
-        self.tick_single();
-    }
-
     pub fn tick(&mut self, cycles: u32) {
         self.step_oam_dma(cycles);
-        // Tick todos os componentes ciclo a ciclo para timing preciso
+        // Tick timer e APU ciclo a ciclo para sincronização correta
         for _ in 0..cycles {
-            self.tick_single();
+            let (new_tima, new_if) = self
+                .timer
+                .tick(1, self.tima, self.tma, self.tac, self.if_);
+            self.tima = new_tima;
+            self.if_ = new_if;
+            // APU precisa do div_counter para sincronizar frame sequencer
+            self.apu.tick(self.timer.get_div_counter());
         }
+        self.ppu.step(cycles, &mut self.if_);
     }
 
-    /// Leitura de memória pela CPU - 4 T-cycles (1 M-cycle)
-    /// Tick é feito ANTES da leitura para sincronizar estado do hardware
+    #[inline]
+    fn consume_cpu_cycles(&mut self, cycles: u32) {
+        if cycles == 0 {
+            return;
+        }
+        self.tick(cycles);
+        self.cpu_cycle_log = self.cpu_cycle_log.saturating_add(cycles);
+    }
+
     #[inline]
     pub fn cpu_read(&mut self, address: u16) -> u8 {
-        // T0: Endereço no barramento, tick 1 ciclo
-        self.tick_single();
-        // T1-T2: Ciclos internos
-        self.tick_single();
-        self.tick_single();
-        // T3: Leitura do dado
         let value = self.read(address);
-        self.tick_single();
-        self.cpu_cycle_log = self.cpu_cycle_log.saturating_add(4);
+        self.consume_cpu_cycles(4);
         value
     }
 
-    /// Escrita de memória pela CPU - 4 T-cycles (1 M-cycle)
-    /// Tick é feito ANTES da escrita para sincronizar estado do hardware
     #[inline]
     pub fn cpu_write(&mut self, address: u16, value: u8) {
-        // T0: Endereço no barramento, tick 1 ciclo
-        self.tick_single();
-        // T1-T2: Ciclos internos
-        self.tick_single();
-        self.tick_single();
-        // T3: Escrita do dado
         self.write(address, value);
-        self.tick_single();
-        self.cpu_cycle_log = self.cpu_cycle_log.saturating_add(4);
+        self.consume_cpu_cycles(4);
     }
 
-    /// Ciclos de idle da CPU (sem acesso à memória)
     #[inline]
     pub fn cpu_idle(&mut self, cycles: u32) {
-        for _ in 0..cycles {
-            self.tick_single();
-        }
-        self.cpu_cycle_log = self.cpu_cycle_log.saturating_add(cycles);
+        self.consume_cpu_cycles(cycles);
     }
 
     #[inline]
@@ -416,13 +379,7 @@ impl MemoryBus {
         taken
     }
 
-    #[inline]
-    pub fn add_cpu_cycles(&mut self, cycles: u32) {
-        self.cpu_cycle_log = self.cpu_cycle_log.saturating_add(cycles);
-    }
-
     // ========== OAM CORRUPTION BUG ==========
-    // Referência: https://gbdev.io/pandocs/OAM_Corruption_Bug.html
 
     /// Verifica se um endereço está no range OAM ($FE00-$FEFF)
     #[inline]
@@ -431,8 +388,6 @@ impl MemoryBus {
     }
 
     /// Chamado quando INC rr ou DEC rr é executado com rr no range OAM
-    /// Isso triggera uma write corruption se o PPU está em mode 2
-    /// O timing agora é cycle-accurate!
     pub fn oam_bug_inc_dec(&mut self, reg_value: u16) {
         if Self::is_oam_range(reg_value) {
             self.ppu.trigger_oam_bug_write();
@@ -440,7 +395,6 @@ impl MemoryBus {
     }
 
     /// Chamado quando LD A,[HLI] ou LD A,[HLD] é executado com HL no range OAM
-    /// Isso triggera tanto a read normal quanto o bug do INC/DEC
     pub fn oam_bug_read_inc_dec(&mut self, hl_value: u16) {
         if Self::is_oam_range(hl_value) {
             self.ppu.trigger_oam_bug_read_inc_dec();
@@ -448,10 +402,8 @@ impl MemoryBus {
     }
 
     /// Chamado quando LD [HLI],A ou LD [HLD],A é executado com HL no range OAM
-    /// Isso triggera write normal + bug do INC/DEC (efetivamente uma write)
     pub fn oam_bug_write_inc_dec(&mut self, hl_value: u16) {
         if Self::is_oam_range(hl_value) {
-            // Write + INC/DEC se comporta como uma única write
             self.ppu.trigger_oam_bug_write();
         }
     }
