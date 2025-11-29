@@ -112,8 +112,6 @@ const DUTY_TABLE: [[u8; 8]; 4] = [
     [1, 0, 0, 1, 1, 1, 1, 1],
 ];
 
-// Sample rate padrão usado no frame sequencer
-const SAMPLE_RATE: u32 = 44100;
 
 impl APU {
     pub fn new() -> Self {
