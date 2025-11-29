@@ -979,7 +979,7 @@ pub fn execute(program: &MicroProgram, regs: &mut Registers, bus: &mut MemoryBus
             }
             MicroAction::PushReg16 { idx } => {
                 // PUSH rr: Empilha registrador 16-bit (16 ciclos)
-                // OAM Bug: 4 vezes (efetivamente 3) - dois writes + dois glitched writes do dec SP
+                // OAM Bug: glitched writes do dec SP
                 // idx: 0=BC, 1=DE, 2=HL, 3=AF
                 let val = match idx {
                     0 => regs.get_bc(),
@@ -994,28 +994,28 @@ pub fn execute(program: &MicroProgram, regs: &mut Registers, bus: &mut MemoryBus
                 bus.oam_bug_inc_dec(sp);
                 sp = sp.wrapping_sub(1);
                 bus.cpu_idle(2);
-                // Write byte alto (write normal)
+                // Write byte alto
                 bus.cpu_write(sp, (val >> 8) as u8);
                 // Segundo decremento de SP (glitched write)
                 bus.oam_bug_inc_dec(sp);
                 sp = sp.wrapping_sub(1);
-                // Write byte baixo (write normal)
+                // Write byte baixo
                 bus.cpu_write(sp, (val & 0xFF) as u8);
                 regs.set_sp(sp);
             }
             MicroAction::PopReg16 { idx } => {
                 // POP rr: Desempilha para registrador 16-bit (12 ciclos)
-                // OAM Bug: 3 vezes - read, glitched write do inc SP, read, glitched write
+                // OAM Bug: glitched writes do inc SP
                 // idx: 0=BC, 1=DE, 2=HL, 3=AF
                 let mut sp = regs.get_sp();
                 // Read byte baixo
                 let lo = bus.cpu_read(sp) as u16;
-                // Primeiro incremento de SP (glitched write se SP estava em OAM)
+                // Primeiro incremento de SP (glitched write)
                 bus.oam_bug_inc_dec(sp);
                 sp = sp.wrapping_add(1);
-                // Read byte alto (pode triggerar bug se SP agora está em OAM)
+                // Read byte alto
                 let hi = bus.cpu_read(sp) as u16;
-                // Segundo incremento de SP (também pode triggerar bug)
+                // Segundo incremento de SP (glitched write)
                 bus.oam_bug_inc_dec(sp);
                 sp = sp.wrapping_add(1);
                 regs.set_sp(sp);
