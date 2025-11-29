@@ -174,6 +174,13 @@ impl CPU {
             }
         }
 
+        // EI habilita IME no INÍCIO da próxima instrução (antes do fetch)
+        // Ref: https://gbdev.io/pandocs/Interrupts.html
+        if self.ime_enable_next {
+            self.ime = true;
+            self.ime_enable_next = false;
+        }
+
         // FETCH
         self.bus.reset_cpu_cycle_log();
         let opcode = self.fetch_next();
@@ -253,12 +260,6 @@ impl CPU {
                 self.ime = true;
             }
             _ => {}
-        }
-
-        // EI habilita IME após a próxima instrução
-        if self.ime_enable_next {
-            self.ime = true;
-            self.ime_enable_next = false;
         }
 
         // Atende interrupções se habilitadas (IME) e pendentes (IF & IE)
