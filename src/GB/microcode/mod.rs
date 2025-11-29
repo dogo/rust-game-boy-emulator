@@ -974,7 +974,8 @@ pub fn execute(program: &MicroProgram, regs: &mut Registers, bus: &mut MemoryBus
                 bus.cpu_idle(4); // 16 ciclos totais: 4 fetch + 4 ler imm + 4 calcular + 4 idle
             }
             MicroAction::PushReg16 { idx } => {
-                // PUSH rr: Empilha registrador 16-bit (16 ciclos: 4 fetch + 4 decrement SP + write hi + 4 decrement SP + write lo + 4 idle)
+                // PUSH rr: Empilha registrador 16-bit (16 ciclos)
+                // OAM Bug: 4 vezes (efetivamente 3) - dois writes + dois glitched writes do dec SP
                 // idx: 0=BC, 1=DE, 2=HL, 3=AF
                 let val = match idx {
                     0 => regs.get_bc(),
@@ -984,20 +985,34 @@ pub fn execute(program: &MicroProgram, regs: &mut Registers, bus: &mut MemoryBus
                     _ => 0,
                 };
                 let mut sp = regs.get_sp();
+                // Primeiro decremento de SP (glitched write)
+                bus.cpu_idle(2);
+                bus.oam_bug_inc_dec(sp);
                 sp = sp.wrapping_sub(1);
-                bus.cpu_write(sp, (val >> 8) as u8); // Byte alto
+                bus.cpu_idle(2);
+                // Write byte alto (write normal)
+                bus.cpu_write(sp, (val >> 8) as u8);
+                // Segundo decremento de SP (glitched write)
+                bus.oam_bug_inc_dec(sp);
                 sp = sp.wrapping_sub(1);
-                bus.cpu_write(sp, (val & 0xFF) as u8); // Byte baixo
+                // Write byte baixo (write normal)
+                bus.cpu_write(sp, (val & 0xFF) as u8);
                 regs.set_sp(sp);
-                bus.cpu_idle(4); // 4 ciclos adicionais para completar
             }
             MicroAction::PopReg16 { idx } => {
-                // POP rr: Desempilha para registrador 16-bit (12 ciclos: 4 fetch + 4 ler lo + 4 ler hi)
+                // POP rr: Desempilha para registrador 16-bit (12 ciclos)
+                // OAM Bug: 3 vezes - read, glitched write do inc SP, read, glitched write
                 // idx: 0=BC, 1=DE, 2=HL, 3=AF
                 let mut sp = regs.get_sp();
+                // Read byte baixo
                 let lo = bus.cpu_read(sp) as u16;
+                // Primeiro incremento de SP (glitched write se SP estava em OAM)
+                bus.oam_bug_inc_dec(sp);
                 sp = sp.wrapping_add(1);
+                // Read byte alto (pode triggerar bug se SP agora está em OAM)
                 let hi = bus.cpu_read(sp) as u16;
+                // Segundo incremento de SP (também pode triggerar bug)
+                bus.oam_bug_inc_dec(sp);
                 sp = sp.wrapping_add(1);
                 regs.set_sp(sp);
                 let val = (hi << 8) | lo;
@@ -1008,7 +1023,6 @@ pub fn execute(program: &MicroProgram, regs: &mut Registers, bus: &mut MemoryBus
                     3 => regs.set_af(val & 0xFFF0), // Lower 4 bits of F always 0
                     _ => {}
                 }
-                // Total: 12 ciclos (4 fetch já feito + 4 ler lo + 4 ler hi)
             }
             MicroAction::CallAbsolute => {
                 // CALL a16: Empilha PC e salta (24 ciclos: 4 fetch + 4 lo + 4 hi + 4 push hi + 4 push lo + 4 idle)
