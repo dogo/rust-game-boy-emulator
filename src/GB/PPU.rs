@@ -686,9 +686,9 @@ impl PPU {
     /// Verifica também mode_clock para garantir timing preciso
     pub fn is_oam_scan_mode(&self) -> bool {
         let lcd_on = (self.lcdc & 0x80) != 0;
-        // Mode 2 dura exatamente 80 T-cycles (20 M-cycles)
-        // Só retorna true se realmente estamos no modo 2 E dentro dos 80 ciclos
-        lcd_on && self.mode == 2 && self.mode_clock < 80
+        // Mode 2 dura 80 T-cycles, mas o OAM bug só acontece nas primeiras 76
+        // Os últimos 4 ciclos são de transição para o modo 3
+        lcd_on && self.mode == 2 && self.mode_clock < 76
     }
 
     /// Retorna a row atual sendo acessada pelo PPU durante mode 2
