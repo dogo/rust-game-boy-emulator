@@ -6,6 +6,7 @@ mod logic;
 mod jump;
 mod arithmetic;
 mod stack;
+pub mod cb_prefix;
 
 use crate::GB::bus::MemoryBus;
 use crate::GB::registers::Registers;
@@ -201,6 +202,53 @@ pub enum MicroAction {
     XorAToHlValue,
     /// Lê de (HL) e executa CP A,valor
     CompareAToHlValue,
+    // === CB-prefix operations ===
+    /// CB-prefix: Busca o opcode CB e lê o segundo byte
+    FetchCbOpcode,
+    /// CB: RLC (Rotate Left Circular) em registrador
+    ExecuteRLC { reg: Reg8 },
+    /// CB: RLC (HL)
+    ExecuteRLCHl,
+    /// CB: RRC (Rotate Right Circular) em registrador
+    ExecuteRRC { reg: Reg8 },
+    /// CB: RRC (HL)
+    ExecuteRRCHl,
+    /// CB: RL (Rotate Left through Carry) em registrador
+    ExecuteRL { reg: Reg8 },
+    /// CB: RL (HL)
+    ExecuteRLHl,
+    /// CB: RR (Rotate Right through Carry) em registrador
+    ExecuteRR { reg: Reg8 },
+    /// CB: RR (HL)
+    ExecuteRRHl,
+    /// CB: SLA (Shift Left Arithmetic) em registrador
+    ExecuteSLA { reg: Reg8 },
+    /// CB: SLA (HL)
+    ExecuteSLAHl,
+    /// CB: SRA (Shift Right Arithmetic) em registrador
+    ExecuteSRA { reg: Reg8 },
+    /// CB: SRA (HL)
+    ExecuteSRAHl,
+    /// CB: SWAP em registrador
+    ExecuteSWAP { reg: Reg8 },
+    /// CB: SWAP (HL)
+    ExecuteSWAPHl,
+    /// CB: SRL (Shift Right Logical) em registrador
+    ExecuteSRL { reg: Reg8 },
+    /// CB: SRL (HL)
+    ExecuteSRLHl,
+    /// CB: BIT b,r (testa bit)
+    TestBit { bit: u8, reg: Reg8 },
+    /// CB: BIT b,(HL) (testa bit)
+    TestBitHl { bit: u8 },
+    /// CB: RES b,r (reseta bit)
+    ResetBit { bit: u8, reg: Reg8 },
+    /// CB: RES b,(HL) (reseta bit)
+    ResetBitHl { bit: u8 },
+    /// CB: SET b,r (seta bit)
+    SetBit { bit: u8, reg: Reg8 },
+    /// CB: SET b,(HL) (seta bit)
+    SetBitHl { bit: u8 },
 }
 
 /// Fonte de endereço para operações de memória
@@ -1180,6 +1228,257 @@ pub fn execute(program: &MicroProgram, regs: &mut Registers, bus: &mut MemoryBus
                 regs.set_hl(hl.wrapping_sub(1));
                 // Total: 8 ciclos
             }
+            // === CB-prefix operations ===
+            MicroAction::FetchCbOpcode => {
+                // Não usado diretamente - CB é tratado no CPU.rs
+                unreachable!("FetchCbOpcode should not be executed directly");
+            }
+            MicroAction::ExecuteRLC { reg } => {
+                // RLC r: Rotate Left Circular (8 ciclos para registrador)
+                let val = reg.read(regs);
+                let bit7 = (val >> 7) & 1;
+                let result = (val << 1) | bit7;
+                reg.write(regs, result);
+                regs.set_flag_z(result == 0);
+                regs.set_flag_n(false);
+                regs.set_flag_h(false);
+                regs.set_flag_c(bit7 == 1);
+                bus.cpu_idle(4); // 8 ciclos totais (4 fetch CB + 4 fetch opcode já contados)
+            }
+            MicroAction::ExecuteRLCHl => {
+                // RLC (HL): Rotate Left Circular em memória (16 ciclos)
+                let addr = regs.get_hl();
+                let val = bus.cpu_read(addr);
+                let bit7 = (val >> 7) & 1;
+                let result = (val << 1) | bit7;
+                bus.cpu_write(addr, result);
+                regs.set_flag_z(result == 0);
+                regs.set_flag_n(false);
+                regs.set_flag_h(false);
+                regs.set_flag_c(bit7 == 1);
+                // Total: 16 ciclos (4 fetch CB + 4 fetch opcode + 4 read + 4 write)
+            }
+            MicroAction::ExecuteRRC { reg } => {
+                // RRC r: Rotate Right Circular
+                let val = reg.read(regs);
+                let bit0 = val & 1;
+                let result = (val >> 1) | (bit0 << 7);
+                reg.write(regs, result);
+                regs.set_flag_z(result == 0);
+                regs.set_flag_n(false);
+                regs.set_flag_h(false);
+                regs.set_flag_c(bit0 == 1);
+                bus.cpu_idle(4);
+            }
+            MicroAction::ExecuteRRCHl => {
+                // RRC (HL)
+                let addr = regs.get_hl();
+                let val = bus.cpu_read(addr);
+                let bit0 = val & 1;
+                let result = (val >> 1) | (bit0 << 7);
+                bus.cpu_write(addr, result);
+                regs.set_flag_z(result == 0);
+                regs.set_flag_n(false);
+                regs.set_flag_h(false);
+                regs.set_flag_c(bit0 == 1);
+            }
+            MicroAction::ExecuteRL { reg } => {
+                // RL r: Rotate Left through Carry
+                let val = reg.read(regs);
+                let old_carry = if regs.get_flag_c() { 1 } else { 0 };
+                let bit7 = (val >> 7) & 1;
+                let result = (val << 1) | old_carry;
+                reg.write(regs, result);
+                regs.set_flag_z(result == 0);
+                regs.set_flag_n(false);
+                regs.set_flag_h(false);
+                regs.set_flag_c(bit7 == 1);
+                bus.cpu_idle(4);
+            }
+            MicroAction::ExecuteRLHl => {
+                // RL (HL)
+                let addr = regs.get_hl();
+                let val = bus.cpu_read(addr);
+                let old_carry = if regs.get_flag_c() { 1 } else { 0 };
+                let bit7 = (val >> 7) & 1;
+                let result = (val << 1) | old_carry;
+                bus.cpu_write(addr, result);
+                regs.set_flag_z(result == 0);
+                regs.set_flag_n(false);
+                regs.set_flag_h(false);
+                regs.set_flag_c(bit7 == 1);
+            }
+            MicroAction::ExecuteRR { reg } => {
+                // RR r: Rotate Right through Carry
+                let val = reg.read(regs);
+                let old_carry = if regs.get_flag_c() { 1 } else { 0 };
+                let bit0 = val & 1;
+                let result = (val >> 1) | (old_carry << 7);
+                reg.write(regs, result);
+                regs.set_flag_z(result == 0);
+                regs.set_flag_n(false);
+                regs.set_flag_h(false);
+                regs.set_flag_c(bit0 == 1);
+                bus.cpu_idle(4);
+            }
+            MicroAction::ExecuteRRHl => {
+                // RR (HL)
+                let addr = regs.get_hl();
+                let val = bus.cpu_read(addr);
+                let old_carry = if regs.get_flag_c() { 1 } else { 0 };
+                let bit0 = val & 1;
+                let result = (val >> 1) | (old_carry << 7);
+                bus.cpu_write(addr, result);
+                regs.set_flag_z(result == 0);
+                regs.set_flag_n(false);
+                regs.set_flag_h(false);
+                regs.set_flag_c(bit0 == 1);
+            }
+            MicroAction::ExecuteSLA { reg } => {
+                // SLA r: Shift Left Arithmetic
+                let val = reg.read(regs);
+                let bit7 = (val >> 7) & 1;
+                let result = val << 1;
+                reg.write(regs, result);
+                regs.set_flag_z(result == 0);
+                regs.set_flag_n(false);
+                regs.set_flag_h(false);
+                regs.set_flag_c(bit7 == 1);
+                bus.cpu_idle(4);
+            }
+            MicroAction::ExecuteSLAHl => {
+                // SLA (HL)
+                let addr = regs.get_hl();
+                let val = bus.cpu_read(addr);
+                let bit7 = (val >> 7) & 1;
+                let result = val << 1;
+                bus.cpu_write(addr, result);
+                regs.set_flag_z(result == 0);
+                regs.set_flag_n(false);
+                regs.set_flag_h(false);
+                regs.set_flag_c(bit7 == 1);
+            }
+            MicroAction::ExecuteSRA { reg } => {
+                // SRA r: Shift Right Arithmetic (preserva MSB)
+                let val = reg.read(regs);
+                let bit0 = val & 1;
+                let bit7 = val & 0x80;
+                let result = (val >> 1) | bit7;
+                reg.write(regs, result);
+                regs.set_flag_z(result == 0);
+                regs.set_flag_n(false);
+                regs.set_flag_h(false);
+                regs.set_flag_c(bit0 == 1);
+                bus.cpu_idle(4);
+            }
+            MicroAction::ExecuteSRAHl => {
+                // SRA (HL)
+                let addr = regs.get_hl();
+                let val = bus.cpu_read(addr);
+                let bit0 = val & 1;
+                let bit7 = val & 0x80;
+                let result = (val >> 1) | bit7;
+                bus.cpu_write(addr, result);
+                regs.set_flag_z(result == 0);
+                regs.set_flag_n(false);
+                regs.set_flag_h(false);
+                regs.set_flag_c(bit0 == 1);
+            }
+            MicroAction::ExecuteSWAP { reg } => {
+                // SWAP r: Troca nibbles
+                let val = reg.read(regs);
+                let result = ((val & 0x0F) << 4) | ((val & 0xF0) >> 4);
+                reg.write(regs, result);
+                regs.set_flag_z(result == 0);
+                regs.set_flag_n(false);
+                regs.set_flag_h(false);
+                regs.set_flag_c(false);
+                bus.cpu_idle(4);
+            }
+            MicroAction::ExecuteSWAPHl => {
+                // SWAP (HL)
+                let addr = regs.get_hl();
+                let val = bus.cpu_read(addr);
+                let result = ((val & 0x0F) << 4) | ((val & 0xF0) >> 4);
+                bus.cpu_write(addr, result);
+                regs.set_flag_z(result == 0);
+                regs.set_flag_n(false);
+                regs.set_flag_h(false);
+                regs.set_flag_c(false);
+            }
+            MicroAction::ExecuteSRL { reg } => {
+                // SRL r: Shift Right Logical (zero fill)
+                let val = reg.read(regs);
+                let bit0 = val & 1;
+                let result = val >> 1;
+                reg.write(regs, result);
+                regs.set_flag_z(result == 0);
+                regs.set_flag_n(false);
+                regs.set_flag_h(false);
+                regs.set_flag_c(bit0 == 1);
+                bus.cpu_idle(4);
+            }
+            MicroAction::ExecuteSRLHl => {
+                // SRL (HL)
+                let addr = regs.get_hl();
+                let val = bus.cpu_read(addr);
+                let bit0 = val & 1;
+                let result = val >> 1;
+                bus.cpu_write(addr, result);
+                regs.set_flag_z(result == 0);
+                regs.set_flag_n(false);
+                regs.set_flag_h(false);
+                regs.set_flag_c(bit0 == 1);
+            }
+            MicroAction::TestBit { bit, reg } => {
+                // BIT b,r: Testa bit (12 ciclos para registrador, mas BIT é 8)
+                let val = reg.read(regs);
+                let bit_set = (val & (1 << bit)) != 0;
+                regs.set_flag_z(!bit_set);
+                regs.set_flag_n(false);
+                regs.set_flag_h(true);
+                bus.cpu_idle(4); // 8 ciclos totais
+            }
+            MicroAction::TestBitHl { bit } => {
+                // BIT b,(HL): Testa bit em memória (12 ciclos)
+                let addr = regs.get_hl();
+                let val = bus.cpu_read(addr);
+                let bit_set = (val & (1 << bit)) != 0;
+                regs.set_flag_z(!bit_set);
+                regs.set_flag_n(false);
+                regs.set_flag_h(true);
+                // Total: 12 ciclos (4 fetch CB + 4 fetch opcode + 4 read)
+            }
+            MicroAction::ResetBit { bit, reg } => {
+                // RES b,r: Reseta bit
+                let val = reg.read(regs);
+                let result = val & !(1 << bit);
+                reg.write(regs, result);
+                bus.cpu_idle(4); // 8 ciclos totais
+            }
+            MicroAction::ResetBitHl { bit } => {
+                // RES b,(HL): Reseta bit em memória (16 ciclos)
+                let addr = regs.get_hl();
+                let val = bus.cpu_read(addr);
+                let result = val & !(1 << bit);
+                bus.cpu_write(addr, result);
+                // Total: 16 ciclos
+            }
+            MicroAction::SetBit { bit, reg } => {
+                // SET b,r: Seta bit
+                let val = reg.read(regs);
+                let result = val | (1 << bit);
+                reg.write(regs, result);
+                bus.cpu_idle(4); // 8 ciclos totais
+            }
+            MicroAction::SetBitHl { bit } => {
+                // SET b,(HL): Seta bit em memória (16 ciclos)
+                let addr = regs.get_hl();
+                let val = bus.cpu_read(addr);
+                let result = val | (1 << bit);
+                bus.cpu_write(addr, result);
+                // Total: 16 ciclos
+            }
         }
     }
 }
@@ -1193,4 +1492,5 @@ pub fn lookup(opcode: u8) -> Option<&'static MicroProgram> {
         .or_else(|| jump::lookup(opcode))
         .or_else(|| arithmetic::lookup(opcode))
         .or_else(|| stack::lookup(opcode))
+        .or_else(|| cb_prefix::lookup(opcode))
 }

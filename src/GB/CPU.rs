@@ -183,7 +183,26 @@ impl CPU {
         let mut unknown = instr.name == "UNKNOWN";
         let cycles: u64;
 
-        if let Some(program) = microcode::lookup(opcode) {
+        // Trata CB-prefix de forma especial
+        if opcode == 0xCB {
+            // Busca o segundo byte (opcode CB real)
+            let cb_opcode = self.bus.cpu_read(self.registers.get_pc());
+            self.registers.set_pc(self.registers.get_pc().wrapping_add(1));
+
+            if let Some(program) = microcode::cb_prefix::lookup(cb_opcode) {
+                microcode::execute(program, &mut self.registers, &mut self.bus);
+                cycles = self.bus.take_cpu_cycle_log() as u64;
+                unknown = false;
+            } else {
+                // Fallback para implementação antiga
+                let exec_cycles = (instr.execute)(&instr, &mut self.registers, &mut self.bus);
+                let consumed = self.bus.take_cpu_cycle_log();
+                if exec_cycles as u32 > consumed {
+                    self.bus.tick(exec_cycles as u32 - consumed);
+                }
+                cycles = exec_cycles;
+            }
+        } else if let Some(program) = microcode::lookup(opcode) {
             microcode::execute(program, &mut self.registers, &mut self.bus);
             cycles = self.bus.take_cpu_cycle_log() as u64;
             unknown = false;

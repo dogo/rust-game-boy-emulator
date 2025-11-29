@@ -95,12 +95,11 @@ pub fn decode(opcode: u8) -> Instruction {
         // DAA (ajuste decimal) - MIGRADO para microcode::arithmetic
         0x27 => arithmetic::daa(opcode),
 
-        // Jumps - PARCIALMENTE MIGRADO
-        // JP a16, JP (HL), JR r8 - agora em microcode::jump (estes não são mais executados)
+        // Jumps - MIGRADO para microcode::jump (mantidos como fallback)
+        // JP a16, JP (HL), JR r8, JP cc,a16, JR cc,r8 - todos em microcode::jump
         0xC3 => jump::jp_a16(opcode),
         0xE9 => jump::jp_hl(opcode),
         0x18 => jump::jr_r8(opcode),
-        // Ainda faltam migrar:
         0xC2 | 0xCA | 0xD2 | 0xDA => jump::jp_cc_a16(opcode),
         0x20 | 0x28 | 0x30 | 0x38 => jump::jr_cc_r8(opcode),
 
@@ -120,7 +119,7 @@ pub fn decode(opcode: u8) -> Instruction {
         0x76 => control::halt(opcode),
         0x10 => control::stop(opcode),
 
-        // CB prefix
+        // CB prefix - MIGRADO para microcode::cb_prefix (mantido como fallback)
         0xCB => cb_prefix::cb(opcode),
 
         // Opcodes ilegais/não documentados - tratados como NOP
