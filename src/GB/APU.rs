@@ -759,6 +759,13 @@ impl APU {
                 if old_enable && !self.sound_enable {
                     self.disable_all_channels();
                 }
+
+                // Se o som foi habilitado, reseta o frame sequencer e divisores
+                // O frame sequencer começa em 7, então o primeiro step será 0
+                if !old_enable && self.sound_enable {
+                    self.frame_sequencer = 7;
+                    self.frame_sequencer_timer = 8192; // Próximo step em 8192 ciclos
+                }
             }
 
             // Wave RAM - HARDWARE QUIRK: write bloqueado durante playback
@@ -890,38 +897,40 @@ impl APU {
         self.ch3_enabled = false;
         self.ch4_enabled = false;
 
-        // Limpar registradores de todos os canais (manter wave RAM conforme hardware)
+        // Limpar registradores de todos os canais
+        // NÃO limpa: length timers (NRx1) e wave RAM - quirk do hardware DMG
 
-        // Canal 1
+        // Canal 1 (mantém ch1_length_timer)
         self.ch1_sweep_period = 0;
         self.ch1_sweep_direction = false;
         self.ch1_sweep_shift = 0;
         self.ch1_wave_duty = 0;
-        self.ch1_length_timer = 0;
+        // self.ch1_length_timer = 0; // NR11 bits 0-5 preservado
         self.ch1_envelope_initial = 0;
         self.ch1_envelope_direction = false;
         self.ch1_envelope_period = 0;
         self.ch1_frequency = 0;
         self.ch1_length_enable = false;
 
-        // Canal 2
+        // Canal 2 (mantém ch2_length_timer)
         self.ch2_wave_duty = 0;
-        self.ch2_length_timer = 0;
+        // self.ch2_length_timer = 0; // NR21 bits 0-5 preservado
         self.ch2_envelope_initial = 0;
         self.ch2_envelope_direction = false;
         self.ch2_envelope_period = 0;
         self.ch2_frequency = 0;
         self.ch2_length_enable = false;
 
-        // Canal 3 (NÃO limpa wave RAM - quirk do hardware)
+        // Canal 3 (mantém ch3_length_timer e wave RAM)
         self.ch3_dac_enable = false;
-        self.ch3_length_timer = 0;
+        // self.ch3_length_timer = 0; // NR31 preservado
         self.ch3_output_level = 0;
         self.ch3_frequency = 0;
         self.ch3_length_enable = false;
 
-        // Canal 4
-        self.ch4_length_timer = 0;
+        // Canal 4 (mantém ch4_length_timer e ch4_length_counter)
+        // self.ch4_length_timer = 0; // NR41 bits 0-5 preservado
+        // ch4_length_counter também preservado
         self.ch4_envelope_initial = 0;
         self.ch4_envelope_direction = false;
         self.ch4_envelope_period = 0;
