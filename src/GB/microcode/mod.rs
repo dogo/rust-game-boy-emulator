@@ -203,8 +203,7 @@ pub enum MicroAction {
     /// Lê de (HL) e executa CP A,valor
     CompareAToHlValue,
     // === CB-prefix operations ===
-    /// CB-prefix: Busca o opcode CB e lê o segundo byte
-    FetchCbOpcode,
+    // Nota: CB prefix é tratado de forma especial no CPU.rs antes de chamar execute()
     /// CB: RLC (Rotate Left Circular) em registrador
     ExecuteRLC { reg: Reg8 },
     /// CB: RLC (HL)
@@ -1229,10 +1228,7 @@ pub fn execute(program: &MicroProgram, regs: &mut Registers, bus: &mut MemoryBus
                 // Total: 8 ciclos
             }
             // === CB-prefix operations ===
-            MicroAction::FetchCbOpcode => {
-                // Não usado diretamente - CB é tratado no CPU.rs
-                unreachable!("FetchCbOpcode should not be executed directly");
-            }
+            // Nota: CB prefix é tratado de forma especial no CPU.rs antes de chamar execute()
             MicroAction::ExecuteRLC { reg } => {
                 // RLC r: Rotate Left Circular (8 ciclos para registrador)
                 let val = reg.read(regs);
