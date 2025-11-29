@@ -66,7 +66,7 @@ pub struct APU {
 
     // === Estado interno ===
     frame_sequencer: u8, // Frame sequencer (0-7) para length/envelope/sweep
-    frame_sequencer_timer: u32, // Timer para frame sequencer de 512Hz
+    frame_sequencer_timer: u32, // Timer para frame sequencer (dispara a cada 8192 ciclos = 512Hz)
 
     // Estados dos canais
     ch1_volume: u8,            // Volume atual do canal 1
@@ -213,8 +213,15 @@ impl APU {
             return;
         }
 
-        // Apenas timers de frequência dos canais (4MHz -> 1MHz)
-        // Frame sequencer agora é controlado apenas por generate_sample()
+        // Frame sequencer: 512Hz = 4194304 / 8192 ciclos
+        // Incrementa a cada ciclo, dispara a cada 8192 ciclos
+        self.frame_sequencer_timer += 1;
+        if self.frame_sequencer_timer >= 8192 {
+            self.frame_sequencer_timer = 0;
+            self.step_frame_sequencer();
+        }
+
+        // Timers de frequência dos canais (4MHz -> 1MHz)
         self.frequency_divider += 1;
         if self.frequency_divider >= 4 {
             self.frequency_divider = 0;
@@ -262,14 +269,9 @@ impl APU {
         }
     }
 
-    /// Gera sample de áudio (chamado a 44.1kHz) com frame sequencer de 512Hz
+    /// Gera sample de áudio (chamado a 44.1kHz)
     pub fn generate_sample(&mut self) -> (f32, f32) {
-        // Frame sequencer: 512Hz = SAMPLE_RATE / 86.132...
-        self.frame_sequencer_timer += 512; // Acumula 512 por sample
-        while self.frame_sequencer_timer >= SAMPLE_RATE {
-            self.frame_sequencer_timer -= SAMPLE_RATE; // Remove quando overflow
-            self.step_frame_sequencer(); // Executa frame sequencer a 512Hz
-        }
+        // Frame sequencer agora é executado em tick() baseado em ciclos de CPU
 
         if !self.sound_enable {
             return (0.0, 0.0);
