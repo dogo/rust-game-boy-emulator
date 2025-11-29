@@ -895,6 +895,7 @@ pub fn execute(program: &MicroProgram, regs: &mut Registers, bus: &mut MemoryBus
             }
             MicroAction::IncReg16 { idx } => {
                 // INC rr: Incrementa registrador 16-bit (BC, DE, HL, SP)
+                // 8 ciclos totais: 4 fetch + 4 operação
                 // idx: 0=BC, 1=DE, 2=HL, 3=SP
                 let val = match idx {
                     0 => regs.get_bc(),
@@ -903,8 +904,11 @@ pub fn execute(program: &MicroProgram, regs: &mut Registers, bus: &mut MemoryBus
                     3 => regs.get_sp(),
                     _ => 0,
                 };
-                // OAM Bug: se valor está no range OAM, triggera corrupção
+                // OAM Bug acontece durante o M-cycle 2 (T4-T7)
+                // Tick 2 ciclos primeiro, depois check, depois mais 2 ciclos
+                bus.cpu_idle(2);
                 bus.oam_bug_inc_dec(val);
+                bus.cpu_idle(2);
                 let res = val.wrapping_add(1);
                 match idx {
                     0 => regs.set_bc(res),
@@ -913,10 +917,10 @@ pub fn execute(program: &MicroProgram, regs: &mut Registers, bus: &mut MemoryBus
                     3 => regs.set_sp(res),
                     _ => {}
                 }
-                bus.cpu_idle(4); // 8 ciclos totais: 4 fetch + 4 operação
             }
             MicroAction::DecReg16 { idx } => {
                 // DEC rr: Decrementa registrador 16-bit
+                // 8 ciclos totais: 4 fetch + 4 operação
                 let val = match idx {
                     0 => regs.get_bc(),
                     1 => regs.get_de(),
@@ -924,8 +928,10 @@ pub fn execute(program: &MicroProgram, regs: &mut Registers, bus: &mut MemoryBus
                     3 => regs.get_sp(),
                     _ => 0,
                 };
-                // OAM Bug: se valor está no range OAM, triggera corrupção
+                // OAM Bug acontece durante o M-cycle 2 (T4-T7)
+                bus.cpu_idle(2);
                 bus.oam_bug_inc_dec(val);
+                bus.cpu_idle(2);
                 let res = val.wrapping_sub(1);
                 match idx {
                     0 => regs.set_bc(res),
@@ -934,7 +940,6 @@ pub fn execute(program: &MicroProgram, regs: &mut Registers, bus: &mut MemoryBus
                     3 => regs.set_sp(res),
                     _ => {}
                 }
-                bus.cpu_idle(4); // 8 ciclos totais
             }
             MicroAction::AddHlToReg16 { idx } => {
                 // ADD HL,rr: Adiciona registrador 16-bit a HL

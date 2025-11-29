@@ -79,9 +79,10 @@ impl PPU {
         }
 
         // LCD desligado -> ligado
+        // Há um pequeno atraso antes do modo 2 começar (4 ciclos)
         if !was_on && now_on {
             self.mode = 2;
-            self.mode_clock = 0;
+            self.mode_clock = 4; // Atraso de inicialização
             self.ly = 0;
             self.frame_ready = false;
             self.wy_trigger = false;
@@ -682,9 +683,12 @@ impl PPU {
     // Referência: https://gbdev.io/pandocs/OAM_Corruption_Bug.html
 
     /// Retorna true se o PPU está no modo 2 (OAM scan) e LCD está ligado
+    /// Verifica também mode_clock para garantir timing preciso
     pub fn is_oam_scan_mode(&self) -> bool {
         let lcd_on = (self.lcdc & 0x80) != 0;
-        lcd_on && self.mode == 2
+        // Mode 2 dura exatamente 80 T-cycles (20 M-cycles)
+        // Só retorna true se realmente estamos no modo 2 E dentro dos 80 ciclos
+        lcd_on && self.mode == 2 && self.mode_clock < 80
     }
 
     /// Retorna a row atual sendo acessada pelo PPU durante mode 2
