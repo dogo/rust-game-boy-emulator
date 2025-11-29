@@ -260,7 +260,7 @@ impl APU {
 
     /// Gera sample de áudio (chamado a 44.1kHz)
     pub fn generate_sample(&mut self) -> (f32, f32) {
-        // Frame sequencer agora é executado em tick() baseado em ciclos de CPU
+        // Frame sequencer é clockado via div_event() baseado no DIV counter
 
         if !self.sound_enable {
             return (0.0, 0.0);

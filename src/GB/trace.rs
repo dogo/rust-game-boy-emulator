@@ -122,9 +122,6 @@ pub fn trace_timer_interrupt(tma: u8) {
 // === Loop principal de trace ===
 
 pub fn run_with_trace(cpu: &mut CPU, max_steps: usize) {
-    // Ativa trace de operações da RAM (MBC, timer, joypad)
-    // Trace flag removed: MemoryBus does not have trace_enabled
-
     for step in 0..max_steps {
         let pc = cpu.registers.get_pc();
         let opcode = cpu.bus.read(pc); // peek
