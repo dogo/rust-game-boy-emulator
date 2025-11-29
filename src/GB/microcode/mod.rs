@@ -903,6 +903,8 @@ pub fn execute(program: &MicroProgram, regs: &mut Registers, bus: &mut MemoryBus
                     3 => regs.get_sp(),
                     _ => 0,
                 };
+                // OAM Bug: se valor está no range OAM, triggera corrupção
+                bus.oam_bug_inc_dec(val);
                 let res = val.wrapping_add(1);
                 match idx {
                     0 => regs.set_bc(res),
@@ -922,6 +924,8 @@ pub fn execute(program: &MicroProgram, regs: &mut Registers, bus: &mut MemoryBus
                     3 => regs.get_sp(),
                     _ => 0,
                 };
+                // OAM Bug: se valor está no range OAM, triggera corrupção
+                bus.oam_bug_inc_dec(val);
                 let res = val.wrapping_sub(1);
                 match idx {
                     0 => regs.set_bc(res),
@@ -1200,6 +1204,8 @@ pub fn execute(program: &MicroProgram, regs: &mut Registers, bus: &mut MemoryBus
             MicroAction::WriteAToHlAndIncrement => {
                 // LDI (HL),A: Escreve A em (HL) e incrementa HL (8 ciclos: 4 fetch + 4 write)
                 let hl = regs.get_hl();
+                // OAM Bug: write + inc triggera corrupção (se comporta como uma única write)
+                bus.oam_bug_write_inc_dec(hl);
                 bus.cpu_write(hl, regs.get_a());
                 regs.set_hl(hl.wrapping_add(1));
                 // Total: 8 ciclos
@@ -1207,6 +1213,8 @@ pub fn execute(program: &MicroProgram, regs: &mut Registers, bus: &mut MemoryBus
             MicroAction::ReadFromHlToAAndIncrement => {
                 // LDI A,(HL): Lê de (HL) para A e incrementa HL (8 ciclos)
                 let hl = regs.get_hl();
+                // OAM Bug: read + inc triggera corrupção complexa
+                bus.oam_bug_read_inc_dec(hl);
                 let val = bus.cpu_read(hl);
                 regs.set_a(val);
                 regs.set_hl(hl.wrapping_add(1));
@@ -1215,6 +1223,8 @@ pub fn execute(program: &MicroProgram, regs: &mut Registers, bus: &mut MemoryBus
             MicroAction::WriteAToHlAndDecrement => {
                 // LDD (HL),A: Escreve A em (HL) e decrementa HL (8 ciclos)
                 let hl = regs.get_hl();
+                // OAM Bug: write + dec triggera corrupção (se comporta como uma única write)
+                bus.oam_bug_write_inc_dec(hl);
                 bus.cpu_write(hl, regs.get_a());
                 regs.set_hl(hl.wrapping_sub(1));
                 // Total: 8 ciclos
@@ -1222,6 +1232,8 @@ pub fn execute(program: &MicroProgram, regs: &mut Registers, bus: &mut MemoryBus
             MicroAction::ReadFromHlToAAndDecrement => {
                 // LDD A,(HL): Lê de (HL) para A e decrementa HL (8 ciclos)
                 let hl = regs.get_hl();
+                // OAM Bug: read + dec triggera corrupção complexa
+                bus.oam_bug_read_inc_dec(hl);
                 let val = bus.cpu_read(hl);
                 regs.set_a(val);
                 regs.set_hl(hl.wrapping_sub(1));

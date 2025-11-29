@@ -674,7 +674,162 @@ impl PPU {
         if lyc_inte && now_eq && !self.ly_eq_lyc_prev {
             *iflags |= 0x02; // LCD STAT
         }
-        // Atualiza “estado anterior”
+        // Atualiza "estado anterior"
         self.ly_eq_lyc_prev = now_eq;
+    }
+
+    // ========== OAM CORRUPTION BUG (DMG only) ==========
+    // Referência: https://gbdev.io/pandocs/OAM_Corruption_Bug.html
+
+    /// Retorna true se o PPU está no modo 2 (OAM scan) e LCD está ligado
+    pub fn is_oam_scan_mode(&self) -> bool {
+        let lcd_on = (self.lcdc & 0x80) != 0;
+        lcd_on && self.mode == 2
+    }
+
+    /// Retorna a row atual sendo acessada pelo PPU durante mode 2
+    /// A OAM tem 20 rows de 8 bytes cada, acessadas uma por M-cycle
+    fn get_current_oam_row(&self) -> usize {
+        // Durante mode 2, o PPU lê uma row por M-cycle (4 T-cycles)
+        // mode_clock conta T-cycles, então dividimos por 4
+        let m_cycles = self.mode_clock / 4;
+        // Limita a 19 (índice máximo das 20 rows)
+        (m_cycles as usize).min(19)
+    }
+
+    /// Lê uma palavra de 16 bits da OAM (little-endian)
+    fn read_oam_word(&self, row: usize, word_index: usize) -> u16 {
+        let addr = row * 8 + word_index * 2;
+        if addr + 1 >= self.oam.len() {
+            return 0;
+        }
+        u16::from_le_bytes([self.oam[addr], self.oam[addr + 1]])
+    }
+
+    /// Escreve uma palavra de 16 bits na OAM (little-endian)
+    fn write_oam_word(&mut self, row: usize, word_index: usize, value: u16) {
+        let addr = row * 8 + word_index * 2;
+        if addr + 1 >= self.oam.len() {
+            return;
+        }
+        let bytes = value.to_le_bytes();
+        self.oam[addr] = bytes[0];
+        self.oam[addr + 1] = bytes[1];
+    }
+
+    /// Aplica write corruption na row atual
+    /// Padrão: primeira palavra = ((a ^ c) & (b ^ c)) ^ c
+    /// Últimas 3 palavras copiadas da row anterior
+    fn apply_write_corruption(&mut self, row: usize) {
+        if row == 0 {
+            return; // Row 0 (objects 0-1) não é afetada
+        }
+
+        let prev_row = row - 1;
+
+        // a = primeira palavra da row atual (valor original)
+        let a = self.read_oam_word(row, 0);
+        // b = primeira palavra da row anterior
+        let b = self.read_oam_word(prev_row, 0);
+        // c = terceira palavra da row anterior
+        let c = self.read_oam_word(prev_row, 2);
+
+        // Corrupção: ((a ^ c) & (b ^ c)) ^ c
+        let corrupted = ((a ^ c) & (b ^ c)) ^ c;
+        self.write_oam_word(row, 0, corrupted);
+
+        // Copia as últimas 3 palavras da row anterior
+        for word_idx in 1..4 {
+            let value = self.read_oam_word(prev_row, word_idx);
+            self.write_oam_word(row, word_idx, value);
+        }
+    }
+
+    /// Aplica read corruption na row atual
+    /// Padrão: primeira palavra = b | (a & c)
+    fn apply_read_corruption(&mut self, row: usize) {
+        if row == 0 {
+            return; // Row 0 não é afetada
+        }
+
+        let prev_row = row - 1;
+
+        // a = primeira palavra da row atual
+        let a = self.read_oam_word(row, 0);
+        // b = primeira palavra da row anterior
+        let b = self.read_oam_word(prev_row, 0);
+        // c = terceira palavra da row anterior
+        let c = self.read_oam_word(prev_row, 2);
+
+        // Corrupção: b | (a & c)
+        let corrupted = b | (a & c);
+        self.write_oam_word(row, 0, corrupted);
+
+        // Copia as últimas 3 palavras da row anterior
+        for word_idx in 1..4 {
+            let value = self.read_oam_word(prev_row, word_idx);
+            self.write_oam_word(row, word_idx, value);
+        }
+    }
+
+    /// Aplica a corrupção complexa de read durante increment/decrement
+    fn apply_read_inc_dec_corruption(&mut self, row: usize) {
+        // Esta corrupção não acontece nas primeiras 4 rows nem na última
+        if row >= 4 && row < 19 {
+            let prev_row = row - 1;
+            let prev_prev_row = row - 2;
+
+            // a = primeira palavra duas rows antes
+            let a = self.read_oam_word(prev_prev_row, 0);
+            // b = primeira palavra da row anterior (será corrompida)
+            let b = self.read_oam_word(prev_row, 0);
+            // c = primeira palavra da row atual
+            let c = self.read_oam_word(row, 0);
+            // d = terceira palavra da row anterior
+            let d = self.read_oam_word(prev_row, 2);
+
+            // Corrupção: (b & (a | c | d)) | (a & c & d)
+            let corrupted = (b & (a | c | d)) | (a & c & d);
+            self.write_oam_word(prev_row, 0, corrupted);
+
+            // Copia o conteúdo da row anterior (após corrupção) para:
+            // - row atual
+            // - duas rows antes
+            for word_idx in 0..4 {
+                let value = self.read_oam_word(prev_row, word_idx);
+                self.write_oam_word(row, word_idx, value);
+                self.write_oam_word(prev_prev_row, word_idx, value);
+            }
+        }
+
+        // Após a corrupção acima (ou se não ocorreu), aplica read corruption normal
+        self.apply_read_corruption(row);
+    }
+
+    /// Função pública para triggerar OAM bug por write (INC/DEC de registrador)
+    pub fn trigger_oam_bug_write(&mut self) {
+        if !self.is_oam_scan_mode() {
+            return;
+        }
+        let row = self.get_current_oam_row();
+        self.apply_write_corruption(row);
+    }
+
+    /// Função pública para triggerar OAM bug por read
+    pub fn trigger_oam_bug_read(&mut self) {
+        if !self.is_oam_scan_mode() {
+            return;
+        }
+        let row = self.get_current_oam_row();
+        self.apply_read_corruption(row);
+    }
+
+    /// Função pública para triggerar OAM bug por read durante INC/DEC
+    pub fn trigger_oam_bug_read_inc_dec(&mut self) {
+        if !self.is_oam_scan_mode() {
+            return;
+        }
+        let row = self.get_current_oam_row();
+        self.apply_read_inc_dec_corruption(row);
     }
 }

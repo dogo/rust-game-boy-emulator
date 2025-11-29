@@ -378,4 +378,43 @@ impl MemoryBus {
         self.cpu_cycle_log = 0;
         taken
     }
+
+    // ========== OAM CORRUPTION BUG ==========
+    // Referência: https://gbdev.io/pandocs/OAM_Corruption_Bug.html
+
+    /// Verifica se um endereço está no range OAM ($FE00-$FEFF)
+    #[inline]
+    fn is_oam_range(addr: u16) -> bool {
+        (0xFE00..=0xFEFF).contains(&addr)
+    }
+
+    /// Chamado quando INC rr ou DEC rr é executado com rr no range OAM
+    /// Isso triggera uma write corruption se o PPU está em mode 2
+    /// NOTA: Desabilitado - requer timing cycle-accurate para funcionar corretamente
+    #[allow(unused_variables)]
+    pub fn oam_bug_inc_dec(&mut self, reg_value: u16) {
+        // OAM bug desabilitado por enquanto - timing não é preciso o suficiente
+        // if Self::is_oam_range(reg_value) {
+        //     self.ppu.trigger_oam_bug_write();
+        // }
+    }
+
+    /// Chamado quando LD A,[HLI] ou LD A,[HLD] é executado com HL no range OAM
+    /// Isso triggera tanto a read normal quanto o bug do INC/DEC
+    pub fn oam_bug_read_inc_dec(&mut self, hl_value: u16) {
+        // Temporariamente desabilitado para debug
+        if Self::is_oam_range(hl_value) && false {
+            self.ppu.trigger_oam_bug_read_inc_dec();
+        }
+    }
+
+    /// Chamado quando LD [HLI],A ou LD [HLD],A é executado com HL no range OAM
+    /// Isso triggera write normal + bug do INC/DEC (efetivamente uma write)
+    pub fn oam_bug_write_inc_dec(&mut self, hl_value: u16) {
+        // Temporariamente desabilitado para debug
+        if Self::is_oam_range(hl_value) && false {
+            // Write + INC/DEC se comporta como uma única write
+            self.ppu.trigger_oam_bug_write();
+        }
+    }
 }
