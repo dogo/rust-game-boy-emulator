@@ -74,7 +74,7 @@ impl RAM {
                 let tma = self.memory[0xFF06];
                 let tac = self.memory[0xFF07];
                 let if_reg = self.memory[0xFF0F];
-                let (new_tima, new_if) = self.timer.reset_div(tima, tma, tac, if_reg);
+                let (new_tima, new_if, _events) = self.timer.reset_div(tima, tma, tac, if_reg, false);
                 self.memory[0xFF05] = new_tima;
                 self.memory[0xFF0F] = new_if;
                 self.memory[0xFF04] = 0;

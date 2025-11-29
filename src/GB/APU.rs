@@ -66,7 +66,6 @@ pub struct APU {
 
     // === Estado interno ===
     frame_sequencer: u8, // Frame sequencer (0-7) para length/envelope/sweep
-    frame_sequencer_div_bit: bool, // Estado anterior do bit 13 do DIV para edge detection
 
     // Estados dos canais
     ch1_volume: u8,            // Volume atual do canal 1
@@ -97,8 +96,6 @@ pub struct APU {
     ch3_frequency_timer: u32, // Timer de frequência do canal 3
     ch4_frequency_timer: u32, // Timer de frequência do canal 4
 
-    // Divisor de frequência para timers (4MHz -> 1MHz)
-    frequency_divider: u8,
 }
 
 const DUTY_TABLE: [[u8; 8]; 4] = [
@@ -176,7 +173,6 @@ impl APU {
 
             // Estado interno
             frame_sequencer: 0,
-            frame_sequencer_div_bit: false,
             ch1_volume: 0,
             ch1_frequency_shadow: 0,
             ch1_wave_position: 0,
@@ -202,35 +198,31 @@ impl APU {
             ch3_frequency_timer: 0,
             ch4_frequency_timer: 0,
 
-            // Divisor de frequência
-            frequency_divider: 0,
         }
     }
 
-    /// Clock APU - chamado a cada ciclo de CPU (4MHz)
-    /// div_counter é o contador interno de 16 bits do DIV
-    pub fn tick(&mut self, div_counter: u16) {
-        // Frame sequencer é clockado pelo bit 12 do DIV (falling edge)
-        // Bit 12 alterna a cada 4096 ciclos, falling edge a cada 8192 = 512Hz
-        let div_bit = (div_counter >> 12) & 1 != 0;
-        if self.frame_sequencer_div_bit && !div_bit {
-            // Falling edge do bit 13 - clocka frame sequencer
-            // Frame sequencer roda SEMPRE, mesmo com APU desligada
-            // Os length counters continuam decrementando
-            self.step_frame_sequencer();
-        }
-        self.frame_sequencer_div_bit = div_bit;
+    /// Evento do DIV - chamado em falling edge do bit 12 (ou 13 em double speed)
+    /// Isso clocka o frame sequencer a 512Hz
+    pub fn div_event(&mut self) {
+        // Frame sequencer roda SEMPRE, mesmo com APU desligada
+        self.step_frame_sequencer();
+    }
 
+    /// Evento secundário do DIV - chamado em rising edge do bit 12
+    /// Usado para delayed envelope tick
+    pub fn div_secondary_event(&mut self) {
+        // Delayed envelope tick (se houver)
+        // TODO: implementar se necessário
+    }
+
+    /// Clock APU - chamado a cada M-cycle para atualizar timers de frequência
+    pub fn tick_m_cycle(&mut self) {
         if !self.sound_enable {
             return;
         }
 
-        // Timers de frequência dos canais (4MHz -> 1MHz)
-        self.frequency_divider += 1;
-        if self.frequency_divider >= 4 {
-            self.frequency_divider = 0;
-            self.update_channel_timers();
-        }
+        // Timers de frequência dos canais
+        self.update_channel_timers();
     }
 
     /// Retorna true se o próximo step do frame sequencer vai clockar length counters

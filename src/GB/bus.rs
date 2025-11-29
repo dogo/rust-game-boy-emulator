@@ -250,11 +250,18 @@ impl MemoryBus {
             0xFF01 => self.serial_sb = value,
             0xFF02 => self.serial_sc = value & 0b1000_0001,
             0xFF04 => {
-                let (new_tima, new_if) = self
+                let (new_tima, new_if, events) = self
                     .timer
-                    .reset_div(self.tima, self.tma, self.tac, self.if_);
+                    .reset_div(self.tima, self.tma, self.tac, self.if_, false);
                 self.tima = new_tima;
                 self.if_ = new_if;
+                // Processa eventos do APU
+                if events.apu_div_event {
+                    self.apu.div_event();
+                }
+                if events.apu_div_secondary {
+                    self.apu.div_secondary_event();
+                }
             }
             0xFF05 => {
                 self.timer.notify_tima_write();
@@ -327,16 +334,25 @@ impl MemoryBus {
 
     pub fn tick(&mut self, cycles: u32) {
         self.step_oam_dma(cycles);
-        // Tick timer e APU ciclo a ciclo para sincronização correta
-        for _ in 0..cycles {
-            let (new_tima, new_if) = self
-                .timer
-                .tick(1, self.tima, self.tma, self.tac, self.if_);
-            self.tima = new_tima;
-            self.if_ = new_if;
-            // APU precisa do div_counter para sincronizar frame sequencer
-            self.apu.tick(self.timer.get_div_counter());
+
+        // Timer T-cycle por T-cycle para detectar eventos corretamente
+        let (new_tima, new_if, events) = self
+            .timer
+            .tick(cycles, self.tima, self.tma, self.tac, self.if_, false);
+        self.tima = new_tima;
+        self.if_ = new_if;
+
+        // Processa eventos do DIV para o APU (frame sequencer 512Hz)
+        if events.apu_div_event {
+            self.apu.div_event();
         }
+        if events.apu_div_secondary {
+            self.apu.div_secondary_event();
+        }
+
+        // APU channel timers - uma vez por tick (equivalente a M-cycle)
+        self.apu.tick_m_cycle();
+
         self.ppu.step(cycles, &mut self.if_);
     }
 
