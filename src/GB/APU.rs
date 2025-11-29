@@ -229,6 +229,13 @@ impl APU {
         }
     }
 
+    /// Retorna true se o próximo step do frame sequencer vai clockar length counters
+    /// Isso acontece nos steps 0, 2, 4, 6 (steps pares)
+    fn is_length_clock_next(&self) -> bool {
+        // Length é clockado em steps pares (0, 2, 4, 6)
+        self.frame_sequencer % 2 == 0
+    }
+
     /// Frame sequencer (512Hz)
     fn step_frame_sequencer(&mut self) {
         self.frame_sequencer = (self.frame_sequencer + 1) % 8;
@@ -571,7 +578,18 @@ impl APU {
             0xFF14 => {
                 // NR14: Frequency high + control
                 self.ch1_frequency = (self.ch1_frequency & 0x00FF) | (((value & 0x07) as u16) << 8);
-                self.ch1_length_enable = (value & 0x40) != 0;
+
+                // Extra length clocking: habilitando length na primeira metade do frame sequencer
+                let new_length_enable = (value & 0x40) != 0;
+                if new_length_enable && !self.ch1_length_enable && self.is_length_clock_next() {
+                    if self.ch1_length_counter > 0 {
+                        self.ch1_length_counter -= 1;
+                        if self.ch1_length_counter == 0 && (value & 0x80) == 0 {
+                            self.ch1_enabled = false;
+                        }
+                    }
+                }
+                self.ch1_length_enable = new_length_enable;
 
                 if (value & 0x80) != 0 {
                     self.trigger_channel1();
@@ -603,7 +621,18 @@ impl APU {
             0xFF19 => {
                 // NR24: Frequency high + control
                 self.ch2_frequency = (self.ch2_frequency & 0x00FF) | (((value & 0x07) as u16) << 8);
-                self.ch2_length_enable = (value & 0x40) != 0;
+
+                // Extra length clocking
+                let new_length_enable = (value & 0x40) != 0;
+                if new_length_enable && !self.ch2_length_enable && self.is_length_clock_next() {
+                    if self.ch2_length_counter > 0 {
+                        self.ch2_length_counter -= 1;
+                        if self.ch2_length_counter == 0 && (value & 0x80) == 0 {
+                            self.ch2_enabled = false;
+                        }
+                    }
+                }
+                self.ch2_length_enable = new_length_enable;
 
                 if (value & 0x80) != 0 {
                     self.trigger_channel2();
@@ -634,7 +663,18 @@ impl APU {
             0xFF1E => {
                 // NR34: Frequency high + control
                 self.ch3_frequency = (self.ch3_frequency & 0x00FF) | (((value & 0x07) as u16) << 8);
-                self.ch3_length_enable = (value & 0x40) != 0;
+
+                // Extra length clocking
+                let new_length_enable = (value & 0x40) != 0;
+                if new_length_enable && !self.ch3_length_enable && self.is_length_clock_next() {
+                    if self.ch3_length_counter > 0 {
+                        self.ch3_length_counter -= 1;
+                        if self.ch3_length_counter == 0 && (value & 0x80) == 0 {
+                            self.ch3_enabled = false;
+                        }
+                    }
+                }
+                self.ch3_length_enable = new_length_enable;
 
                 if (value & 0x80) != 0 {
                     self.trigger_channel3();
@@ -666,7 +706,17 @@ impl APU {
             }
             0xFF23 => {
                 // NR44: Control
-                self.ch4_length_enable = (value & 0x40) != 0;
+                // Extra length clocking
+                let new_length_enable = (value & 0x40) != 0;
+                if new_length_enable && !self.ch4_length_enable && self.is_length_clock_next() {
+                    if self.ch4_length_counter > 0 {
+                        self.ch4_length_counter -= 1;
+                        if self.ch4_length_counter == 0 && (value & 0x80) == 0 {
+                            self.ch4_enabled = false;
+                        }
+                    }
+                }
+                self.ch4_length_enable = new_length_enable;
 
                 if (value & 0x80) != 0 {
                     self.trigger_channel4();
@@ -719,9 +769,16 @@ impl APU {
     /// Trigger do canal 1
     fn trigger_channel1(&mut self) {
         self.ch1_enabled = true;
+
+        // Se length counter era 0, seta para máximo
+        // E se length_enable + primeira metade do frame seq, faz clock extra
         if self.ch1_length_counter == 0 {
             self.ch1_length_counter = 64;
+            if self.ch1_length_enable && self.is_length_clock_next() {
+                self.ch1_length_counter -= 1;
+            }
         }
+
         self.ch1_envelope_timer = self.ch1_envelope_period;
         self.ch1_volume = self.ch1_envelope_initial;
 
@@ -743,9 +800,14 @@ impl APU {
     /// Trigger do canal 2
     fn trigger_channel2(&mut self) {
         self.ch2_enabled = true;
+
         if self.ch2_length_counter == 0 {
             self.ch2_length_counter = 64;
+            if self.ch2_length_enable && self.is_length_clock_next() {
+                self.ch2_length_counter -= 1;
+            }
         }
+
         self.ch2_envelope_timer = self.ch2_envelope_period;
         self.ch2_volume = self.ch2_envelope_initial;
 
@@ -762,8 +824,12 @@ impl APU {
     /// Trigger do canal 3
     fn trigger_channel3(&mut self) {
         self.ch3_enabled = self.ch3_dac_enable;
+
         if self.ch3_length_counter == 0 {
             self.ch3_length_counter = 256;
+            if self.ch3_length_enable && self.is_length_clock_next() {
+                self.ch3_length_counter -= 1;
+            }
         }
 
         // Inicializar timer de frequência
@@ -774,8 +840,12 @@ impl APU {
     /// Trigger do canal 4
     fn trigger_channel4(&mut self) {
         self.ch4_enabled = true;
+
         if self.ch4_length_counter == 0 {
             self.ch4_length_counter = 64;
+            if self.ch4_length_enable && self.is_length_clock_next() {
+                self.ch4_length_counter -= 1;
+            }
         }
         self.ch4_envelope_timer = self.ch4_envelope_period;
         self.ch4_volume = self.ch4_envelope_initial;
