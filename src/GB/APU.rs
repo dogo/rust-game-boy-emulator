@@ -769,7 +769,6 @@ impl APU {
 
                 // Se o som foi habilitado, reseta o frame sequencer
                 // O frame sequencer começa em 7, então o primeiro step será 0
-                // A sincronização com o DIV é automática via bit 13
                 if !old_enable && self.sound_enable {
                     self.frame_sequencer = 7;
                 }
