@@ -100,6 +100,11 @@ impl Timer {
         (self.div_counter >> 8) as u8
     }
 
+    /// Retorna o contador DIV interno completo (16 bits)
+    pub fn get_div_counter(&self) -> u16 {
+        self.div_counter
+    }
+
     /// Inicializa o div_counter para um valor específico (usado no estado pós-boot)
     /// O valor visível de DIV são os 8 bits superiores do contador de 16 bits
     pub fn set_div(&mut self, value: u8) {

@@ -66,7 +66,7 @@ pub struct APU {
 
     // === Estado interno ===
     frame_sequencer: u8, // Frame sequencer (0-7) para length/envelope/sweep
-    frame_sequencer_timer: u32, // Timer para frame sequencer (dispara a cada 8192 ciclos = 512Hz)
+    frame_sequencer_div_bit: bool, // Estado anterior do bit 13 do DIV para edge detection
 
     // Estados dos canais
     ch1_volume: u8,            // Volume atual do canal 1
@@ -176,7 +176,7 @@ impl APU {
 
             // Estado interno
             frame_sequencer: 0,
-            frame_sequencer_timer: 0,
+            frame_sequencer_div_bit: false,
             ch1_volume: 0,
             ch1_frequency_shadow: 0,
             ch1_wave_position: 0,
@@ -208,17 +208,21 @@ impl APU {
     }
 
     /// Clock APU - chamado a cada ciclo de CPU (4MHz)
-    pub fn tick(&mut self) {
+    /// div_counter é o contador interno de 16 bits do DIV
+    pub fn tick(&mut self, div_counter: u16) {
+        // Frame sequencer é clockado pelo bit 12 do DIV (falling edge)
+        // Bit 12 alterna a cada 4096 ciclos, falling edge a cada 8192 = 512Hz
+        let div_bit = (div_counter >> 12) & 1 != 0;
+        if self.frame_sequencer_div_bit && !div_bit {
+            // Falling edge do bit 13 - clocka frame sequencer
+            if self.sound_enable {
+                self.step_frame_sequencer();
+            }
+        }
+        self.frame_sequencer_div_bit = div_bit;
+
         if !self.sound_enable {
             return;
-        }
-
-        // Frame sequencer: 512Hz = 4194304 / 8192 ciclos
-        // Incrementa a cada ciclo, dispara a cada 8192 ciclos
-        self.frame_sequencer_timer += 1;
-        if self.frame_sequencer_timer >= 8192 {
-            self.frame_sequencer_timer = 0;
-            self.step_frame_sequencer();
         }
 
         // Timers de frequência dos canais (4MHz -> 1MHz)
@@ -541,8 +545,13 @@ impl APU {
     /// Escreve em um registrador do APU
     pub fn write_register(&mut self, address: u16, value: u8) {
         // No DMG, quando o som está desabilitado (NR52 bit 7 = 0),
-        // escritas em NR10-NR51 são ignoradas (exceto NR52 e Wave RAM)
-        if !self.sound_enable && address != 0xFF26 && !(0xFF30..=0xFF3F).contains(&address) {
+        // escritas em NR10-NR51 são ignoradas (exceto NR52, NR41 e Wave RAM)
+        // NR41 (0xFF20) é especial: pode ser escrito mesmo com APU desligada
+        if !self.sound_enable
+            && address != 0xFF26
+            && address != 0xFF20
+            && !(0xFF30..=0xFF3F).contains(&address)
+        {
             return;
         }
 
@@ -758,11 +767,11 @@ impl APU {
                     self.disable_all_channels();
                 }
 
-                // Se o som foi habilitado, reseta o frame sequencer e divisores
+                // Se o som foi habilitado, reseta o frame sequencer
                 // O frame sequencer começa em 7, então o primeiro step será 0
+                // A sincronização com o DIV é automática via bit 13
                 if !old_enable && self.sound_enable {
                     self.frame_sequencer = 7;
-                    self.frame_sequencer_timer = 8192; // Próximo step em 8192 ciclos
                 }
             }
 

@@ -327,13 +327,15 @@ impl MemoryBus {
 
     pub fn tick(&mut self, cycles: u32) {
         self.step_oam_dma(cycles);
-        let (new_tima, new_if) = self
-            .timer
-            .tick(cycles, self.tima, self.tma, self.tac, self.if_);
-        self.tima = new_tima;
-        self.if_ = new_if;
+        // Tick timer e APU ciclo a ciclo para sincronização correta
         for _ in 0..cycles {
-            self.apu.tick();
+            let (new_tima, new_if) = self
+                .timer
+                .tick(1, self.tima, self.tma, self.tac, self.if_);
+            self.tima = new_tima;
+            self.if_ = new_if;
+            // APU precisa do div_counter para sincronizar frame sequencer
+            self.apu.tick(self.timer.get_div_counter());
         }
         self.ppu.step(cycles, &mut self.if_);
     }
