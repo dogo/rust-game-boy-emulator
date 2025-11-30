@@ -4,7 +4,7 @@ pub mod mbc3;
 pub mod mbc5;
 pub mod none;
 
-pub fn create_mbc(rom: Vec<u8>) -> Box<dyn MBC> {
+pub fn create_mbc(rom: Vec<u8>) -> Box<dyn MBC + Send> {
     let cart_type = rom.get(0x0147).copied().unwrap_or(0x00);
     let ram_size = get_ram_size(&rom);
     match cart_type {
@@ -28,7 +28,7 @@ fn get_ram_size(rom: &[u8]) -> usize {
         _ => 0,
     }
 }
-pub trait MBC {
+pub trait MBC: Send {
     /// Lê um byte da ROM (0x0000-0x7FFF)
     fn read_rom(&self, address: u16) -> u8;
 

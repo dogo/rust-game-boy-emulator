@@ -6,7 +6,7 @@ use crate::GB::timer::Timer;
 use rand::Rng;
 
 pub struct MemoryBus {
-    mbc: Box<dyn MBC>,
+    mbc: Box<dyn MBC + Send>,
     wram: [u8; 0x2000], // Work RAM (8KB)
     hram: [u8; 0x7F],   // High RAM (127 bytes)
     timer: Timer,
@@ -102,7 +102,7 @@ impl MemoryBus {
         }
     }
 
-    pub fn new(mbc: Box<dyn MBC>) -> Self {
+    pub fn new(mbc: Box<dyn MBC + Send>) -> Self {
         let mut rng = rand::thread_rng();
         let mut wram = [0u8; 0x2000];
         let mut hram = [0u8; 0x7F];
