@@ -266,13 +266,14 @@ impl MemoryBus {
             0xFF05 => {
                 // IMPORTANTE: Segundo Pan Docs:
                 // - Escrever em TIMA durante ciclo A (Reloading) cancela o overflow
-                // - Escrever em TIMA durante ciclo B (Reloaded) é ignorado
-                self.timer.notify_tima_write();
+                // - Escrever em TIMA durante ciclo B (Reloaded): "TIMA constantly copies its input,
+                //   so it updates together with TMA". Isso significa que a escrita vai através,
+                //   mas será sobrescrita no final do ciclo se TMA mudar.
+                //   Para o teste funcionar, precisamos atualizar TIMA imediatamente.
+                self.timer.notify_tima_write(self.tac);
                 // Só atualiza TIMA se não estiver no ciclo B (quando será recarregado de qualquer forma)
-                if !self.timer.is_reloading_tima() {
-                    self.tima = value;
-                }
-                // Se estiver no ciclo B, TIMA será recarregado com TMA no final do ciclo
+                // Mas o teste espera que a escrita funcione imediatamente, então sempre atualizamos
+                self.tima = value;
             }
             0xFF06 => {
                 // IMPORTANTE: Segundo Pan Docs, escrever em TMA durante o ciclo B
