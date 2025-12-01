@@ -68,13 +68,13 @@ pub struct APU {
     frame_sequencer: u8, // Frame sequencer (0-7) para length/envelope/sweep
 
     // Estados dos canais
-    ch1_volume: u8,            // Volume atual do canal 1
-    ch1_frequency_shadow: u16, // Shadow register da frequência (para sweep)
-    ch1_wave_position: u8,     // Posição na wave duty
-    ch1_envelope_timer: u8,    // Timer do envelope
-    ch1_length_counter: u8,    // Contador de length
-    ch1_sweep_timer: u8,        // Timer do sweep
-    ch1_sweep_enabled: bool,    // Sweep habilitado
+    ch1_volume: u8,              // Volume atual do canal 1
+    ch1_frequency_shadow: u16,   // Shadow register da frequência (para sweep)
+    ch1_wave_position: u8,       // Posição na wave duty
+    ch1_envelope_timer: u8,      // Timer do envelope
+    ch1_length_counter: u8,      // Contador de length
+    ch1_sweep_timer: u8,         // Timer do sweep
+    ch1_sweep_enabled: bool,     // Sweep habilitado
     ch1_sweep_negate_used: bool, // True se negate foi usado em cálculo (quirk)
 
     ch2_volume: u8,         // Volume atual do canal 2
@@ -95,7 +95,6 @@ pub struct APU {
     ch2_frequency_timer: u32, // Timer de frequência do canal 2
     ch3_frequency_timer: u32, // Timer de frequência do canal 3
     ch4_frequency_timer: u32, // Timer de frequência do canal 4
-
 }
 
 const DUTY_TABLE: [[u8; 8]; 4] = [
@@ -108,7 +107,6 @@ const DUTY_TABLE: [[u8; 8]; 4] = [
     // 75%
     [1, 0, 0, 1, 1, 1, 1, 1],
 ];
-
 
 impl APU {
     pub fn new() -> Self {
@@ -197,7 +195,6 @@ impl APU {
             ch2_frequency_timer: 0,
             ch3_frequency_timer: 0,
             ch4_frequency_timer: 0,
-
         }
     }
 

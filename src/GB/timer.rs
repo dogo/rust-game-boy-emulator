@@ -15,8 +15,8 @@ enum TimaReloadState {
 /// Eventos gerados pelo timer quando div_counter muda
 #[derive(Default)]
 pub struct TimerEvents {
-    pub apu_div_event: bool,      // Falling edge no bit 12 (ou 13 em double speed)
-    pub apu_div_secondary: bool,  // Rising edge no bit 12
+    pub apu_div_event: bool,     // Falling edge no bit 12 (ou 13 em double speed)
+    pub apu_div_secondary: bool, // Rising edge no bit 12
 }
 
 pub struct Timer {
