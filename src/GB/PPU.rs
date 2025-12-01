@@ -169,8 +169,13 @@ impl PPU {
             return;
         }
 
-        // Window só aparece se WY <= LY (janela começou)
+        // Window só aparece se WY <= LY (janela começou verticalmente)
         if self.wy > self.ly {
+            return;
+        }
+
+        // Window só renderiza se WX <= 166 (window pode aparecer horizontalmente)
+        if self.wx > 166 {
             return;
         }
 
@@ -185,21 +190,9 @@ impl PPU {
         // LCDC bit 4: BG/Window tile data select (mesmo que BG)
         let tile_data_mode = (self.lcdc & 0x10) != 0;
 
-        // incrementa wy_pos se window está ativa
-        let wx_trigger = self.wx <= 166;
-        let win_line = if self.wy_trigger && wx_trigger {
-            self.wy_pos += 1;
-            self.wy_pos
-        } else {
-            -1
-        };
-
         // Calcular linha da window (sem scroll)
-        let window_y = if win_line >= 0 {
-            win_line as u8
-        } else {
-            self.ly - self.wy
-        };
+        // window_y = linha atual dentro da window (0, 1, 2, ...)
+        let window_y = (self.ly - self.wy) as u8;
         let tile_y = (window_y / 8) as usize;
         let pixel_y = (window_y % 8) as usize;
 
@@ -592,11 +585,11 @@ impl PPU {
         self.mode_clock += cycles;
 
         if self.ly < 144 {
-            if self.mode_clock <= 80 {
+            if self.mode_clock < 80 {
                 if self.mode != 2 {
                     self.change_mode(2, iflags);
                 }
-            } else if self.mode_clock <= 252 {
+            } else if self.mode_clock < 252 {
                 if self.mode != 3 {
                     self.change_mode(3, iflags);
                 }
@@ -682,9 +675,10 @@ impl PPU {
     // Referência: https://gbdev.io/pandocs/OAM_Corruption_Bug.html
 
     /// Retorna true se o PPU está no modo 2 (OAM scan) e LCD está ligado
+    /// Mode 2 dura exatamente 80 ciclos (20 M-cycles)
     pub fn is_oam_scan_mode(&self) -> bool {
         let lcd_on = (self.lcdc & 0x80) != 0;
-        lcd_on && self.mode == 2 && self.mode_clock < 76
+        lcd_on && self.mode == 2 && self.mode_clock < 80
     }
 
     /// Retorna a row atual sendo acessada pelo PPU durante mode 2
