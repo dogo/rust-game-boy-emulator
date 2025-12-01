@@ -169,13 +169,15 @@ impl PPU {
             return;
         }
 
-        // Window só aparece se WY <= LY (janela começou verticalmente)
-        if self.wy > self.ly {
+        // Window só renderiza se LY >= WY (janela começou verticalmente)
+        // IMPORTANTE: Window só renderiza quando LY >= WY, não quando LY > WY
+        if self.ly < self.wy {
             return;
         }
 
         // Window só renderiza se WX <= 166 (window pode aparecer horizontalmente)
-        if self.wx > 166 {
+        // Se WX < 7, a window não aparece na tela (está fora da área visível)
+        if self.wx > 166 || self.wx < 7 {
             return;
         }
 
@@ -192,15 +194,18 @@ impl PPU {
 
         // Calcular linha da window (sem scroll)
         // window_y = linha atual dentro da window (0, 1, 2, ...)
-        let window_y = (self.ly - self.wy) as u8;
-        let tile_y = (window_y / 8) as usize;
-        let pixel_y = (window_y % 8) as usize;
+        // Quando LY == WY, window_y = 0 (primeira linha da window)
+        let window_y = self.ly.wrapping_sub(self.wy);
+        let tile_y = (window_y as usize) / 8;
+        let pixel_y = (window_y as usize) % 8;
 
         let line_start = self.ly as usize * 160;
 
-        // WX é offset por 7, então WX=7 significa coluna 0
-        let window_start_x = if self.wx >= 7 { self.wx - 7 } else { 0 };
+        // WX é offset por 7, então WX=7 significa coluna 0 na tela
+        // WX < 7 significa que a window está fora da área visível (já tratado acima)
+        let window_start_x = self.wx - 7;
 
+        // Window só renderiza da coluna window_start_x até o final da tela (160)
         for screen_x in window_start_x..160 {
             // Posição dentro da window (sem offset WX)
             let window_x = screen_x - window_start_x;
