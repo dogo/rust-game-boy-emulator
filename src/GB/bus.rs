@@ -264,10 +264,25 @@ impl MemoryBus {
                 }
             }
             0xFF05 => {
+                // IMPORTANTE: Segundo Pan Docs:
+                // - Escrever em TIMA durante ciclo A (Reloading) cancela o overflow
+                // - Escrever em TIMA durante ciclo B (Reloaded) é ignorado
                 self.timer.notify_tima_write();
-                self.tima = value;
+                // Só atualiza TIMA se não estiver no ciclo B (quando será recarregado de qualquer forma)
+                if !self.timer.is_reloading_tima() {
+                    self.tima = value;
+                }
+                // Se estiver no ciclo B, TIMA será recarregado com TMA no final do ciclo
             }
-            0xFF06 => self.tma = value,
+            0xFF06 => {
+                // IMPORTANTE: Segundo Pan Docs, escrever em TMA durante o ciclo B
+                // terá o mesmo valor copiado para TIMA também, no mesmo ciclo
+                self.tma = value;
+                // Se estamos no ciclo B (Reloaded), atualiza TIMA também
+                if self.timer.is_reloading_tima() {
+                    self.tima = value;
+                }
+            }
             0xFF07 => {
                 let (new_tima, new_if) = self
                     .timer
@@ -350,8 +365,12 @@ impl MemoryBus {
             self.apu.div_secondary_event();
         }
 
-        // APU channel timers - uma vez por tick (equivalente a M-cycle)
-        self.apu.tick_m_cycle();
+        // APU channel timers - uma vez por M-cycle (4 T-cycles)
+        // Só chama se processamos pelo menos um M-cycle completo
+        let m_cycles = cycles / 4;
+        for _ in 0..m_cycles {
+            self.apu.tick_m_cycle();
+        }
 
         self.ppu.step(cycles, &mut self.if_);
     }
