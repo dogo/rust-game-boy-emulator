@@ -106,31 +106,7 @@ impl CPU {
         self.bus.write(0xFF4A, 0x00); // WY
         self.bus.write(0xFF4B, 0x00); // WX
 
-        // DIV é setado por último pois os writes acima consomem ciclos
         self.bus.set_div(0xAB);
-
-        eprintln!("🚀 POST-BOOT STATE 🚀");
-        eprintln!(
-            "Registers: AF={:04X} BC={:04X} DE={:04X} HL={:04X} SP={:04X} PC={:04X}",
-            self.registers.get_af(),
-            self.registers.get_bc(),
-            self.registers.get_de(),
-            self.registers.get_hl(),
-            self.registers.get_sp(),
-            self.registers.get_pc()
-        );
-        eprintln!(
-            "IO: LCDC={:02X} STAT={:02X} DIV={:02X} TIMA={:02X} TMA={:02X} TAC={:02X} BGP={:02X} OBP0={:02X} OBP1={:02X}",
-            self.bus.read(0xFF40),
-            self.bus.read(0xFF41),
-            self.bus.read(0xFF04),
-            self.bus.read(0xFF05),
-            self.bus.read(0xFF06),
-            self.bus.read(0xFF07),
-            self.bus.read(0xFF47),
-            self.bus.read(0xFF48),
-            self.bus.read(0xFF49)
-        );
     }
 
     pub fn fetch_next(&mut self) -> u8 {
@@ -177,11 +153,14 @@ impl CPU {
             }
         }
 
-        // EI habilita IME no INÍCIO da próxima instrução (antes do fetch)
-        // Ref: https://gbdev.io/pandocs/Interrupts.html
+        let effective_ime = self.ime;
         if self.ime_enable_next {
-            self.ime = true;
+            self.ime = !self.ime;
             self.ime_enable_next = false;
+        }
+
+        if self.service_interrupts_with_ime(effective_ime) {
+            return (20, false);
         }
 
         // FETCH
@@ -228,91 +207,84 @@ impl CPU {
         }
         self.cycles += cycles;
 
-        // 🔧 EFEITOS ESPECIAIS NO CPU (fora dos registradores)
         match opcode {
             0xF3 => {
-                // DI
                 self.ime = false;
             }
             0xFB => {
-                // EI
-                // Habilita IME após a PRÓXIMA instrução
-                self.ime_enable_next = true;
+                if !self.ime && !self.ime_enable_next {
+                    self.ime_enable_next = true;
+                }
             }
             0x76 => {
-                // HALT
                 let if_reg = self.bus.read(0xFF0F);
                 let ie_reg = self.bus.read(0xFFFF);
                 let pending = if_reg & ie_reg;
 
                 if !self.ime && pending != 0 {
-                    // HALT bug: IME=0 e existe interrupção pendente -> NÃO entra em halt, apenas ativa o bug
                     self.halt_bug = true;
                 } else {
-                    // HALT normal
                     self.halted = true;
                 }
             }
             0x10 => {
-                // STOP: para a CPU até Joypad acordar
                 self.stopped = true;
             }
             0xD9 => {
-                // RETI
-                // RET já foi feito na própria instrução (pop PC), aqui só reabilita IME
                 self.ime = true;
             }
             _ => {}
         }
 
-        // Atende interrupções se habilitadas (IME) e pendentes (IF & IE)
-        self.service_interrupts();
-
         (cycles, unknown)
     }
 
-    // Atende interrupções se habilitadas (IME) e pendentes (IF & IE)
-    fn service_interrupts(&mut self) {
-        // 1) Só faz qualquer coisa se IME estiver habilitado
-        if !self.ime {
-            return;
-        }
-
+    fn service_interrupts_with_ime(&mut self, effective_ime: bool) -> bool {
         let ie = self.bus.get_ie();
         let iflags = self.bus.get_if();
-        let pending = ie & iflags;
+        let pending = ie & iflags & 0x1F;
 
-        // 2) Se não tem pending, sai
-        if pending == 0 {
-            return;
+        if !effective_ime {
+            return false;
         }
 
-        // 3) Decide vetor real
+        if pending == 0 {
+            return false;
+        }
+
         let (vector, mask) = if (pending & 0x01) != 0 {
-            (0x0040u16, 0x01u8) // VBlank
+            (0x0040u16, 0x01u8)
         } else if (pending & 0x02) != 0 {
-            (0x0048u16, 0x02u8) // LCD STAT
+            (0x0048u16, 0x02u8)
         } else if (pending & 0x04) != 0 {
-            (0x0050u16, 0x04u8) // Timer
+            (0x0050u16, 0x04u8)
         } else if (pending & 0x08) != 0 {
-            (0x0058u16, 0x08u8) // Serial
+            (0x0058u16, 0x08u8)
         } else {
-            (0x0060u16, 0x10u8) // Joypad
+            (0x0060u16, 0x10u8)
         };
 
-        // 4) Desabilita IME enquanto atende
+        let old_pc = self.registers.get_pc();
+
+        self.bus.cpu_write(self.registers.get_sp().wrapping_sub(1), (old_pc >> 8) as u8);
+        self.registers.set_sp(self.registers.get_sp().wrapping_sub(1));
+
+        let sp_after_high = self.registers.get_sp();
+        if sp_after_high == 0xFF0F + 1 {
+            self.registers.set_sp(sp_after_high.wrapping_sub(1));
+            self.bus.cpu_write(0xFF0F, (old_pc & 0xFF) as u8);
+        } else {
+            self.bus.cpu_write(self.registers.get_sp().wrapping_sub(1), (old_pc & 0xFF) as u8);
+            self.registers.set_sp(self.registers.get_sp().wrapping_sub(1));
+        }
+
+        self.registers.set_pc(vector);
+        self.bus.clear_if_bits(mask);
         self.ime = false;
 
-        // 5) Limpa bit em IF pela API do bus
-        self.bus.clear_if_bits(mask);
-
-        // 6) Push PC e salta pro vetor
-        let pc = self.registers.get_pc();
-        self.push_u16(pc);
-        self.registers.set_pc(vector);
-
-        // 7) Custo da interrupção (~20 ciclos)
         self.cycles += 20;
         self.bus.tick(20);
+
+        true
     }
 }

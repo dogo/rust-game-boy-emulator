@@ -79,7 +79,6 @@ impl MemoryBus {
     #[inline]
     pub fn clear_if_bits(&mut self, mask: u8) {
         self.if_ &= !mask;
-        self.write(0xFF0F, self.if_);
     }
 
     /// Seta o bit de interrupção do Joypad (IF bit 4)
@@ -279,6 +278,8 @@ impl MemoryBus {
                 // IMPORTANTE: Segundo Pan Docs, escrever em TMA durante o ciclo B
                 // terá o mesmo valor copiado para TIMA também, no mesmo ciclo
                 self.tma = value;
+                // Notifica o Timer sobre a escrita em TMA para que ele use o valor atualizado no reload
+                self.timer.notify_tma_write(value);
                 // Se estamos no ciclo B (Reloaded), atualiza TIMA também
                 if self.timer.is_reloading_tima() {
                     self.tima = value;
@@ -292,11 +293,15 @@ impl MemoryBus {
                 self.if_ = new_if;
                 self.tac = value;
             }
-            0xFF0F => self.if_ = value,
+            0xFF0F => {
+                self.if_ &= !value;
+            }
             0xFF10..=0xFF3F => self.apu.write_register(address, value),
             0xFF40..=0xFF4B => self.ppu.write_register(address, value, &mut self.if_),
             0xFF80..=0xFFFE => self.hram[(address - 0xFF80) as usize] = value,
-            0xFFFF => self.ie = value,
+            0xFFFF => {
+                self.ie = value;
+            }
             _ => {}
         }
     }
