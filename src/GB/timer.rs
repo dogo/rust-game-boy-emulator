@@ -22,36 +22,36 @@ pub struct TimerEvents {
     pub apu_div_secondary: bool, // Rising edge no bit 12
 }
 
-    pub struct Timer {
-        div_counter: u16, // Contador interno que incrementa a cada T-cycle
-        tima_reload_state: TimaReloadState,
-        last_div_bit: bool,            // Para detectar edges no bit do APU
-        m_cycle_offset: u32,           // Rastreia offset dentro do M-cycle atual (0-3)
-        tima_written_this_cycle: bool, // Flag para rastrear se TIMA foi escrito durante o ciclo B
-        tima_increment_counter: u32,   // Contador para rastrear quantas vezes TIMA foi incrementado
-        suppress_until: Option<u16>, // Deadline absoluto (div_counter value) até quando suprimir falling edges
-        prev_tima_bit: bool,         // Estado anterior do bit selecionado para detectar falling edges
-        reload_pending: Option<u16>, // Deadline absoluto (div_counter value) para reload após overflow
-        reload_just_reached: bool,   // Flag para forçar delay de um M-cycle antes de executar reload
-        tma_reg: u8,                 // Valor atual de TMA (atualizado quando CPU escreve em TMA)
-    }
+pub struct Timer {
+    div_counter: u16, // Contador interno que incrementa a cada T-cycle
+    tima_reload_state: TimaReloadState,
+    last_div_bit: bool,            // Para detectar edges no bit do APU
+    m_cycle_offset: u32,           // Rastreia offset dentro do M-cycle atual (0-3)
+    tima_written_this_cycle: bool, // Flag para rastrear se TIMA foi escrito durante o ciclo B
+    tima_increment_counter: u32,   // Contador para rastrear quantas vezes TIMA foi incrementado
+    suppress_until: Option<u16>, // Deadline absoluto (div_counter value) até quando suprimir falling edges
+    prev_tima_bit: bool,         // Estado anterior do bit selecionado para detectar falling edges
+    reload_pending: Option<u16>, // Deadline absoluto (div_counter value) para reload após overflow
+    reload_just_reached: bool,   // Flag para forçar delay de um M-cycle antes de executar reload
+    tma_reg: u8,                 // Valor atual de TMA (atualizado quando CPU escreve em TMA)
+}
 
 impl Timer {
-        pub fn new() -> Self {
-            Timer {
-                div_counter: 0,
-                tima_reload_state: TimaReloadState::Running,
-                last_div_bit: false,
-                m_cycle_offset: 0,
-                tima_written_this_cycle: false,
-                tima_increment_counter: 0,
-                suppress_until: None,
-                prev_tima_bit: false,
-                reload_pending: None,
-                reload_just_reached: false,
-                tma_reg: 0,
-            }
+    pub fn new() -> Self {
+        Timer {
+            div_counter: 0,
+            tima_reload_state: TimaReloadState::Running,
+            last_div_bit: false,
+            m_cycle_offset: 0,
+            tima_written_this_cycle: false,
+            tima_increment_counter: 0,
+            suppress_until: None,
+            prev_tima_bit: false,
+            reload_pending: None,
+            reload_just_reached: false,
+            tma_reg: 0,
         }
+    }
 
     fn advance_tima_state_machine(&mut self, tima: &mut u8, _tma: u8, if_reg: &mut u8) {
         match self.tima_reload_state {

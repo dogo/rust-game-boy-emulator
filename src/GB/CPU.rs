@@ -266,16 +266,22 @@ impl CPU {
 
         let old_pc = self.registers.get_pc();
 
-        self.bus.cpu_write(self.registers.get_sp().wrapping_sub(1), (old_pc >> 8) as u8);
-        self.registers.set_sp(self.registers.get_sp().wrapping_sub(1));
+        self.bus
+            .cpu_write(self.registers.get_sp().wrapping_sub(1), (old_pc >> 8) as u8);
+        self.registers
+            .set_sp(self.registers.get_sp().wrapping_sub(1));
 
         let sp_after_high = self.registers.get_sp();
         if sp_after_high == 0xFF0F + 1 {
             self.registers.set_sp(sp_after_high.wrapping_sub(1));
             self.bus.cpu_write(0xFF0F, (old_pc & 0xFF) as u8);
         } else {
-            self.bus.cpu_write(self.registers.get_sp().wrapping_sub(1), (old_pc & 0xFF) as u8);
-            self.registers.set_sp(self.registers.get_sp().wrapping_sub(1));
+            self.bus.cpu_write(
+                self.registers.get_sp().wrapping_sub(1),
+                (old_pc & 0xFF) as u8,
+            );
+            self.registers
+                .set_sp(self.registers.get_sp().wrapping_sub(1));
         }
 
         self.registers.set_pc(vector);
