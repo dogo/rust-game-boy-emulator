@@ -448,4 +448,18 @@ impl MemoryBus {
             self.ppu.trigger_oam_bug_write();
         }
     }
+
+    /// Chamado quando uma operação CB prefix faz read de (HL) no range OAM
+    pub fn oam_bug_cb_read(&mut self, hl_value: u16) {
+        if Self::is_oam_range(hl_value) {
+            self.ppu.trigger_oam_bug_read();
+        }
+    }
+
+    /// Chamado quando uma operação CB prefix faz write de (HL) no range OAM
+    pub fn oam_bug_cb_write(&mut self, hl_value: u16) {
+        if Self::is_oam_range(hl_value) {
+            self.ppu.trigger_oam_bug_write();
+        }
+    }
 }
