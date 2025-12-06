@@ -4,33 +4,37 @@ use gb_emu::GB::PPU::PPU;
 #[test]
 fn test_sprite_visible_collection() {
     let mut ppu = PPU::new();
-    ppu.lcdc = 0x93; // LCD on, sprites on
-    ppu.current_line = 72; // Linha onde o sprite está
+    let mut iflags = 0u8;
+
+    // Habilitar LCD e sprites
+    ppu.write_register(0xFF40, 0x93, &mut iflags);
 
     // Sprite na linha 72 (OAM Y = 72 + 16 = 88)
-    ppu.oam[0] = 88; // Y
-    ppu.oam[1] = 80; // X
-    ppu.oam[2] = 0;  // Tile
-    ppu.oam[3] = 0;  // Flags
+    ppu.write_oam(0xFE00, 88); // Y
+    ppu.write_oam(0xFE01, 80); // X
+    ppu.write_oam(0xFE02, 0);  // Tile
+    ppu.write_oam(0xFE03, 0);  // Flags
 
     // Criar tile simples
-    ppu.vram[0] = 0xFF; // Todos pixels cor 1
-    ppu.vram[1] = 0x00;
+    ppu.write_vram(0x8000, 0xFF); // Todos pixels cor 1
+    ppu.write_vram(0x8001, 0x00);
 
-    // Coletar sprites visíveis
-    ppu.collect_visible_sprites();
+    // Configurar paleta
+    ppu.write_register(0xFF48, 0xE4, &mut iflags);
 
-    // Verificar se sprite foi coletado
-    // Como visible_sprites é privado, vamos verificar indiretamente
-    // através do comportamento durante mode 3
-
-    // Simular mode 3
-    let mut iflags = 0u8;
-    ppu.change_mode(3, &mut iflags);
-
-    // Avançar alguns ciclos para processar sprite
-    for _ in 0..200 {
+    // Renderizar até linha 72 ser completada
+    let mut safety = 0;
+    while ppu.ly < 73 && safety < 100_000 {
         ppu.step(4, &mut iflags);
+        safety += 1;
+    }
+
+    // Avançar mais um pouco para garantir que a linha foi renderizada
+    for _ in 0..500 {
+        ppu.step(4, &mut iflags);
+        if ppu.ly > 72 {
+            break;
+        }
     }
 
     // Verificar se algum pixel foi renderizado na linha 72
