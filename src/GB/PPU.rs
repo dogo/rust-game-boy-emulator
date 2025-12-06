@@ -811,8 +811,9 @@ impl PPU {
             Some(item) => item,
             None => return,
         };
-        let mut bg_priority = fifo_item.bg_priority;
+        let bg_priority = fifo_item.bg_priority;
 
+        let mut sprite_behind_bg = false;
         let mut draw_oam = false;
         let mut oam_pixel = 0;
         let mut oam_palette = 0;
@@ -822,7 +823,7 @@ impl PPU {
                     draw_oam = true;
                     oam_pixel = oam_item.pixel;
                     oam_palette = oam_item.palette;
-                    bg_priority |= oam_item.bg_priority;
+                    sprite_behind_bg = oam_item.bg_priority;
                 }
             }
         }
@@ -847,6 +848,10 @@ impl PPU {
             return;
         }
 
+        if fifo_item.pixel != 0 && sprite_behind_bg {
+            draw_oam = false;
+        }
+
         let bg_enabled = (self.lcdc & 0x01) != 0;
         let mut pixel = if bg_enabled {
             fifo_item.pixel
@@ -854,27 +859,19 @@ impl PPU {
             0
         };
 
-        if fifo_item.pixel != 0 && bg_priority {
-            draw_oam = false;
-        }
-
         pixel = self.apply_palette(pixel, self.bgp);
 
-        // Renderiza apenas quando position_in_line está na faixa visível (0-159)
         if self.position_in_line >= 0 && self.position_in_line < 160 {
             let pixel_idx = (self.current_line as usize * 160) + self.position_in_line as usize;
             if pixel_idx < 160 * 144 {
-                self.framebuffer[pixel_idx] = pixel;
+                if draw_oam && oam_pixel != 0 {
+                    let palette_reg = if oam_palette != 0 { self.obp1 } else { self.obp0 };
+                    let sprite_pixel = self.apply_palette(oam_pixel, palette_reg);
+                    self.framebuffer[pixel_idx] = sprite_pixel;
+                } else {
+                    self.framebuffer[pixel_idx] = pixel;
+                }
                 self.bg_priority[pixel_idx] = bg_priority;
-            }
-        }
-
-        if draw_oam && self.position_in_line >= 0 && self.position_in_line < 160 {
-            let pixel_idx = (self.current_line as usize * 160) + self.position_in_line as usize;
-            if pixel_idx < 160 * 144 {
-                let palette_reg = if oam_palette != 0 { self.obp1 } else { self.obp0 };
-                let sprite_pixel = self.apply_palette(oam_pixel, palette_reg);
-                self.framebuffer[pixel_idx] = sprite_pixel;
             }
         }
 
