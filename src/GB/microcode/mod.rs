@@ -1266,13 +1266,13 @@ pub fn execute(program: &MicroProgram, regs: &mut Registers, bus: &mut MemoryBus
             }
             MicroAction::ExecuteRLCHl => {
                 // RLC (HL): Rotate Left Circular em memória (16 ciclos)
+                // OAM bug é tratado automaticamente dentro de cpu_read/cpu_write
                 let addr = regs.get_hl();
-                bus.oam_bug_cb_read(addr);
                 let val = bus.cpu_read(addr);
                 let bit7 = (val >> 7) & 1;
                 let result = (val << 1) | bit7;
-                bus.oam_bug_cb_write(addr);
                 bus.cpu_write(addr, result);
+                // Flags são calculados com base no valor lido (pode ser 0xFF se VRAM bloqueada)
                 regs.set_flag_z(result == 0);
                 regs.set_flag_n(false);
                 regs.set_flag_h(false);
@@ -1293,12 +1293,11 @@ pub fn execute(program: &MicroProgram, regs: &mut Registers, bus: &mut MemoryBus
             }
             MicroAction::ExecuteRRCHl => {
                 // RRC (HL)
+                // OAM bug é tratado automaticamente dentro de cpu_read/cpu_write
                 let addr = regs.get_hl();
-                bus.oam_bug_cb_read(addr);
                 let val = bus.cpu_read(addr);
                 let bit0 = val & 1;
                 let result = (val >> 1) | (bit0 << 7);
-                bus.oam_bug_cb_write(addr);
                 bus.cpu_write(addr, result);
                 regs.set_flag_z(result == 0);
                 regs.set_flag_n(false);
@@ -1320,13 +1319,12 @@ pub fn execute(program: &MicroProgram, regs: &mut Registers, bus: &mut MemoryBus
             }
             MicroAction::ExecuteRLHl => {
                 // RL (HL)
+                // OAM bug é tratado automaticamente dentro de cpu_read/cpu_write
                 let addr = regs.get_hl();
-                bus.oam_bug_cb_read(addr);
                 let val = bus.cpu_read(addr);
                 let old_carry = if regs.get_flag_c() { 1 } else { 0 };
                 let bit7 = (val >> 7) & 1;
                 let result = (val << 1) | old_carry;
-                bus.oam_bug_cb_write(addr);
                 bus.cpu_write(addr, result);
                 regs.set_flag_z(result == 0);
                 regs.set_flag_n(false);
@@ -1348,13 +1346,12 @@ pub fn execute(program: &MicroProgram, regs: &mut Registers, bus: &mut MemoryBus
             }
             MicroAction::ExecuteRRHl => {
                 // RR (HL)
+                // OAM bug é tratado automaticamente dentro de cpu_read/cpu_write
                 let addr = regs.get_hl();
-                bus.oam_bug_cb_read(addr);
                 let val = bus.cpu_read(addr);
                 let old_carry = if regs.get_flag_c() { 1 } else { 0 };
                 let bit0 = val & 1;
                 let result = (val >> 1) | (old_carry << 7);
-                bus.oam_bug_cb_write(addr);
                 bus.cpu_write(addr, result);
                 regs.set_flag_z(result == 0);
                 regs.set_flag_n(false);
@@ -1375,12 +1372,11 @@ pub fn execute(program: &MicroProgram, regs: &mut Registers, bus: &mut MemoryBus
             }
             MicroAction::ExecuteSLAHl => {
                 // SLA (HL)
+                // OAM bug é tratado automaticamente dentro de cpu_read/cpu_write
                 let addr = regs.get_hl();
-                bus.oam_bug_cb_read(addr);
                 let val = bus.cpu_read(addr);
                 let bit7 = (val >> 7) & 1;
                 let result = val << 1;
-                bus.oam_bug_cb_write(addr);
                 bus.cpu_write(addr, result);
                 regs.set_flag_z(result == 0);
                 regs.set_flag_n(false);
@@ -1402,13 +1398,12 @@ pub fn execute(program: &MicroProgram, regs: &mut Registers, bus: &mut MemoryBus
             }
             MicroAction::ExecuteSRAHl => {
                 // SRA (HL)
+                // OAM bug é tratado automaticamente dentro de cpu_read/cpu_write
                 let addr = regs.get_hl();
-                bus.oam_bug_cb_read(addr);
                 let val = bus.cpu_read(addr);
                 let bit0 = val & 1;
                 let bit7 = val & 0x80;
                 let result = (val >> 1) | bit7;
-                bus.oam_bug_cb_write(addr);
                 bus.cpu_write(addr, result);
                 regs.set_flag_z(result == 0);
                 regs.set_flag_n(false);
@@ -1428,11 +1423,10 @@ pub fn execute(program: &MicroProgram, regs: &mut Registers, bus: &mut MemoryBus
             }
             MicroAction::ExecuteSWAPHl => {
                 // SWAP (HL)
+                // OAM bug é tratado automaticamente dentro de cpu_read/cpu_write
                 let addr = regs.get_hl();
-                bus.oam_bug_cb_read(addr);
                 let val = bus.cpu_read(addr);
                 let result = ((val & 0x0F) << 4) | ((val & 0xF0) >> 4);
-                bus.oam_bug_cb_write(addr);
                 bus.cpu_write(addr, result);
                 regs.set_flag_z(result == 0);
                 regs.set_flag_n(false);
@@ -1453,12 +1447,11 @@ pub fn execute(program: &MicroProgram, regs: &mut Registers, bus: &mut MemoryBus
             }
             MicroAction::ExecuteSRLHl => {
                 // SRL (HL)
+                // OAM bug é tratado automaticamente dentro de cpu_read/cpu_write
                 let addr = regs.get_hl();
-                bus.oam_bug_cb_read(addr);
                 let val = bus.cpu_read(addr);
                 let bit0 = val & 1;
                 let result = val >> 1;
-                bus.oam_bug_cb_write(addr);
                 bus.cpu_write(addr, result);
                 regs.set_flag_z(result == 0);
                 regs.set_flag_n(false);
@@ -1476,8 +1469,8 @@ pub fn execute(program: &MicroProgram, regs: &mut Registers, bus: &mut MemoryBus
             }
             MicroAction::TestBitHl { bit } => {
                 // BIT b,(HL): Testa bit em memória (12 ciclos)
+                // OAM bug é tratado automaticamente dentro de cpu_read
                 let addr = regs.get_hl();
-                bus.oam_bug_cb_read(addr);
                 let val = bus.cpu_read(addr);
                 let bit_set = (val & (1 << bit)) != 0;
                 regs.set_flag_z(!bit_set);
@@ -1494,11 +1487,10 @@ pub fn execute(program: &MicroProgram, regs: &mut Registers, bus: &mut MemoryBus
             }
             MicroAction::ResetBitHl { bit } => {
                 // RES b,(HL): Reseta bit em memória (16 ciclos)
+                // OAM bug é tratado automaticamente dentro de cpu_read/cpu_write
                 let addr = regs.get_hl();
-                bus.oam_bug_cb_read(addr);
                 let val = bus.cpu_read(addr);
                 let result = val & !(1 << bit);
-                bus.oam_bug_cb_write(addr);
                 bus.cpu_write(addr, result);
                 // Total: 16 ciclos
             }
@@ -1511,11 +1503,10 @@ pub fn execute(program: &MicroProgram, regs: &mut Registers, bus: &mut MemoryBus
             }
             MicroAction::SetBitHl { bit } => {
                 // SET b,(HL): Seta bit em memória (16 ciclos)
+                // OAM bug é tratado automaticamente dentro de cpu_read/cpu_write
                 let addr = regs.get_hl();
-                bus.oam_bug_cb_read(addr);
                 let val = bus.cpu_read(addr);
                 let result = val | (1 << bit);
-                bus.oam_bug_cb_write(addr);
                 bus.cpu_write(addr, result);
                 // Total: 16 ciclos
             }
