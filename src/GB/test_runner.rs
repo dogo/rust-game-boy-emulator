@@ -85,11 +85,19 @@ pub fn run(cpu: &mut CPU) -> TestResult {
 
         // Log de progresso
         if executed_cycles / 1_000_000 != (executed_cycles - cycles as u64) / 1_000_000 {
+            let mega_cycles = executed_cycles / 1_000_000;
             eprintln!(
-                "… progresso: {}M ciclos executados (steps={})",
-                executed_cycles / 1_000_000,
-                steps
+                "… progresso: {}M ciclos executados (steps={}) | PC={:04X} | Serial log: {} bytes",
+                mega_cycles,
+                steps,
+                cpu.registers.get_pc(),
+                serial_log.len()
             );
+
+            // Mostra serial log a cada 10M ciclos se houver conteúdo
+            if mega_cycles % 10 == 0 && !serial_log.is_empty() {
+                eprintln!("  Serial output até agora: {}", serial_log);
+            }
 
             if let Some((status, text)) = check_memory_result(cpu) {
                 if status != 0x80 {
