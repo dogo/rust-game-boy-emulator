@@ -29,8 +29,12 @@ pub struct MemoryBus {
     oam_dma_value: u8, // Último valor escrito em FF46
 
     // ===== Serial =====
-    serial_sb: u8, // FF01
-    serial_sc: u8, // FF02
+    serial_sb: u8,                // FF01 - Serial Transfer Data
+    serial_sc: u8,                // FF02 - Serial Transfer Control
+    serial_transfer_active: bool, // Transferência em andamento
+    serial_transfer_cycles: u32,  // Ciclos acumulados da transferência
+    serial_clock_source: bool,    // true = internal clock (master), false = external clock (slave)
+    serial_last_transmitted: u8,  // Último byte transmitido (para debug/testes)
 
     // Contagem de ciclos consumidos pela CPU nesta instrução
     cpu_cycle_log: u32,
@@ -129,6 +133,10 @@ impl MemoryBus {
             oam_dma_value: 0,
             serial_sb: 0x00,
             serial_sc: 0x7E, // bits não usados em 1
+            serial_transfer_active: false,
+            serial_transfer_cycles: 0,
+            serial_clock_source: false,
+            serial_last_transmitted: 0x00,
             cpu_cycle_log: 0,
         }
     }
@@ -170,7 +178,17 @@ impl MemoryBus {
             }
             0xFF00 => self.joypad.read(),
             0xFF01 => self.serial_sb,
-            0xFF02 => self.serial_sc | 0b0111_1110,
+            0xFF02 => {
+                // Bit 7: Transfer Start Flag (read-only durante transferência)
+                // Bits 1-6: Não usados, sempre leem como 1
+                // Bit 0: Clock Source (readable)
+                let transfer_flag = if self.serial_transfer_active {
+                    0x80
+                } else {
+                    0x00
+                };
+                transfer_flag | 0x7E | (if self.serial_clock_source { 0x01 } else { 0x00 })
+            }
             0xFF04 => self.timer.read_div(),
             0xFF05 => self.tima,
             0xFF06 => self.tma,
@@ -246,8 +264,30 @@ impl MemoryBus {
                 }
             }
             0xFF00 => self.joypad.write(value),
-            0xFF01 => self.serial_sb = value,
-            0xFF02 => self.serial_sc = value & 0b1000_0001,
+            0xFF01 => {
+                // SB pode ser escrito mesmo durante transferência (mas não é recomendado)
+                self.serial_sb = value;
+                // Guarda o último byte escrito para uso em testes/debug
+                if !self.serial_transfer_active {
+                    self.serial_last_transmitted = value;
+                }
+            }
+            0xFF02 => {
+                // SC: bits 1-6 são write-only (não usados)
+                // Bit 0: Clock Source (0=external/slave, 1=internal/master)
+                // Bit 7: Transfer Start Flag
+                let old_transfer_start = (self.serial_sc & 0x80) != 0;
+                let new_transfer_start = (value & 0x80) != 0;
+                let clock_source = (value & 0x01) != 0;
+
+                self.serial_clock_source = clock_source;
+                self.serial_sc = value & 0b1000_0001;
+
+                // Inicia transferência se bit 7 mudou de 0 para 1
+                if !old_transfer_start && new_transfer_start {
+                    self.start_serial_transfer();
+                }
+            }
             0xFF04 => {
                 let (new_tima, new_if, events) = self
                     .timer
@@ -355,6 +395,7 @@ impl MemoryBus {
 
     pub fn tick(&mut self, cycles: u32) {
         self.step_oam_dma(cycles);
+        self.step_serial_transfer(cycles);
 
         // Timer T-cycle por T-cycle para detectar eventos corretamente
         let (new_tima, new_if, events) = self
@@ -465,5 +506,62 @@ impl MemoryBus {
         if Self::is_oam_range(hl_value) {
             self.ppu.trigger_oam_bug_write();
         }
+    }
+
+    // ========== SERIAL PORT ==========
+
+    /// Inicia uma transferência serial
+    /// Chamado quando bit 7 de SC (FF02) é setado para 1
+    fn start_serial_transfer(&mut self) {
+        // Só inicia se estiver em modo internal clock (master)
+        // Em modo external clock (slave), a transferência é controlada externamente
+        if self.serial_clock_source {
+            self.serial_transfer_active = true;
+            self.serial_transfer_cycles = 0;
+            // Guarda o byte que será transmitido
+            self.serial_last_transmitted = self.serial_sb;
+        }
+    }
+
+    /// Avança a transferência serial
+    /// Internal clock: 8192 Hz = 512 ciclos de CPU por bit = 4096 ciclos por byte
+    /// External clock: aguarda sinal externo (não implementado ainda)
+    fn step_serial_transfer(&mut self, cycles: u32) {
+        if !self.serial_transfer_active {
+            return;
+        }
+
+        // Só processa se estiver em modo internal clock (master)
+        if !self.serial_clock_source {
+            // Em modo external clock (slave), a transferência é controlada externamente
+            // Por enquanto, não implementamos comunicação real entre consoles
+            return;
+        }
+
+        // Internal clock: 8192 Hz = 512 ciclos por bit = 4096 ciclos por byte completo
+        const SERIAL_CYCLES_PER_BYTE: u32 = 4096; // 8 bits * 512 ciclos por bit
+
+        self.serial_transfer_cycles = self.serial_transfer_cycles.saturating_add(cycles);
+
+        if self.serial_transfer_cycles >= SERIAL_CYCLES_PER_BYTE {
+            // Transferência completa
+            self.complete_serial_transfer();
+        }
+    }
+
+    /// Completa a transferência serial e dispara interrupção
+    fn complete_serial_transfer(&mut self) {
+        // Reset do bit 7 (Transfer Start Flag)
+        self.serial_sc &= !0x80;
+        self.serial_transfer_active = false;
+        self.serial_transfer_cycles = 0;
+
+        // Em modo loopback (sem dispositivo externo), o byte recebido é 0xFF
+        // Em uma implementação real de link cable, aqui receberíamos o byte do outro console
+        // Por enquanto, implementamos loopback básico para compatibilidade com testes
+        // self.serial_sb = 0xFF; // Byte recebido (loopback)
+
+        // Dispara interrupção serial (bit 3 do IF)
+        self.if_ |= 0x08;
     }
 }

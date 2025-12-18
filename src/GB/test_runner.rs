@@ -35,19 +35,27 @@ fn check_memory_result(cpu: &CPU) -> Option<(u8, String)> {
 }
 
 /// Lê saída da porta serial (FF01/FF02)
+/// Verifica se houve interrupção serial (transferência completa)
+/// Em modo loopback (sem dispositivo conectado), captura o byte transmitido
 fn poll_serial(cpu: &mut CPU, log: &mut String) {
-    let sc = cpu.bus.read(0xFF02);
+    // Verifica se interrupção serial foi disparada (bit 3 do IF)
+    let if_reg = cpu.bus.read(0xFF0F);
+    if (if_reg & 0x08) != 0 {
+        // Limpa flag de interrupção
+        cpu.bus.write(0xFF0F, if_reg & !0x08);
 
-    if (sc & 0x81) == 0x81 {
+        // Em modo loopback, o byte recebido é sempre 0xFF
+        // Mas para testes, queremos capturar o byte que foi transmitido
+        // Vamos ler SB diretamente (que contém o byte transmitido)
         let byte = cpu.bus.read(0xFF01);
-        if byte != 0xFF {
-            if (0x20..=0x7E).contains(&byte) || byte == b'\n' || byte == b'\r' {
-                log.push(byte as char);
-            } else {
-                log.push_str(&format!("<{:02X}>", byte));
-            }
+
+        // Processa byte (em loopback, pode ser 0xFF, mas geralmente é o byte transmitido)
+        if (0x20..=0x7E).contains(&byte) || byte == b'\n' || byte == b'\r' {
+            log.push(byte as char);
+        } else if byte != 0xFF {
+            // Mostra bytes não-FF em formato hexadecimal
+            log.push_str(&format!("<{:02X}>", byte));
         }
-        cpu.bus.write(0xFF02, sc & !0x80);
     }
 }
 
