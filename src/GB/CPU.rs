@@ -153,13 +153,14 @@ impl CPU {
             }
         }
 
-        let effective_ime = self.ime;
+        // IME é habilitado ANTES de verificar interrupções
+        // Se ime_enable_next está true, IME será habilitado agora (após a última instrução)
         if self.ime_enable_next {
             self.ime = !self.ime;
             self.ime_enable_next = false;
         }
 
-        if self.service_interrupts_with_ime(effective_ime) {
+        if self.service_interrupts_with_ime(self.ime) {
             return (20, false);
         }
 
