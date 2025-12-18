@@ -357,7 +357,8 @@ pub fn execute(program: &MicroProgram, regs: &mut Registers, bus: &mut MemoryBus
                 // Calcula novo PC e consome 4 ciclos adicionais
                 bus.cpu_idle(4);
                 // Usa PC já incrementado para calcular o salto
-                let new_pc = regs.get_pc().wrapping_add(offset as u16);
+                // Usa as i16 as u16 para fazer extensão de sinal correta
+                let new_pc = regs.get_pc().wrapping_add(offset as i16 as u16);
                 regs.set_pc(new_pc);
             }
             MicroAction::JumpRelativeConditional { cond } => {
