@@ -31,7 +31,7 @@ run_test() {
         return 1
     fi
 
-    result=$(timeout 120 cargo run --release -- "$rom_path" --headless 2>&1)
+    result=$(timeout 120 cargo run -- "$rom_path" --headless 2>&1 || echo "EXECUTION_FAILED")
     exit_code=$?
 
     if [ $exit_code -eq 124 ]; then

@@ -66,8 +66,20 @@ fn main() {
     // Executa
     if headless {
         let result = GB::test_runner::run(&mut cpu);
-        println!("Resultado: {:?}", result);
-        return;
+        match result {
+            GB::test_runner::TestResult::Passed => {
+                println!("✅ Teste passou");
+                std::process::exit(0);
+            }
+            GB::test_runner::TestResult::Failed(code) => {
+                println!("❌ Teste falhou com código {}", code);
+                std::process::exit(1);
+            }
+            GB::test_runner::TestResult::Timeout => {
+                println!("⏱️ Teste deu timeout");
+                std::process::exit(2);
+            }
+        }
     } else if trace {
         run_trace(&mut cpu, &data);
     } else {
