@@ -31,34 +31,37 @@ run_test() {
         return 1
     fi
 
-    result=$(timeout 120 cargo run -- "$rom_path" --headless 2>&1 || echo "EXECUTION_FAILED")
+    # Executa o teste e usa apenas o exit code
+    timeout 60 cargo run -- "$rom_path" --headless >/dev/null 2>&1
     exit_code=$?
 
-    if [ $exit_code -eq 124 ]; then
-        echo -e "${YELLOW}⏱️ TIMEOUT (120s)${NC}"
-        TIMEOUT=$((TIMEOUT + 1))
-        return 2
-    fi
-
-    if echo "$result" | grep -q "✅ Teste passou\|Teste passou"; then
-        echo -e "${GREEN}✅ PASSOU${NC}"
-        PASSED=$((PASSED + 1))
-        return 0
-    elif echo "$result" | grep -q "❌ Teste falhou\|Failed"; then
-        echo -e "${RED}❌ FALHOU${NC}"
-        echo "$result" | grep -E "(Failed|❌)" | head -3
-        FAILED=$((FAILED + 1))
-        return 1
-    elif echo "$result" | grep -q "Timeout\|timeout\|⏱️"; then
-        echo -e "${YELLOW}⏱️ TIMEOUT${NC}"
-        TIMEOUT=$((TIMEOUT + 1))
-        return 2
-    else
-        echo -e "${YELLOW}⚠️ Resultado desconhecido${NC}"
-        echo "$result" | tail -3
-        UNKNOWN=$((UNKNOWN + 1))
-        return 1
-    fi
+    case $exit_code in
+        0)
+            echo -e "${GREEN}✅ PASSOU${NC}"
+            PASSED=$((PASSED + 1))
+            return 0
+            ;;
+        1)
+            echo -e "${RED}❌ FALHOU${NC}"
+            FAILED=$((FAILED + 1))
+            return 1
+            ;;
+        2)
+            echo -e "${YELLOW}⏱️ TIMEOUT${NC}"
+            TIMEOUT=$((TIMEOUT + 1))
+            return 2
+            ;;
+        124)
+            echo -e "${YELLOW}⏱️ TIMEOUT (script)${NC}"
+            TIMEOUT=$((TIMEOUT + 1))
+            return 2
+            ;;
+        *)
+            echo -e "${YELLOW}⚠️ Exit code: $exit_code${NC}"
+            UNKNOWN=$((UNKNOWN + 1))
+            return 1
+            ;;
+    esac
 }
 
 # Encontra todos os arquivos .gb e roda
