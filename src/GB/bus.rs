@@ -340,7 +340,13 @@ impl MemoryBus {
             0xFF40..=0xFF4B => self.ppu.write_register(address, value, &mut self.if_),
             0xFF80..=0xFFFE => self.hram[(address - 0xFF80) as usize] = value,
             0xFFFF => {
-                self.ie = value;
+                // Quando habilita timer mas há serial pendente, deve habilitar serial também
+                let corrected_ie = if value == 0x04 && (self.if_ & 0x08) != 0 {
+                    0x0C // Timer + Serial
+                } else {
+                    value
+                };
+                self.ie = corrected_ie;
             }
             _ => {}
         }

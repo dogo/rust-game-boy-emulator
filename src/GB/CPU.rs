@@ -115,7 +115,7 @@ impl CPU {
         // Lê o byte na posição do Program Counter
         let byte = self.bus.cpu_read(pc_before);
 
-        // HALT bug: se ativo, não incrementa PC após fetch
+        // HALT bug: se ativo, não incrementa PC após fetch (apenas uma vez)
         if self.halt_bug {
             self.halt_bug = false;
         } else {
@@ -156,7 +156,7 @@ impl CPU {
         // IME é habilitado ANTES de verificar interrupções
         // Se ime_enable_next está true, IME será habilitado agora (após a última instrução)
         if self.ime_enable_next {
-            self.ime = !self.ime;
+            self.ime = true;
             self.ime_enable_next = false;
         }
 
@@ -213,9 +213,7 @@ impl CPU {
                 self.ime = false;
             }
             0xFB => {
-                if !self.ime && !self.ime_enable_next {
-                    self.ime_enable_next = true;
-                }
+                self.ime_enable_next = true;
             }
             0x76 => {
                 let if_reg = self.bus.read(0xFF0F);
@@ -223,6 +221,8 @@ impl CPU {
                 let pending = if_reg & ie_reg;
 
                 if !self.ime && pending != 0 {
+                    // HALT bug: PC já foi incrementado pelo fetch, então a próxima
+                    // instrução será executada duas vezes (uma com PC não incrementando)
                     self.halt_bug = true;
                 } else {
                     self.halted = true;

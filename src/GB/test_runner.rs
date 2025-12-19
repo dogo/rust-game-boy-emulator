@@ -4,6 +4,7 @@
 use crate::GB::CPU::CPU;
 
 /// Resultado de um teste
+#[derive(Debug)]
 pub enum TestResult {
     Passed,
     Failed(u8),
@@ -65,40 +66,38 @@ pub fn run(cpu: &mut CPU) -> TestResult {
     let max_cycles: u64 = 4_194_304 * 120; // ~120 segundos
     let mut executed_cycles: u64 = 0;
     let mut steps: u64 = 0;
+    let mut last_pc = 0u16;
+    let mut same_pc_count = 0u32;
 
     loop {
         let (cycles, _) = cpu.execute_next();
         steps += 1;
 
+        let pc = cpu.registers.get_pc();
+
+        // Detecta loop infinito (mesmo PC por muitas instruções)
+        if pc == last_pc {
+            same_pc_count += 1;
+            if same_pc_count >= 1000 {
+                break;
+            }
+        } else {
+            same_pc_count = 0;
+            last_pc = pc;
+        }
+
         if cycles == 0 {
-            eprintln!(
-                "⚠ cycles == 0 em step {} | PC={:04X} opcode={:02X}",
-                steps,
-                cpu.registers.get_pc(),
-                cpu.opcode
-            );
             break;
         }
 
         executed_cycles = executed_cycles.wrapping_add(cycles);
         poll_serial(cpu, &mut serial_log);
 
-        // Log de progresso
+        // Log de progresso e detecção de loop
         if executed_cycles / 1_000_000 != (executed_cycles - cycles as u64) / 1_000_000 {
             let mega_cycles = executed_cycles / 1_000_000;
-            eprintln!(
-                "… progresso: {}M ciclos executados (steps={}) | PC={:04X} | Serial log: {} bytes",
-                mega_cycles,
-                steps,
-                cpu.registers.get_pc(),
-                serial_log.len()
-            );
 
-            // Mostra serial log a cada 10M ciclos se houver conteúdo
-            if mega_cycles % 10 == 0 && !serial_log.is_empty() {
-                eprintln!("  Serial output até agora: {}", serial_log);
-            }
-
+            // Verifica resultado na memória
             if let Some((status, text)) = check_memory_result(cpu) {
                 if status != 0x80 {
                     print_result(status, &text);
@@ -119,7 +118,6 @@ pub fn run(cpu: &mut CPU) -> TestResult {
         }
 
         if executed_cycles >= max_cycles {
-            eprintln!("⏱️ Atingiu limite de ciclos ({})", max_cycles);
             if let Some((status, text)) = check_memory_result(cpu) {
                 print_result(status, &text);
                 println!("Serial log:\n{}", serial_log);

@@ -14,9 +14,7 @@ fn get_sav_path(rom_path: &str) -> String {
 
 fn run_trace(cpu: &mut GB::CPU::CPU, rom_data: &[u8]) {
     GB::cartridge::print_info(rom_data);
-    println!("Trace iniciado (CTRL+C para interromper)");
     GB::trace::run_with_trace(cpu, usize::MAX);
-    println!("Trace encerrado");
 }
 
 fn main() {
@@ -64,7 +62,8 @@ fn main() {
 
     // Executa
     if headless {
-        GB::test_runner::run(&mut cpu);
+        let result = GB::test_runner::run(&mut cpu);
+        println!("Resultado: {:?}", result);
         return;
     } else if trace {
         run_trace(&mut cpu, &data);

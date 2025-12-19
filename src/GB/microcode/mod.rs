@@ -352,13 +352,15 @@ pub fn execute(program: &MicroProgram, regs: &mut Registers, bus: &mut MemoryBus
             MicroAction::JumpRelative => {
                 // JR r8: Lê offset assinado e salta relativamente
                 // Ciclos: 4 fetch opcode (já feito), 4 ler offset, 4 calcular e saltar
-                let offset = bus.cpu_read(regs.get_pc()) as i8;
-                regs.set_pc(regs.get_pc().wrapping_add(1));
+                let pc_before = regs.get_pc();
+                let offset = bus.cpu_read(pc_before) as i8;
+                regs.set_pc(pc_before.wrapping_add(1));
                 // Calcula novo PC e consome 4 ciclos adicionais
                 bus.cpu_idle(4);
                 // Usa PC já incrementado para calcular o salto
                 // Usa as i16 as u16 para fazer extensão de sinal correta
-                let new_pc = regs.get_pc().wrapping_add(offset as i16 as u16);
+                let pc_after_increment = regs.get_pc();
+                let new_pc = pc_after_increment.wrapping_add(offset as i16 as u16);
                 regs.set_pc(new_pc);
             }
             MicroAction::JumpRelativeConditional { cond } => {
