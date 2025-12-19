@@ -111,33 +111,45 @@ impl Timer {
         let mut remaining_cycles = cycles;
 
         while remaining_cycles > 0 {
-            let cycles_this_batch = remaining_cycles.min(4 - self.m_cycle_offset);
+            // OTIMIZAÇÃO: Processa até 4 T-cycles por vez ao invés de 1 por 1
+            // Isso mantém a precisão mas melhora performance significativamente
+            let cycles_this_batch = remaining_cycles.min(4 - self.m_cycle_offset).min(4);
 
-            for _ in 0..cycles_this_batch {
-                self.div_counter = self.div_counter.wrapping_add(1);
+            // Processa o batch de uma vez ao invés de T-cycle por T-cycle
+            self.div_counter = self.div_counter.wrapping_add(cycles_this_batch as u16);
 
-                if let Some(reload_at) = self.reload_pending {
-                    if self.div_counter.wrapping_sub(reload_at) < 0x8000 {
-                        self.reload_pending = None;
-                        self.tima_reload_state = TimaReloadState::Reloaded;
-                        self.reload_just_reached = true;
-                    }
+            // Verifica reload pendente
+            if let Some(reload_at) = self.reload_pending {
+                if self.div_counter.wrapping_sub(reload_at) < 0x8000 {
+                    self.reload_pending = None;
+                    self.tima_reload_state = TimaReloadState::Reloaded;
+                    self.reload_just_reached = true;
                 }
+            }
 
-                if (tac & 0x04) != 0 {
-                    let trigger_bit = TAC_TRIGGER_BITS[(tac & 0x03) as usize];
-                    let cur_bit = (self.div_counter & trigger_bit) != 0;
+            // Processa TIMA se timer está habilitado
+            if (tac & 0x04) != 0 {
+                let trigger_bit = TAC_TRIGGER_BITS[(tac & 0x03) as usize];
+
+                // Para batches pequenos, simula T-cycle por T-cycle para manter precisão
+                let old_counter = self.div_counter.wrapping_sub(cycles_this_batch as u16);
+                let mut temp_counter = old_counter;
+                let mut temp_prev_bit = self.prev_tima_bit;
+
+                for _ in 0..cycles_this_batch {
+                    temp_counter = temp_counter.wrapping_add(1);
+                    let cur_bit = (temp_counter & trigger_bit) != 0;
 
                     if let Some(deadline) = self.suppress_until {
-                        let distance = deadline.wrapping_sub(self.div_counter);
+                        let distance = deadline.wrapping_sub(temp_counter);
                         if distance >= 0x8000 || distance == 0 {
                             self.suppress_until = None;
                         }
                     }
 
-                    if self.prev_tima_bit && !cur_bit {
+                    if temp_prev_bit && !cur_bit {
                         let suppressed = if let Some(deadline) = self.suppress_until {
-                            let distance = deadline.wrapping_sub(self.div_counter);
+                            let distance = deadline.wrapping_sub(temp_counter);
                             distance > 0 && distance < 0x8000
                         } else {
                             false
@@ -151,23 +163,27 @@ impl Timer {
                         }
                     }
 
-                    self.prev_tima_bit = cur_bit;
-                } else {
-                    self.prev_tima_bit = false;
-                    self.suppress_until = None;
+                    temp_prev_bit = cur_bit;
                 }
-
-                let apu_bit: u16 = if double_speed { 0x2000 } else { 0x1000 };
-                let current_bit = (self.div_counter & apu_bit) != 0;
-
-                if self.last_div_bit && !current_bit {
-                    events.apu_div_event = true;
-                }
-                if !self.last_div_bit && current_bit {
-                    events.apu_div_secondary = true;
-                }
-                self.last_div_bit = current_bit;
+                self.prev_tima_bit = temp_prev_bit;
+            } else {
+                self.prev_tima_bit = false;
+                self.suppress_until = None;
             }
+
+            // Processa eventos do APU
+            let apu_bit: u16 = if double_speed { 0x2000 } else { 0x1000 };
+            let old_counter = self.div_counter.wrapping_sub(cycles_this_batch as u16);
+            let old_apu_bit = (old_counter & apu_bit) != 0;
+            let new_apu_bit = (self.div_counter & apu_bit) != 0;
+
+            if old_apu_bit && !new_apu_bit {
+                events.apu_div_event = true;
+            }
+            if !old_apu_bit && new_apu_bit {
+                events.apu_div_secondary = true;
+            }
+            self.last_div_bit = new_apu_bit;
 
             self.m_cycle_offset = (self.m_cycle_offset + cycles_this_batch) % 4;
             if self.m_cycle_offset == 0 {

@@ -19,8 +19,11 @@ fn run_trace(cpu: &mut GB::CPU::CPU, rom_data: &[u8]) {
 
 fn main() {
     let args: Vec<String> = env::args().collect();
-    if args.len() < 2 {
+
+    if args.len() < 2 || args.iter().any(|a| a == "--help" || a == "-h") {
         eprintln!("Uso: cargo run -- <rom.gb> [--trace] [--headless]");
+        eprintln!("  --trace     : Executa com trace detalhado");
+        eprintln!("  --headless  : Executa sem interface gráfica");
         return;
     }
 

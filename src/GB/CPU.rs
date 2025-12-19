@@ -142,7 +142,8 @@ impl CPU {
         // Se CPU está em HALT, não executa instruções até uma interrupção acordar
         if self.halted {
             let if_reg = self.bus.read(0xFF0F);
-            let ie_reg = self.bus.read(0xFFFF);
+            let mut ie_reg = self.bus.read(0xFFFF);
+
             if (if_reg & ie_reg) != 0 {
                 // Acorda da HALT normal
                 self.halted = false;
@@ -217,7 +218,8 @@ impl CPU {
             }
             0x76 => {
                 let if_reg = self.bus.read(0xFF0F);
-                let ie_reg = self.bus.read(0xFFFF);
+                let mut ie_reg = self.bus.read(0xFFFF);
+
                 let pending = if_reg & ie_reg;
 
                 if !self.ime && pending != 0 {
@@ -241,8 +243,9 @@ impl CPU {
     }
 
     fn service_interrupts_with_ime(&mut self, effective_ime: bool) -> bool {
-        let ie = self.bus.get_ie();
+        let mut ie = self.bus.get_ie();
         let iflags = self.bus.get_if();
+
         let pending = ie & iflags & 0x1F;
 
         if !effective_ime {
@@ -286,6 +289,7 @@ impl CPU {
         }
 
         self.registers.set_pc(vector);
+
         self.bus.clear_if_bits(mask);
         self.ime = false;
 
