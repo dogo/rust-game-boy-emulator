@@ -34,12 +34,12 @@ fn check_memory_result(cpu: &CPU) -> Option<(u8, String)> {
     } else {
         // Verifica se há dados válidos (não só 0xFF ou 0x00)
         let status = cpu.bus.read(0xA000);
-        
+
         // Ignora se for só 0xFF (RAM não inicializada) ou 0x00 (vazio)
         if status == 0xFF || status == 0x00 {
             return None;
         }
-        
+
         // Verifica se há texto legível na área
         let mut text = String::new();
         let mut has_text = false;
@@ -55,7 +55,7 @@ fn check_memory_result(cpu: &CPU) -> Option<(u8, String)> {
                 text.push_str(&format!("<{:02X}>", ch));
             }
         }
-        
+
         if has_text && text.len() > 5 {
             Some((status, text))
         } else {
@@ -136,18 +136,25 @@ pub fn run(cpu: &mut CPU) -> TestResult {
         // Verifica padrões de sucesso/falha na saída serial
         if !serial_log.is_empty() {
             let log_lower = serial_log.to_lowercase();
-            
+
             // Padrões de sucesso
-            if log_lower.contains("passed") || log_lower.contains("pass") || 
-               log_lower.contains("ok") || log_lower.contains("success") ||
-               serial_log.ends_with("Passed") || serial_log.ends_with("OK") {
+            if log_lower.contains("passed")
+                || log_lower.contains("pass")
+                || log_lower.contains("ok")
+                || log_lower.contains("success")
+                || serial_log.ends_with("Passed")
+                || serial_log.ends_with("OK")
+            {
                 println!("{}", serial_log);
                 return TestResult::Passed;
             }
 
             // Padrões de falha
-            if log_lower.contains("failed") || log_lower.contains("fail") || 
-               log_lower.contains("error") || log_lower.contains("wrong") {
+            if log_lower.contains("failed")
+                || log_lower.contains("fail")
+                || log_lower.contains("error")
+                || log_lower.contains("wrong")
+            {
                 println!("{}", serial_log);
                 return TestResult::Failed(1);
             }
