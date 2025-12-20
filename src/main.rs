@@ -27,7 +27,13 @@ fn main() {
         return;
     }
 
-    let rom_path = &args[1];
+    // Encontra o arquivo ROM (não é um flag)
+    let rom_path = args
+        .iter()
+        .skip(1)
+        .find(|arg| !arg.starts_with("--"))
+        .expect("Nenhum arquivo ROM especificado");
+
     let headless = args.iter().any(|a| a == "--headless");
     let trace = args.iter().any(|a| a == "--trace");
     let sav_path = get_sav_path(rom_path);
