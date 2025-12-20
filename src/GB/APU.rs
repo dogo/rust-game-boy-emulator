@@ -648,138 +648,168 @@ impl APU {
         raw_sample * volume_shift
     }
 
-    /// Lê um registrador do APU
+    /// Lê um registrador do APU com máscaras de bits corretas conforme Pan Docs
     pub fn read_register(&self, address: u16) -> u8 {
-        match address {
-            // Canal 1
-            0xFF10 => {
-                // NR10: Sweep (bit 7 não usado, sempre 1)
-                0x80 | (self.ch1_sweep_period << 4)
-                    | (if self.ch1_sweep_direction { 0x08 } else { 0x00 })
-                    | self.ch1_sweep_shift
-            }
-            0xFF11 => {
-                // NR11: Wave duty + length timer (só duty é readable)
-                (self.ch1_wave_duty << 6) | 0x3F
-            }
-            0xFF12 => {
-                // NR12: Envelope
-                (self.ch1_envelope_initial << 4)
-                    | (if self.ch1_envelope_direction {
-                        0x08
-                    } else {
-                        0x00
-                    })
-                    | self.ch1_envelope_period
-            }
-            0xFF13 => 0xFF, // NR13: Frequency low (write-only)
-            0xFF14 => {
-                // NR14: Frequency high + control (só length enable é readable)
-                (if self.ch1_length_enable { 0x40 } else { 0x00 }) | 0xBF
-            }
-
-            // Canal 2
-            0xFF16 => {
-                // NR21: Wave duty + length timer (só duty é readable)
-                (self.ch2_wave_duty << 6) | 0x3F
-            }
-            0xFF17 => {
-                // NR22: Envelope
-                (self.ch2_envelope_initial << 4)
-                    | (if self.ch2_envelope_direction {
-                        0x08
-                    } else {
-                        0x00
-                    })
-                    | self.ch2_envelope_period
-            }
-            0xFF18 => 0xFF, // NR23: Frequency low (write-only)
-            0xFF19 => {
-                // NR24: Frequency high + control (só length enable é readable)
-                (if self.ch2_length_enable { 0x40 } else { 0x00 }) | 0xBF
-            }
-
-            // Canal 3
-            0xFF1A => {
-                // NR30: DAC enable
-                (if self.ch3_dac_enable { 0x80 } else { 0x00 }) | 0x7F
-            }
-            0xFF1B => 0xFF, // NR31: Length timer (write-only)
-            0xFF1C => {
-                // NR32: Output level
-                (self.ch3_output_level << 5) | 0x9F
-            }
-            0xFF1D => 0xFF, // NR33: Frequency low (write-only)
-            0xFF1E => {
-                // NR34: Frequency high + control (só length enable é readable)
-                (if self.ch3_length_enable { 0x40 } else { 0x00 }) | 0xBF
-            }
-
-            // Canal 4
-            0xFF20 => 0xFF, // NR41: Length timer (write-only)
-            0xFF21 => {
-                // NR42: Envelope
-                (self.ch4_envelope_initial << 4)
-                    | (if self.ch4_envelope_direction {
-                        0x08
-                    } else {
-                        0x00
-                    })
-                    | self.ch4_envelope_period
-            }
-            0xFF22 => {
-                // NR43: Noise parameters
-                (self.ch4_clock_shift << 4)
-                    | (if self.ch4_width_mode { 0x08 } else { 0x00 })
-                    | self.ch4_divisor_code
-            }
-            0xFF23 => {
-                // NR44: Control (só length enable é readable)
-                (if self.ch4_length_enable { 0x40 } else { 0x00 }) | 0xBF
-            }
-
-            // Controle geral
-            0xFF24 => {
-                // NR50: Master volume
-                (if self.vin_left_enable { 0x80 } else { 0x00 })
-                    | (self.left_volume << 4)
-                    | (if self.vin_right_enable { 0x08 } else { 0x00 })
-                    | self.right_volume
-            }
-            0xFF25 => {
-                // NR51: Sound panning
-                (if self.ch4_left { 0x80 } else { 0x00 })
-                    | (if self.ch3_left { 0x40 } else { 0x00 })
-                    | (if self.ch2_left { 0x20 } else { 0x00 })
-                    | (if self.ch1_left { 0x10 } else { 0x00 })
-                    | (if self.ch4_right { 0x08 } else { 0x00 })
-                    | (if self.ch3_right { 0x04 } else { 0x00 })
-                    | (if self.ch2_right { 0x02 } else { 0x00 })
-                    | (if self.ch1_right { 0x01 } else { 0x00 })
-            }
-            0xFF26 => {
-                // NR52: Sound on/off + channel status
-                (if self.sound_enable { 0x80 } else { 0x00 }) |
-                0x70 | // bits 6-4 não usados (sempre 1)
-                (if self.ch4_enabled { 0x08 } else { 0x00 }) |
-                (if self.ch3_enabled { 0x04 } else { 0x00 }) |
-                (if self.ch2_enabled { 0x02 } else { 0x00 }) |
-                (if self.ch1_enabled { 0x01 } else { 0x00 })
-            }
-
-            // Wave RAM - HARDWARE QUIRK: durante playback, retorna byte sendo acessado
-            0xFF30..=0xFF3F => {
-                if self.ch3_enabled && self.ch3_dac_enable {
-                    // HARDWARE QUIRK: Durante playback, retorna o byte que o canal está acessando atualmente
-                    // Este é o byte que está sendo lido pelo canal 3 na posição atual da wave
-                    self.ch3_current_sample_byte
-                } else {
-                    // Normal: acesso direto à Wave RAM quando canal não está tocando
+        // HARDWARE PRECISION: Quando APU está desligada, todos os registradores
+        // (exceto NR52, length timers e Wave RAM) retornam 0xFF
+        if !self.sound_enable {
+            match address {
+                0xFF26 => {
+                    // NR52: Sempre readable, mesmo com APU desligada
+                    // Bits 6-4 sempre 1, bits 3-0 sempre 0 quando APU desligada
+                    0x70
+                }
+                0xFF11 | 0xFF16 | 0xFF1B | 0xFF20 => {
+                    // Length timers: readable mesmo com APU desligada (bits não utilizados = 1)
+                    match address {
+                        0xFF11 => 0x3F, // NR11: bits 5-0 não utilizados para leitura
+                        0xFF16 => 0x3F, // NR21: bits 5-0 não utilizados para leitura
+                        0xFF1B => 0xFF, // NR31: completamente write-only
+                        0xFF20 => 0xFF, // NR41: bits 5-0 não utilizados para leitura
+                        _ => 0xFF,
+                    }
+                }
+                0xFF30..=0xFF3F => {
+                    // Wave RAM: sempre accessible
                     self.ch3_wave_ram[(address - 0xFF30) as usize]
                 }
+                _ => 0xFF, // Todos os outros registradores retornam 0xFF quando APU desligada
             }
+        } else {
+            // APU ligada: comportamento normal com máscaras corretas
+            match address {
+                // Canal 1
+                0xFF10 => {
+                    // NR10: Sweep - bit 7 não usado (sempre 1)
+                    0x80 | (self.ch1_sweep_period << 4)
+                        | (if self.ch1_sweep_direction { 0x08 } else { 0x00 })
+                        | self.ch1_sweep_shift
+                }
+                0xFF11 => {
+                    // NR11: Wave duty + length timer - bits 5-0 não utilizados para leitura (sempre 1)
+                    (self.ch1_wave_duty << 6) | 0x3F
+                }
+                0xFF12 => {
+                    // NR12: Envelope - todos os bits são readable
+                    (self.ch1_envelope_initial << 4)
+                        | (if self.ch1_envelope_direction {
+                            0x08
+                        } else {
+                            0x00
+                        })
+                        | self.ch1_envelope_period
+                }
+                0xFF13 => 0xFF, // NR13: Frequency low - write-only (todos os bits 1)
+                0xFF14 => {
+                    // NR14: Frequency high + control - bits 7,5-3,2-0 não utilizados (sempre 1)
+                    (if self.ch1_length_enable { 0x40 } else { 0x00 }) | 0xBF
+                }
 
-            _ => 0xFF, // Registradores não implementados
+                // Canal 2
+                0xFF15 => 0xFF, // NR20: Não existe no DMG (sempre 0xFF)
+                0xFF16 => {
+                    // NR21: Wave duty + length timer - bits 5-0 não utilizados para leitura (sempre 1)
+                    (self.ch2_wave_duty << 6) | 0x3F
+                }
+                0xFF17 => {
+                    // NR22: Envelope - todos os bits são readable
+                    (self.ch2_envelope_initial << 4)
+                        | (if self.ch2_envelope_direction {
+                            0x08
+                        } else {
+                            0x00
+                        })
+                        | self.ch2_envelope_period
+                }
+                0xFF18 => 0xFF, // NR23: Frequency low - write-only (todos os bits 1)
+                0xFF19 => {
+                    // NR24: Frequency high + control - bits 7,5-3,2-0 não utilizados (sempre 1)
+                    (if self.ch2_length_enable { 0x40 } else { 0x00 }) | 0xBF
+                }
+
+                // Canal 3
+                0xFF1A => {
+                    // NR30: DAC enable - bits 6-0 não utilizados (sempre 1)
+                    (if self.ch3_dac_enable { 0x80 } else { 0x00 }) | 0x7F
+                }
+                0xFF1B => 0xFF, // NR31: Length timer - write-only (todos os bits 1)
+                0xFF1C => {
+                    // NR32: Output level - bits 7,4-0 não utilizados (sempre 1)
+                    (self.ch3_output_level << 5) | 0x9F
+                }
+                0xFF1D => 0xFF, // NR33: Frequency low - write-only (todos os bits 1)
+                0xFF1E => {
+                    // NR34: Frequency high + control - bits 7,5-3,2-0 não utilizados (sempre 1)
+                    (if self.ch3_length_enable { 0x40 } else { 0x00 }) | 0xBF
+                }
+
+                // Canal 4
+                0xFF1F => 0xFF, // NR40: Não existe no DMG (sempre 0xFF)
+                0xFF20 => 0xFF, // NR41: Length timer - write-only (todos os bits 1)
+                0xFF21 => {
+                    // NR42: Envelope - todos os bits são readable
+                    (self.ch4_envelope_initial << 4)
+                        | (if self.ch4_envelope_direction {
+                            0x08
+                        } else {
+                            0x00
+                        })
+                        | self.ch4_envelope_period
+                }
+                0xFF22 => {
+                    // NR43: Noise parameters - todos os bits são readable
+                    (self.ch4_clock_shift << 4)
+                        | (if self.ch4_width_mode { 0x08 } else { 0x00 })
+                        | self.ch4_divisor_code
+                }
+                0xFF23 => {
+                    // NR44: Control - bits 7,5-3,2-0 não utilizados (sempre 1)
+                    (if self.ch4_length_enable { 0x40 } else { 0x00 }) | 0xBF
+                }
+
+                // Controle geral
+                0xFF24 => {
+                    // NR50: Master volume - todos os bits são readable
+                    (if self.vin_left_enable { 0x80 } else { 0x00 })
+                        | (self.left_volume << 4)
+                        | (if self.vin_right_enable { 0x08 } else { 0x00 })
+                        | self.right_volume
+                }
+                0xFF25 => {
+                    // NR51: Sound panning - todos os bits são readable
+                    (if self.ch4_left { 0x80 } else { 0x00 })
+                        | (if self.ch3_left { 0x40 } else { 0x00 })
+                        | (if self.ch2_left { 0x20 } else { 0x00 })
+                        | (if self.ch1_left { 0x10 } else { 0x00 })
+                        | (if self.ch4_right { 0x08 } else { 0x00 })
+                        | (if self.ch3_right { 0x04 } else { 0x00 })
+                        | (if self.ch2_right { 0x02 } else { 0x00 })
+                        | (if self.ch1_right { 0x01 } else { 0x00 })
+                }
+                0xFF26 => {
+                    // NR52: Sound on/off + channel status - bits 6-4 não utilizados (sempre 1)
+                    (if self.sound_enable { 0x80 } else { 0x00 })
+                        | 0x70 // bits 6-4 não usados (sempre 1)
+                        | (if self.ch4_enabled { 0x08 } else { 0x00 })
+                        | (if self.ch3_enabled { 0x04 } else { 0x00 })
+                        | (if self.ch2_enabled { 0x02 } else { 0x00 })
+                        | (if self.ch1_enabled { 0x01 } else { 0x00 })
+                }
+
+                // Wave RAM - HARDWARE QUIRK: durante playback, retorna byte sendo acessado
+                0xFF30..=0xFF3F => {
+                    if self.ch3_enabled && self.ch3_dac_enable {
+                        // HARDWARE QUIRK: Durante playback, retorna o byte que o canal está acessando atualmente
+                        // Este é o byte que está sendo lido pelo canal 3 na posição atual da wave
+                        self.ch3_current_sample_byte
+                    } else {
+                        // Normal: acesso direto à Wave RAM quando canal não está tocando
+                        self.ch3_wave_ram[(address - 0xFF30) as usize]
+                    }
+                }
+
+                _ => 0xFF, // Registradores não implementados (bits não utilizados sempre 1)
+            }
         }
     }
 
@@ -1156,47 +1186,46 @@ impl APU {
         }
     }
 
-    /// Desabilita todos os canais quando o som é desligado
+    /// Desabilita todos os canais quando o som é desligado (NR52 bit 7 = 0)
+    /// HARDWARE PRECISION: Limpa todos os registradores EXCETO length timers e Wave RAM
     fn disable_all_channels(&mut self) {
+        // Desabilitar todos os canais imediatamente
         self.ch1_enabled = false;
         self.ch2_enabled = false;
         self.ch3_enabled = false;
         self.ch4_enabled = false;
 
-        // Limpar registradores de todos os canais
-        // NÃO limpa: length timers (NRx1) e wave RAM - quirk do hardware DMG
+        // HARDWARE PRECISION: Quando APU é desligada (NR52 bit 7 = 0):
+        // - Todos os registradores NR10-NR51 são zerados
+        // - EXCETO: length timers (NRx1) e Wave RAM (0xFF30-0xFF3F)
+        // - Length counters internos também são preservados
 
-        // Canal 1 (mantém ch1_length_timer)
+        // Canal 1 - Limpar tudo EXCETO ch1_length_timer
         self.ch1_sweep_period = 0;
         self.ch1_sweep_direction = false;
         self.ch1_sweep_shift = 0;
         self.ch1_wave_duty = 0;
-        // self.ch1_length_timer = 0; // NR11 bits 0-5 preservado
         self.ch1_envelope_initial = 0;
         self.ch1_envelope_direction = false;
         self.ch1_envelope_period = 0;
         self.ch1_frequency = 0;
         self.ch1_length_enable = false;
 
-        // Canal 2 (mantém ch2_length_timer)
+        // Canal 2 - Limpar tudo EXCETO ch2_length_timer
         self.ch2_wave_duty = 0;
-        // self.ch2_length_timer = 0; // NR21 bits 0-5 preservado
         self.ch2_envelope_initial = 0;
         self.ch2_envelope_direction = false;
         self.ch2_envelope_period = 0;
         self.ch2_frequency = 0;
         self.ch2_length_enable = false;
 
-        // Canal 3 (mantém ch3_length_timer e wave RAM)
+        // Canal 3 - Limpar tudo EXCETO ch3_length_timer e Wave RAM
         self.ch3_dac_enable = false;
-        // self.ch3_length_timer = 0; // NR31 preservado
         self.ch3_output_level = 0;
         self.ch3_frequency = 0;
         self.ch3_length_enable = false;
 
-        // Canal 4 (mantém ch4_length_timer e ch4_length_counter)
-        // self.ch4_length_timer = 0; // NR41 bits 0-5 preservado
-        // ch4_length_counter também preservado
+        // Canal 4 - Limpar tudo EXCETO ch4_length_timer
         self.ch4_envelope_initial = 0;
         self.ch4_envelope_direction = false;
         self.ch4_envelope_period = 0;
@@ -1205,7 +1234,7 @@ impl APU {
         self.ch4_divisor_code = 0;
         self.ch4_length_enable = false;
 
-        // Reset controles gerais
+        // Controles gerais (NR50, NR51) - Limpar completamente
         self.left_volume = 0;
         self.right_volume = 0;
         self.vin_left_enable = false;
@@ -1218,6 +1247,9 @@ impl APU {
         self.ch3_right = false;
         self.ch4_left = false;
         self.ch4_right = false;
+
+        // NR52 não é limpo aqui - apenas o bit 7 é controlado externamente
+        // Os bits 3-0 (channel status) são atualizados automaticamente via ch*_enabled
     }
 
     /// Atualiza timers dos canais

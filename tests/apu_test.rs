@@ -1165,3 +1165,302 @@ fn property_wave_ram_write_protection() {
         }
     }
 }
+
+#[test]
+fn property_register_read_bit_patterns() {
+    // Property-based testing manual: 5 iterações para testar máscaras de leitura de registradores
+    for iteration in 0..5 {
+        let mut apu = APU::new();
+
+        // Garantir que APU está ligada
+        apu.write_register(0xFF26, 0x80);
+
+        // Testar diferentes valores de escrita para verificar máscaras de leitura
+        let test_values = [0x00, 0xFF, 0x55, 0xAA, 0x33];
+        let test_value = test_values[iteration % test_values.len()];
+
+        // === Testar registradores com máscaras específicas ===
+
+        // NR10 (0xFF10): bit 7 sempre 1, bits 6-0 readable
+        apu.write_register(0xFF10, test_value);
+        let nr10_read = apu.read_register(0xFF10);
+        assert_eq!(
+            nr10_read & 0x80,
+            0x80,
+            "Iteração {}: NR10 bit 7 deve sempre ser 1, mas foi 0x{:02X}",
+            iteration,
+            nr10_read
+        );
+
+        // NR11 (0xFF11): bits 7-6 readable (duty), bits 5-0 sempre 1
+        apu.write_register(0xFF11, test_value);
+        let nr11_read = apu.read_register(0xFF11);
+        assert_eq!(
+            nr11_read & 0x3F,
+            0x3F,
+            "Iteração {}: NR11 bits 5-0 devem sempre ser 1, mas foi 0x{:02X}",
+            iteration,
+            nr11_read
+        );
+
+        // NR13 (0xFF13): write-only, deve sempre retornar 0xFF
+        apu.write_register(0xFF13, test_value);
+        let nr13_read = apu.read_register(0xFF13);
+        assert_eq!(
+            nr13_read, 0xFF,
+            "Iteração {}: NR13 é write-only, deve retornar 0xFF mas foi 0x{:02X}",
+            iteration, nr13_read
+        );
+
+        // NR14 (0xFF14): bit 6 readable (length enable), outros bits sempre 1
+        apu.write_register(0xFF14, test_value);
+        let nr14_read = apu.read_register(0xFF14);
+        assert_eq!(
+            nr14_read & 0xBF,
+            0xBF,
+            "Iteração {}: NR14 bits 7,5-3,2-0 devem sempre ser 1, mas foi 0x{:02X}",
+            iteration,
+            nr14_read
+        );
+
+        // NR1A (0xFF1A): bit 7 readable (DAC enable), bits 6-0 sempre 1
+        apu.write_register(0xFF1A, test_value);
+        let nr1a_read = apu.read_register(0xFF1A);
+        assert_eq!(
+            nr1a_read & 0x7F,
+            0x7F,
+            "Iteração {}: NR1A bits 6-0 devem sempre ser 1, mas foi 0x{:02X}",
+            iteration,
+            nr1a_read
+        );
+
+        // NR1B (0xFF1B): write-only, deve sempre retornar 0xFF
+        apu.write_register(0xFF1B, test_value);
+        let nr1b_read = apu.read_register(0xFF1B);
+        assert_eq!(
+            nr1b_read, 0xFF,
+            "Iteração {}: NR1B é write-only, deve retornar 0xFF mas foi 0x{:02X}",
+            iteration, nr1b_read
+        );
+
+        // NR1C (0xFF1C): bits 6-5 readable (output level), outros bits sempre 1
+        apu.write_register(0xFF1C, test_value);
+        let nr1c_read = apu.read_register(0xFF1C);
+        assert_eq!(
+            nr1c_read & 0x9F,
+            0x9F,
+            "Iteração {}: NR1C bits 7,4-0 devem sempre ser 1, mas foi 0x{:02X}",
+            iteration,
+            nr1c_read
+        );
+
+        // NR20 (0xFF20): write-only, deve sempre retornar 0xFF
+        apu.write_register(0xFF20, test_value);
+        let nr20_read = apu.read_register(0xFF20);
+        assert_eq!(
+            nr20_read, 0xFF,
+            "Iteração {}: NR20 é write-only, deve retornar 0xFF mas foi 0x{:02X}",
+            iteration, nr20_read
+        );
+
+        // NR26 (0xFF26): bit 7 readable (sound enable), bits 6-4 sempre 1, bits 3-0 status dos canais
+        let nr26_read = apu.read_register(0xFF26);
+        assert_eq!(
+            nr26_read & 0x70,
+            0x70,
+            "Iteração {}: NR26 bits 6-4 devem sempre ser 1, mas foi 0x{:02X}",
+            iteration,
+            nr26_read
+        );
+
+        // Registradores não existentes devem retornar 0xFF
+        let nr15_read = apu.read_register(0xFF15); // NR20 não existe no DMG
+        assert_eq!(
+            nr15_read, 0xFF,
+            "Iteração {}: Registrador não existente deve retornar 0xFF mas foi 0x{:02X}",
+            iteration, nr15_read
+        );
+    }
+}
+
+#[test]
+fn property_apu_power_off_register_clearing() {
+    // Property-based testing manual: 5 iterações para testar comportamento de power-off
+    for iteration in 0..5 {
+        let mut apu = APU::new();
+
+        // Configurar registradores com valores conhecidos
+        let test_values = [0x11, 0x22, 0x33, 0x44, 0x55];
+        let base_value = test_values[iteration % test_values.len()];
+
+        // === Configurar todos os registradores com valores de teste ===
+
+        // Canal 1
+        apu.write_register(0xFF10, base_value); // NR10: Sweep
+        apu.write_register(0xFF11, base_value); // NR11: Duty + Length
+        apu.write_register(0xFF12, base_value | 0x08); // NR12: Envelope (garantir DAC enable)
+        apu.write_register(0xFF13, base_value); // NR13: Freq low
+        apu.write_register(0xFF14, base_value); // NR14: Freq high + control
+
+        // Canal 2
+        apu.write_register(0xFF16, base_value); // NR21: Duty + Length
+        apu.write_register(0xFF17, base_value | 0x08); // NR22: Envelope
+        apu.write_register(0xFF18, base_value); // NR23: Freq low
+        apu.write_register(0xFF19, base_value); // NR24: Freq high + control
+
+        // Canal 3
+        apu.write_register(0xFF1A, base_value | 0x80); // NR30: DAC enable
+        apu.write_register(0xFF1B, base_value); // NR31: Length
+        apu.write_register(0xFF1C, base_value); // NR32: Output level
+        apu.write_register(0xFF1D, base_value); // NR33: Freq low
+        apu.write_register(0xFF1E, base_value); // NR34: Freq high + control
+
+        // Canal 4
+        apu.write_register(0xFF20, base_value); // NR41: Length
+        apu.write_register(0xFF21, base_value | 0x08); // NR42: Envelope
+        apu.write_register(0xFF22, base_value); // NR43: Noise params
+        apu.write_register(0xFF23, base_value); // NR44: Control
+
+        // Controles gerais
+        apu.write_register(0xFF24, base_value); // NR50: Master volume
+        apu.write_register(0xFF25, base_value); // NR51: Panning
+
+        // Wave RAM
+        for i in 0..16 {
+            apu.write_register(0xFF30 + i as u16, base_value.wrapping_add(i as u8));
+        }
+
+        // Verificar que registradores foram configurados (APU ligada)
+        let nr26_before = apu.read_register(0xFF26);
+        assert_eq!(
+            nr26_before & 0x80,
+            0x80,
+            "Iteração {}: APU deve estar ligada antes do teste",
+            iteration
+        );
+
+        // Salvar Wave RAM (deve ser preservada)
+        let mut wave_ram_before = [0u8; 16];
+        for i in 0..16 {
+            wave_ram_before[i] = apu.read_register(0xFF30 + i as u16);
+        }
+
+        // === DESLIGAR APU (NR52 bit 7 = 0) ===
+        apu.write_register(0xFF26, 0x00);
+
+        // Verificar que APU está desligada
+        let nr26_after = apu.read_register(0xFF26);
+        assert_eq!(
+            nr26_after & 0x80,
+            0x00,
+            "Iteração {}: APU deve estar desligada após escrever 0x00 em NR52",
+            iteration
+        );
+
+        // Verificar que bits de status dos canais foram zerados
+        assert_eq!(
+            nr26_after & 0x0F,
+            0x00,
+            "Iteração {}: Status dos canais deve ser 0x00 com APU desligada, mas foi 0x{:02X}",
+            iteration,
+            nr26_after & 0x0F
+        );
+
+        // === VERIFICAR QUE REGISTRADORES FORAM LIMPOS ===
+
+        // Registradores que devem retornar 0xFF quando APU desligada (exceto casos especiais)
+        let registers_to_check = [
+            0xFF10, 0xFF12, 0xFF13, 0xFF14, // Canal 1 (exceto NR11)
+            0xFF17, 0xFF18, 0xFF19, // Canal 2 (exceto NR16)
+            0xFF1A, 0xFF1C, 0xFF1D, 0xFF1E, // Canal 3 (exceto NR1B)
+            0xFF21, 0xFF22, 0xFF23, // Canal 4 (exceto NR20)
+            0xFF24, 0xFF25, // Controles gerais
+        ];
+
+        for &reg_addr in &registers_to_check {
+            let reg_value = apu.read_register(reg_addr);
+            assert_eq!(
+                reg_value, 0xFF,
+                "Iteração {}: Registrador 0x{:04X} deve retornar 0xFF com APU desligada, mas foi 0x{:02X}",
+                iteration, reg_addr, reg_value
+            );
+        }
+
+        // Registradores de length timer devem ter comportamento especial
+        let nr11_after = apu.read_register(0xFF11);
+        assert_eq!(
+            nr11_after, 0x3F,
+            "Iteração {}: NR11 deve retornar 0x3F com APU desligada (length timer preservado mas não readable), mas foi 0x{:02X}",
+            iteration, nr11_after
+        );
+
+        let nr16_after = apu.read_register(0xFF16);
+        assert_eq!(
+            nr16_after, 0x3F,
+            "Iteração {}: NR16 deve retornar 0x3F com APU desligada, mas foi 0x{:02X}",
+            iteration, nr16_after
+        );
+
+        let nr1b_after = apu.read_register(0xFF1B);
+        assert_eq!(
+            nr1b_after, 0xFF,
+            "Iteração {}: NR1B deve retornar 0xFF com APU desligada (write-only), mas foi 0x{:02X}",
+            iteration, nr1b_after
+        );
+
+        let nr20_after = apu.read_register(0xFF20);
+        assert_eq!(
+            nr20_after, 0xFF,
+            "Iteração {}: NR20 deve retornar 0xFF com APU desligada (write-only), mas foi 0x{:02X}",
+            iteration, nr20_after
+        );
+
+        // Wave RAM deve ser preservada
+        for i in 0..16 {
+            let wave_value = apu.read_register(0xFF30 + i as u16);
+            assert_eq!(
+                wave_value, wave_ram_before[i],
+                "Iteração {}: Wave RAM[{}] deve ser preservada: esperado 0x{:02X}, mas foi 0x{:02X}",
+                iteration, i, wave_ram_before[i], wave_value
+            );
+        }
+
+        // === RELIGAR APU E VERIFICAR QUE REGISTRADORES AINDA ESTÃO LIMPOS ===
+        apu.write_register(0xFF26, 0x80);
+
+        let nr26_relit = apu.read_register(0xFF26);
+        assert_eq!(
+            nr26_relit & 0x80,
+            0x80,
+            "Iteração {}: APU deve estar ligada após religar",
+            iteration
+        );
+
+        // Registradores devem ainda estar limpos (exceto length timers e Wave RAM)
+        let nr10_relit = apu.read_register(0xFF10);
+        assert_eq!(
+            nr10_relit & 0x7F,
+            0x00,
+            "Iteração {}: NR10 deve estar limpo após religar APU (exceto bit 7), mas foi 0x{:02X}",
+            iteration,
+            nr10_relit
+        );
+
+        let nr12_relit = apu.read_register(0xFF12);
+        assert_eq!(
+            nr12_relit, 0x00,
+            "Iteração {}: NR12 deve estar limpo após religar APU, mas foi 0x{:02X}",
+            iteration, nr12_relit
+        );
+
+        // Wave RAM deve ainda estar preservada
+        for i in 0..16 {
+            let wave_value = apu.read_register(0xFF30 + i as u16);
+            assert_eq!(
+                wave_value, wave_ram_before[i],
+                "Iteração {}: Wave RAM[{}] deve permanecer preservada após religar: esperado 0x{:02X}, mas foi 0x{:02X}",
+                iteration, i, wave_ram_before[i], wave_value
+            );
+        }
+    }
+}
