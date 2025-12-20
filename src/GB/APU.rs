@@ -80,6 +80,11 @@ impl Envelope {
         self.period = period;
         self.timer = period;
         self.stopped = false;
+        
+        // HARDWARE PRECISION: Se já está no limite e não pode mudar, deve parar
+        if (initial_volume == 15 && direction) || (initial_volume == 0 && !direction) {
+            self.stopped = true;
+        }
     }
 
     pub fn step(&mut self) {
