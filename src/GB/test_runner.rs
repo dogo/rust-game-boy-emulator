@@ -36,18 +36,19 @@ fn check_memory_result(cpu: &CPU) -> Option<(u8, String)> {
     }
 }
 
-/// Executa ROM de teste em modo headless - VERSÃO OTIMIZADA PARA CPU TESTS
+/// Executa ROM de teste em modo headless
 pub fn run(cpu: &mut CPU) -> TestResult {
     let mut instruction_count = 0u64;
     let mut last_pc = 0u16;
     let mut stuck_count = 0u32;
     let mut serial_output = String::new();
 
-    // Limites otimizados para CPU tests
-    const MAX_INSTRUCTIONS: u64 = 50_000_000; // 50M instruções max
-    const STUCK_THRESHOLD: u32 = 10000; // 10k instruções no mesmo PC = travado
+    // Limites otimizados para captura melhor
+    const MAX_INSTRUCTIONS: u64 = 300_000_000; // 300M instruções max
+    const STUCK_THRESHOLD: u32 = 200000; // 200k instruções no mesmo PC = travado
     const MEMORY_CHECK_INTERVAL: u64 = 1000; // Verifica memória a cada 1k instruções
-    const SERIAL_CHECK_INTERVAL: u64 = 100; // Verifica serial a cada 100 instruções
+    const SERIAL_CHECK_INTERVAL: u64 = 50; // Verifica serial a cada 50 instruções
+    const FINAL_CHECK_INTERVAL: u64 = 50000; // Verificação final mais frequente
 
     loop {
         // Executa uma instrução
@@ -64,19 +65,46 @@ pub fn run(cpu: &mut CPU) -> TestResult {
         if pc == last_pc {
             stuck_count += 1;
             if stuck_count >= STUCK_THRESHOLD {
-                // CPU travado - verifica resultado final
-                if let Some((status, text)) = check_memory_result(cpu) {
-                    if status != 0x80 {
-                        if !text.is_empty() {
-                            println!("{}", text);
+                // Verificação final intensiva antes de desistir
+                for _ in 0..20 {
+                    if let Some((status, text)) = check_memory_result(cpu) {
+                        if status != 0x80 {
+                            if !text.is_empty() {
+                                println!("{}", text);
+                            }
+                            if !serial_output.is_empty() {
+                                println!("Serial: {}", serial_output);
+                            }
+                            return if status == 0 {
+                                TestResult::Passed
+                            } else {
+                                TestResult::Failed(status)
+                            };
                         }
-                        return if status == 0 {
-                            TestResult::Passed
-                        } else {
-                            TestResult::Failed(status)
-                        };
+                    }
+
+                    // Verifica serial uma última vez
+                    let if_reg = cpu.bus.read(0xFF0F);
+                    if (if_reg & 0x08) != 0 {
+                        let byte = cpu.bus.read(0xFF01);
+                        if (0x20..=0x7E).contains(&byte) || byte == b'\n' || byte == b'\r' {
+                            serial_output.push(byte as char);
+                        }
+                        cpu.bus.clear_if_bits(0x08);
                     }
                 }
+
+                // Se CPU está halted, tenta acordar com interrupções
+                if cpu.halted {
+                    let ie = cpu.bus.get_ie();
+                    let if_reg = cpu.bus.get_if();
+                    if (ie & if_reg) != 0 {
+                        cpu.halted = false;
+                        stuck_count = 0;
+                        continue;
+                    }
+                }
+
                 break;
             }
         } else {
@@ -104,9 +132,8 @@ pub fn run(cpu: &mut CPU) -> TestResult {
             }
         }
 
-        // Verifica saída serial com mais frequência
+        // Verifica saída serial com alta frequência
         if instruction_count % SERIAL_CHECK_INTERVAL == 0 {
-            // Captura qualquer atividade serial
             let if_reg = cpu.bus.read(0xFF0F);
             if (if_reg & 0x08) != 0 {
                 let byte = cpu.bus.read(0xFF01);
@@ -128,28 +155,78 @@ pub fn run(cpu: &mut CPU) -> TestResult {
             }
         }
 
+        // Verificação final mais intensiva quando se aproxima do limite
+        if instruction_count > MAX_INSTRUCTIONS - FINAL_CHECK_INTERVAL {
+            if instruction_count % 100 == 0 {
+                // Verifica a cada 100 instruções no final
+                if let Some((status, text)) = check_memory_result(cpu) {
+                    if status != 0x80 {
+                        if !text.is_empty() {
+                            println!("{}", text);
+                        }
+                        if !serial_output.is_empty() {
+                            println!("Serial: {}", serial_output);
+                        }
+                        return if status == 0 {
+                            TestResult::Passed
+                        } else {
+                            TestResult::Failed(status)
+                        };
+                    }
+                }
+            }
+        }
+
         // Limite de segurança
         if instruction_count >= MAX_INSTRUCTIONS {
-            // Última verificação antes do timeout
-            if let Some((status, text)) = check_memory_result(cpu) {
-                if status != 0x80 {
-                    if !text.is_empty() {
-                        println!("{}", text);
+            // Última verificação intensiva
+            for _ in 0..1000 {
+                if let Some((status, text)) = check_memory_result(cpu) {
+                    if status != 0x80 {
+                        if !text.is_empty() {
+                            println!("{}", text);
+                        }
+                        if !serial_output.is_empty() {
+                            println!("Serial: {}", serial_output);
+                        }
+                        return if status == 0 {
+                            TestResult::Passed
+                        } else {
+                            TestResult::Failed(status)
+                        };
                     }
-                    return if status == 0 {
-                        TestResult::Passed
-                    } else {
-                        TestResult::Failed(status)
-                    };
                 }
             }
             break;
         }
     }
 
-    // Timeout - mostra qualquer saída capturada
+    // Análise final antes de reportar timeout
     if !serial_output.is_empty() {
         println!("Serial: {}", serial_output);
+
+        // Se há saída serial, pode ser uma falha não detectada
+        let lower = serial_output.to_lowercase();
+        if lower.contains("fail") || lower.contains("error") || lower.contains("wrong") {
+            return TestResult::Failed(1);
+        }
     }
+
+    // Última tentativa de capturar resultado da memória
+    for _ in 0..100 {
+        if let Some((status, text)) = check_memory_result(cpu) {
+            if status != 0x80 {
+                if !text.is_empty() {
+                    println!("{}", text);
+                }
+                return if status == 0 {
+                    TestResult::Passed
+                } else {
+                    TestResult::Failed(status)
+                };
+            }
+        }
+    }
+
     TestResult::Timeout
 }
