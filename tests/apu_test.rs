@@ -1,7 +1,7 @@
 // Integration tests para APU
 // cargo test apu_test
 
-use gb_emu::GB::APU::{APU, Envelope, FrameSequencer};
+use gb_emu::GB::APU::{APU, Envelope, FrameSequencer, SweepUnit};
 
 #[cfg(test)]
 mod apu_tests {
@@ -376,8 +376,6 @@ mod apu_tests {
 
     #[test]
     fn test_sweep_overflow_channel_disable_property() {
-        use gb_emu::GB::APU::SweepUnit;
-
         // Executar 100 iterações para simular property-based testing
         for iteration in 0..100 {
             let mut sweep = SweepUnit::new();
@@ -431,8 +429,6 @@ mod apu_tests {
 
     #[test]
     fn test_sweep_negate_to_add_quirk_property() {
-        use gb_emu::GB::APU::SweepUnit;
-
         // Executar 100 iterações para simular property-based testing
         for iteration in 0..100 {
             let mut sweep = SweepUnit::new();
@@ -488,14 +484,16 @@ mod apu_tests {
     fn test_apu_sweep_overflow_integration() {
         let mut apu = APU::new();
 
-        // Configurar canal 1 com sweep que pode causar overflow
+        // Configurar canal 1 com sweep que pode causar overflow após alguns steps
+        // Usar frequência que não overflow imediatamente: 1000 + 500 = 1500 (OK)
+        // Mas após alguns steps: 1500 + 750 = 2250 > 2047 (overflow)
         apu.write_register(0xFF10, 0x11); // NR10: period=1, add, shift=1
         apu.write_register(0xFF11, 0x80); // NR11: duty=2, length=0
         apu.write_register(0xFF12, 0xF0); // NR12: volume=15, increase, period=0
-        apu.write_register(0xFF13, 0xFF); // NR13: freq low = 0xFF
-        apu.write_register(0xFF14, 0x87); // NR14: freq high = 7, trigger
+        apu.write_register(0xFF13, 0xE8); // NR13: freq low = 0xE8 (232)
+        apu.write_register(0xFF14, 0x83); // NR14: freq high = 3, trigger (freq = 1000)
 
-        // Canal deve estar habilitado inicialmente
+        // Canal deve estar habilitado inicialmente (1000 + 500 = 1500 <= 2047)
         let nr52 = apu.read_register(0xFF26);
         assert_eq!(
             nr52 & 0x01,
@@ -517,6 +515,9 @@ mod apu_tests {
                 return; // Teste passou
             }
         }
+
+        // Se chegou aqui, o teste falhou
+        panic!("Canal não foi desabilitado por overflow após 20 steps");
     }
 
     #[test]
@@ -630,8 +631,6 @@ mod apu_tests {
 
     #[test]
     fn property_sweep_overflow_channel_disable() {
-        use gb_emu::GB::APU::SweepUnit;
-
         // Property-based testing manual: 100 iterações
         for iteration in 0..100 {
             let mut sweep = SweepUnit::new();
@@ -686,6 +685,125 @@ mod apu_tests {
                     new_freq
                 );
             }
+        }
+    }
+
+    #[test]
+    fn property_sweep_negate_to_add_quirk() {
+        // Property-based testing manual: 100 iterações
+        for iteration in 0..100 {
+            // Gerar configurações de sweep válidas
+            let period = 1 + (iteration % 7) as u8; // 1-7
+            let shift = (iteration % 8) as u8; // 0-7
+            let base_frequency = 100 + (iteration % 1900) as u16; // 100..=1999
+
+            // === Caso 1: Negate usado, depois mudança para add -> deve desabilitar ===
+            let mut sweep_with_negate = SweepUnit::new();
+            sweep_with_negate.configure(period, true, shift); // direction=true (negate)
+
+            // Fazer um cálculo para marcar negate_used = true
+            let _result = sweep_with_negate.calculate_new_frequency(base_frequency);
+
+            // Verificar que negate foi usado
+            assert!(
+                sweep_with_negate.was_negate_used(),
+                "Iteração {}: Negate deve ter sido marcado como usado após cálculo",
+                iteration
+            );
+
+            // Tentar mudar para modo add (direction=false)
+            // Isso deve retornar false (desabilita canal) devido ao quirk
+            let should_continue = sweep_with_negate.handle_direction_change(false);
+            assert!(
+                !should_continue,
+                "Iteração {}: Mudança de negate para add após uso deve retornar false (desabilitar canal)",
+                iteration
+            );
+
+            // === Caso 2: Negate NÃO usado, mudança para add -> NÃO deve desabilitar ===
+            let mut sweep_without_negate = SweepUnit::new();
+            sweep_without_negate.configure(period, true, shift); // direction=true (negate)
+
+            // NÃO fazer nenhum cálculo (negate_used permanece false)
+            assert!(
+                !sweep_without_negate.was_negate_used(),
+                "Iteração {}: Negate não deve estar marcado como usado sem cálculo",
+                iteration
+            );
+
+            // Mudança para add não deve desabilitar se negate não foi usado
+            let should_continue = sweep_without_negate.handle_direction_change(false);
+            assert!(
+                should_continue,
+                "Iteração {}: Mudança para add sem uso prévio de negate deve retornar true (não desabilitar)",
+                iteration
+            );
+
+            // === Caso 3: Modo add desde o início -> nunca deve desabilitar ===
+            let mut sweep_always_add = SweepUnit::new();
+            sweep_always_add.configure(period, false, shift); // direction=false (add)
+
+            // Fazer cálculos em modo add
+            let _result = sweep_always_add.calculate_new_frequency(base_frequency);
+
+            // Negate não deve ter sido usado
+            assert!(
+                !sweep_always_add.was_negate_used(),
+                "Iteração {}: Negate não deve ser marcado em modo add",
+                iteration
+            );
+
+            // Mudança para add novamente não deve desabilitar
+            let should_continue = sweep_always_add.handle_direction_change(false);
+            assert!(
+                should_continue,
+                "Iteração {}: Mudança para add quando já está em add não deve desabilitar",
+                iteration
+            );
+
+            // === Caso 4: Negate usado, mudança para negate novamente -> não deve desabilitar ===
+            let mut sweep_negate_to_negate = SweepUnit::new();
+            sweep_negate_to_negate.configure(period, true, shift); // direction=true (negate)
+
+            // Fazer cálculo para marcar negate_used
+            let _result = sweep_negate_to_negate.calculate_new_frequency(base_frequency);
+            assert!(sweep_negate_to_negate.was_negate_used());
+
+            // Mudança para negate novamente não deve desabilitar
+            let should_continue = sweep_negate_to_negate.handle_direction_change(true);
+            assert!(
+                should_continue,
+                "Iteração {}: Mudança de negate para negate não deve desabilitar",
+                iteration
+            );
+
+            // === Caso 5: Múltiplos cálculos em negate, depois mudança para add ===
+            let mut sweep_multiple_calcs = SweepUnit::new();
+            sweep_multiple_calcs.configure(period, true, shift);
+
+            // Fazer múltiplos cálculos
+            let mut current_freq = base_frequency;
+            for _ in 0..3 {
+                if let Some(new_freq) = sweep_multiple_calcs.calculate_new_frequency(current_freq)
+                {
+                    current_freq = new_freq;
+                }
+            }
+
+            // Negate deve estar marcado
+            assert!(
+                sweep_multiple_calcs.was_negate_used(),
+                "Iteração {}: Negate deve estar marcado após múltiplos cálculos",
+                iteration
+            );
+
+            // Mudança para add deve desabilitar
+            let should_continue = sweep_multiple_calcs.handle_direction_change(false);
+            assert!(
+                !should_continue,
+                "Iteração {}: Mudança para add após múltiplos cálculos em negate deve desabilitar",
+                iteration
+            );
         }
     }
 }

@@ -794,24 +794,26 @@ impl APU {
             // Canal 1
             0xFF10 => {
                 // NR10: Sweep
-                self.ch1_sweep_period = (value >> 4) & 0x07;
-                self.ch1_sweep_direction = (value & 0x08) != 0;
-                self.ch1_sweep_shift = value & 0x07;
+                let new_period = (value >> 4) & 0x07;
+                let new_direction = (value & 0x08) != 0;
+                let new_shift = value & 0x07;
 
-                // Configurar sweep unit com hardware precision
+                // HARDWARE QUIRK: Verificar quirk negate-to-add ANTES de atualizar configuração
+                if !self.ch1_sweep.handle_direction_change(new_direction) {
+                    self.ch1_enabled = false;
+                }
+
+                // Atualizar valores dos registradores
+                self.ch1_sweep_period = new_period;
+                self.ch1_sweep_direction = new_direction;
+                self.ch1_sweep_shift = new_shift;
+
+                // Configurar sweep unit com precisão de hardware
                 self.ch1_sweep.configure(
                     self.ch1_sweep_period,
                     self.ch1_sweep_direction,
                     self.ch1_sweep_shift,
                 );
-
-                // Quirk: se estava em negate, fez cálculo, e agora mudou para add -> desabilita
-                if !self
-                    .ch1_sweep
-                    .handle_direction_change(self.ch1_sweep_direction)
-                {
-                    self.ch1_enabled = false;
-                }
             }
             0xFF11 => {
                 // NR11: Wave duty + length timer
