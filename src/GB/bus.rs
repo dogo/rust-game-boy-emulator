@@ -192,7 +192,7 @@ impl MemoryBus {
             0xFF04 => self.timer.read_div(),
             0xFF05 => self.tima,
             0xFF06 => self.tma,
-            0xFF07 => self.tac | 0xF8, // bits 3-7 não usados, leem como 1
+            0xFF07 => (self.tac & 0x07) | 0xF8, // bits 0-2 são TAC real, bits 3-7 leem como 1
             0xFF0F => self.if_,
             0xFF10..=0xFF3F => self.apu.read_register(address),
             0xFF40..=0xFF45 => self.ppu.read_register(address),
