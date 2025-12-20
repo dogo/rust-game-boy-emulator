@@ -1053,8 +1053,12 @@ impl APU {
         self.ch1_sweep.reset_negate_flag(); // Reset da flag no trigger
 
         // Se shift > 0, calcula frequência imediatamente (overflow check)
+        // HARDWARE PRECISION: usar shadow register para cálculo
         if self.ch1_sweep_shift > 0 {
-            if let Some(new_freq) = self.ch1_sweep.calculate_new_frequency(self.ch1_frequency) {
+            if let Some(new_freq) = self
+                .ch1_sweep
+                .calculate_new_frequency(self.ch1_frequency_shadow)
+            {
                 if new_freq > 2047 {
                     self.ch1_enabled = false;
                 }

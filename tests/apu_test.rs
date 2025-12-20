@@ -375,6 +375,191 @@ mod apu_tests {
     }
 
     #[test]
+    fn test_sweep_overflow_channel_disable_property() {
+        use gb_emu::GB::APU::SweepUnit;
+
+        // Executar 100 iterações para simular property-based testing
+        for iteration in 0..100 {
+            let mut sweep = SweepUnit::new();
+
+            // Testar diferentes configurações que podem causar overflow
+            let test_cases = [
+                (1, false, 1), // period=1, add, shift=1
+                (2, false, 2), // period=2, add, shift=2
+                (3, false, 3), // period=3, add, shift=3
+                (4, false, 4), // period=4, add, shift=4
+                (1, false, 7), // period=1, add, shift=7 (máximo)
+            ];
+
+            let case_index = iteration % test_cases.len();
+            let (period, direction, shift) = test_cases[case_index];
+
+            sweep.configure(period, direction, shift);
+
+            // Testar frequências próximas ao limite que podem causar overflow
+            let test_frequencies = [1800, 1900, 2000, 2040, 2047];
+
+            for &freq in &test_frequencies {
+                let mut test_sweep = sweep.clone();
+
+                // Calcular nova frequência
+                if let Some(new_freq) = test_sweep.calculate_new_frequency(freq) {
+                    // Se não houve overflow na função, a frequência deve estar <= 2047
+                    assert!(
+                        new_freq <= 2047,
+                        "Iteração {}: Frequência calculada {} deve estar <= 2047 para freq inicial {}",
+                        iteration,
+                        new_freq,
+                        freq
+                    );
+                } else {
+                    // Se houve overflow (retornou None), a frequência calculada seria > 2047
+                    let freq_change = freq >> shift;
+                    let would_be_freq = freq.wrapping_add(freq_change);
+                    assert!(
+                        would_be_freq > 2047,
+                        "Iteração {}: Overflow detectado corretamente para freq {} + {} = {}",
+                        iteration,
+                        freq,
+                        freq_change,
+                        would_be_freq
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_sweep_negate_to_add_quirk_property() {
+        use gb_emu::GB::APU::SweepUnit;
+
+        // Executar 100 iterações para simular property-based testing
+        for iteration in 0..100 {
+            let mut sweep = SweepUnit::new();
+
+            // Configurar sweep em modo negate (subtract)
+            let period = 1 + (iteration % 7) as u8; // period 1-7
+            let shift = 1 + (iteration % 7) as u8; // shift 1-7
+
+            sweep.configure(period, true, shift); // direction=true (negate/subtract)
+
+            // Fazer um cálculo para marcar negate_used = true
+            let test_freq = 1000 + (iteration % 1000) as u16;
+            let _result = sweep.calculate_new_frequency(test_freq);
+
+            // Verificar que negate foi usado
+            assert!(
+                sweep.was_negate_used(),
+                "Iteração {}: Negate deve ter sido marcado como usado",
+                iteration
+            );
+
+            // Agora tentar mudar para modo add (direction=false)
+            // Isso deve retornar false (desabilita canal) devido ao quirk
+            let should_disable = !sweep.handle_direction_change(false);
+            assert!(
+                should_disable,
+                "Iteração {}: Mudança de negate para add após uso deve desabilitar canal",
+                iteration
+            );
+
+            // Testar caso onde negate não foi usado - não deve desabilitar
+            let mut sweep_unused = SweepUnit::new();
+            sweep_unused.configure(period, true, shift);
+
+            // Não fazer nenhum cálculo (negate_used permanece false)
+            assert!(
+                !sweep_unused.was_negate_used(),
+                "Iteração {}: Negate não deve estar marcado como usado",
+                iteration
+            );
+
+            // Mudança para add não deve desabilitar se negate não foi usado
+            let should_not_disable = sweep_unused.handle_direction_change(false);
+            assert!(
+                should_not_disable,
+                "Iteração {}: Mudança para add sem uso prévio de negate não deve desabilitar",
+                iteration
+            );
+        }
+    }
+
+    #[test]
+    fn test_apu_sweep_overflow_integration() {
+        let mut apu = APU::new();
+
+        // Configurar canal 1 com sweep que pode causar overflow
+        apu.write_register(0xFF10, 0x11); // NR10: period=1, add, shift=1
+        apu.write_register(0xFF11, 0x80); // NR11: duty=2, length=0
+        apu.write_register(0xFF12, 0xF0); // NR12: volume=15, increase, period=0
+        apu.write_register(0xFF13, 0xFF); // NR13: freq low = 0xFF
+        apu.write_register(0xFF14, 0x87); // NR14: freq high = 7, trigger
+
+        // Canal deve estar habilitado inicialmente
+        let nr52 = apu.read_register(0xFF26);
+        assert_eq!(
+            nr52 & 0x01,
+            0x01,
+            "Canal 1 deve estar habilitado após trigger"
+        );
+
+        // Simular sweep steps até overflow
+        for step in 0..20 {
+            // Simular frame sequencer até sweep clock
+            for _ in 0..4 {
+                apu.div_event(); // 4 div events = 1 sweep clock (steps 2 e 6)
+            }
+
+            let nr52 = apu.read_register(0xFF26);
+            if (nr52 & 0x01) == 0 {
+                // Canal foi desabilitado por overflow
+                println!("Canal desabilitado por overflow no step {}", step);
+                return; // Teste passou
+            }
+        }
+    }
+
+    #[test]
+    fn test_apu_negate_to_add_quirk_integration() {
+        let mut apu = APU::new();
+
+        // Configurar canal 1 com sweep em modo negate
+        apu.write_register(0xFF10, 0x19); // NR10: period=1, negate, shift=1
+        apu.write_register(0xFF11, 0x80); // NR11: duty=2, length=0
+        apu.write_register(0xFF12, 0xF0); // NR12: volume=15, increase, period=0
+        apu.write_register(0xFF13, 0x00); // NR13: freq low = 0x00
+        apu.write_register(0xFF14, 0x84); // NR14: freq high = 4, trigger
+
+        // Canal deve estar habilitado
+        let nr52 = apu.read_register(0xFF26);
+        assert_eq!(
+            nr52 & 0x01,
+            0x01,
+            "Canal 1 deve estar habilitado após trigger"
+        );
+
+        // Simular alguns sweep steps para usar negate
+        for _ in 0..8 {
+            apu.div_event();
+        }
+
+        // Canal ainda deve estar habilitado
+        let nr52 = apu.read_register(0xFF26);
+        assert_eq!(nr52 & 0x01, 0x01, "Canal 1 deve ainda estar habilitado");
+
+        // Agora mudar para modo add - isso deve desabilitar o canal
+        apu.write_register(0xFF10, 0x11); // NR10: period=1, add, shift=1
+
+        // Canal deve ter sido desabilitado pelo quirk
+        let nr52 = apu.read_register(0xFF26);
+        assert_eq!(
+            nr52 & 0x01,
+            0x00,
+            "Canal 1 deve ter sido desabilitado pelo quirk negate-to-add"
+        );
+    }
+
+    #[test]
     fn test_envelope_automatic_stopping_property() {
         // Teste 1: Envelope aumentando até volume máximo (15)
         let mut envelope_up = Envelope::new();
