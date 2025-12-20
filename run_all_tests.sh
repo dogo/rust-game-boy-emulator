@@ -2,6 +2,18 @@
 
 # Script para executar TODOS os testes disponíveis
 
+# Encerra tudo ao apertar Ctrl+C
+cleanup() {
+    trap - INT TERM
+    echo ""
+    echo -e "${RED}🛑 Execução interrompida pelo usuário (Ctrl+C)${NC}"
+    kill -- -$$ 2>/dev/null
+    exit 130
+}
+
+trap cleanup INT TERM
+
+
 echo "=========================================="
 echo "Executando TODOS os Testes"
 echo "=========================================="
