@@ -1,5 +1,277 @@
 #![allow(non_snake_case)]
 
+// ============================================================================
+// ESTRUTURAS DE PRECISÃO DE HARDWARE
+// Organizadas em seções para facilitar manutenção
+// ============================================================================
+
+/// Frame Sequencer com comportamento preciso de hardware
+/// HARDWARE PRECISION: inicia em 7 para que o primeiro step seja 0
+#[derive(Debug, Clone)]
+pub struct FrameSequencer {
+    step: u8,           // 0-7, inicializa em 7 (não 0)
+}
+
+impl FrameSequencer {
+    pub fn new() -> Self {
+        FrameSequencer {
+            step: 7,  // HARDWARE PRECISION: inicia em 7
+        }
+    }
+    
+    pub fn reset(&mut self) {
+        // HARDWARE PRECISION: Frame sequencer inicia em 7
+        // para que o primeiro step após reset seja 0
+        self.step = 7;
+    }
+    
+    pub fn tick(&mut self) -> FrameSequencerEvents {
+        self.step = (self.step + 1) % 8;
+        
+        FrameSequencerEvents {
+            length_clock: matches!(self.step, 0 | 2 | 4 | 6),
+            envelope_clock: self.step == 7,
+            sweep_clock: matches!(self.step, 2 | 6),
+        }
+    }
+    
+    pub fn current_step(&self) -> u8 {
+        self.step
+    }
+    
+    /// Retorna true se o próximo step vai clockar length counters
+    pub fn is_length_clock_next(&self) -> bool {
+        // Length é clockado em steps pares (0, 2, 4, 6)
+        (self.step + 1) % 2 == 0
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct FrameSequencerEvents {
+    pub length_clock: bool,
+    pub envelope_clock: bool,
+    pub sweep_clock: bool,
+}
+
+/// Envelope com parada automática nos limites (hardware precision)
+#[derive(Debug, Clone)]
+pub struct Envelope {
+    volume: u8,
+    direction: bool,  // true = increase, false = decrease
+    period: u8,
+    timer: u8,
+    stopped: bool,    // NOVO: para parar envelope automaticamente
+}
+
+impl Envelope {
+    pub fn new() -> Self {
+        Envelope {
+            volume: 0,
+            direction: false,
+            period: 0,
+            timer: 0,
+            stopped: false,
+        }
+    }
+    
+    pub fn configure(&mut self, initial_volume: u8, direction: bool, period: u8) {
+        self.volume = initial_volume;
+        self.direction = direction;
+        self.period = period;
+        self.timer = period;
+        self.stopped = false;
+    }
+    
+    pub fn step(&mut self) {
+        if self.stopped || self.period == 0 {
+            return;
+        }
+        
+        if self.timer > 0 {
+            self.timer -= 1;
+        } else {
+            self.timer = if self.period > 0 { self.period } else { 8 };
+            
+            if self.direction && self.volume < 15 {
+                self.volume += 1;
+                // HARDWARE PRECISION: para quando atinge máximo
+                if self.volume == 15 {
+                    self.stopped = true;
+                }
+            } else if !self.direction && self.volume > 0 {
+                self.volume -= 1;
+                // HARDWARE PRECISION: para quando atinge zero
+                if self.volume == 0 {
+                    self.stopped = true;
+                }
+            }
+        }
+    }
+    
+    pub fn current_volume(&self) -> u8 {
+        self.volume
+    }
+    
+    pub fn is_stopped(&self) -> bool {
+        self.stopped
+    }
+}
+
+/// Sweep Unit com quirks de hardware (overflow e negate-to-add)
+#[derive(Debug, Clone)]
+pub struct SweepUnit {
+    period: u8,
+    direction: bool,  // true = decrease (negate), false = increase (add)
+    shift: u8,
+    timer: u8,
+    enabled: bool,
+    negate_used: bool,  // NOVO: track se negate foi usado
+}
+
+impl SweepUnit {
+    pub fn new() -> Self {
+        SweepUnit {
+            period: 0,
+            direction: false,
+            shift: 0,
+            timer: 0,
+            enabled: false,
+            negate_used: false,
+        }
+    }
+    
+    pub fn configure(&mut self, period: u8, direction: bool, shift: u8) {
+        self.period = period;
+        self.direction = direction;
+        self.shift = shift;
+        self.timer = if period > 0 { period } else { 8 };
+        self.enabled = period > 0 || shift > 0;
+    }
+    
+    pub fn calculate_new_frequency(&mut self, current_freq: u16) -> Option<u16> {
+        let freq_change = current_freq >> self.shift;
+        
+        if self.direction {
+            // HARDWARE PRECISION: subtração usa complemento de um
+            self.negate_used = true;
+            Some(current_freq.wrapping_sub(freq_change))
+        } else {
+            // HARDWARE PRECISION: pode overflow além de 2047
+            let new_freq = current_freq.wrapping_add(freq_change);
+            if new_freq > 2047 {
+                None  // Overflow - desabilita canal
+            } else {
+                Some(new_freq)
+            }
+        }
+    }
+    
+    pub fn handle_direction_change(&mut self, new_direction: bool) -> bool {
+        // HARDWARE QUIRK: mudança de negate para add após uso -> desabilita
+        if self.negate_used && self.direction && !new_direction {
+            return false;  // Desabilita canal
+        }
+        self.direction = new_direction;
+        true
+    }
+    
+    pub fn step(&mut self) -> bool {
+        if !self.enabled {
+            return true;
+        }
+        
+        if self.timer > 0 {
+            self.timer -= 1;
+            return true;
+        }
+        
+        self.timer = if self.period > 0 { self.period } else { 8 };
+        
+        // Retorna true se deve continuar, false se deve fazer sweep calculation
+        self.enabled && self.period > 0
+    }
+    
+    pub fn is_enabled(&self) -> bool {
+        self.enabled
+    }
+    
+    pub fn was_negate_used(&self) -> bool {
+        self.negate_used
+    }
+    
+    pub fn reset_negate_flag(&mut self) {
+        self.negate_used = false;
+    }
+}
+
+/// Length Counter com extra clocking quirk
+#[derive(Debug, Clone)]
+pub struct LengthCounter {
+    counter: u16,
+    enable: bool,
+    max_length: u16,
+}
+
+impl LengthCounter {
+    pub fn new(max_length: u16) -> Self {
+        LengthCounter {
+            counter: 0,
+            enable: false,
+            max_length,
+        }
+    }
+    
+    pub fn load_length(&mut self, length_timer: u8) {
+        // Para canais 1, 2, 4: counter = 64 - length_timer
+        // Para canal 3: counter = 256 - length_timer
+        if self.max_length == 64 {
+            self.counter = 64 - (length_timer & 0x3F) as u16;
+        } else {
+            self.counter = 256 - length_timer as u16;
+        }
+    }
+    
+    pub fn handle_enable_write(&mut self, new_enable: bool, is_length_clock_next: bool) {
+        // HARDWARE QUIRK: extra length clocking
+        if new_enable && !self.enable && is_length_clock_next {
+            if self.counter > 0 {
+                self.counter -= 1;
+            }
+        }
+        self.enable = new_enable;
+    }
+    
+    pub fn step(&mut self) -> bool {
+        if self.enable && self.counter > 0 {
+            self.counter -= 1;
+            return self.counter > 0;
+        }
+        true
+    }
+    
+    pub fn handle_trigger(&mut self, length_enable: bool, is_length_clock_next: bool) {
+        // HARDWARE PRECISION: trigger com length counter = 0
+        if self.counter == 0 {
+            self.counter = self.max_length;
+            if length_enable && is_length_clock_next {
+                self.counter -= 1;
+            }
+        }
+    }
+    
+    pub fn current_value(&self) -> u16 {
+        self.counter
+    }
+    
+    pub fn is_enabled(&self) -> bool {
+        self.enable
+    }
+}
+
+// ============================================================================
+// APU PRINCIPAL
+// ============================================================================
+
 /// APU (Audio Processing Unit) do Game Boy
 /// 4 canais de áudio: 2 square waves, 1 wave, 1 noise
 pub struct APU {
@@ -64,31 +336,25 @@ pub struct APU {
 
     sound_enable: bool, // NR52 bit 7: master sound enable
 
-    // === Estado interno ===
-    frame_sequencer: u8, // Frame sequencer (0-7) para length/envelope/sweep
+    // === Estado interno com estruturas de precisão ===
+    frame_sequencer: FrameSequencer, // Frame sequencer com hardware precision
+    
+    // Estruturas de precisão para canais
+    ch1_envelope: Envelope,
+    ch1_sweep: SweepUnit,
+    ch1_length: LengthCounter,
+    ch2_envelope: Envelope,
+    ch2_length: LengthCounter,
+    ch3_length: LengthCounter,
+    ch4_envelope: Envelope,
+    ch4_length: LengthCounter,
 
-    // Estados dos canais
-    ch1_volume: u8,              // Volume atual do canal 1
+    // Estados dos canais (mantidos para compatibilidade)
     ch1_frequency_shadow: u16,   // Shadow register da frequência (para sweep)
     ch1_wave_position: u8,       // Posição na wave duty
-    ch1_envelope_timer: u8,      // Timer do envelope
-    ch1_length_counter: u8,      // Contador de length
-    ch1_sweep_timer: u8,         // Timer do sweep
-    ch1_sweep_enabled: bool,     // Sweep habilitado
-    ch1_sweep_negate_used: bool, // True se negate foi usado em cálculo (quirk)
-
-    ch2_volume: u8,         // Volume atual do canal 2
-    ch2_wave_position: u8,  // Posição na wave duty
-    ch2_envelope_timer: u8, // Timer do envelope
-    ch2_length_counter: u8, // Contador de length
-
-    ch3_wave_position: u8,   // Posição no wave pattern (0-31)
-    ch3_length_counter: u16, // Contador de length (0-255)
-
-    ch4_volume: u8,         // Volume atual do canal 4
-    ch4_envelope_timer: u8, // Timer do envelope
-    ch4_length_counter: u8, // Contador de length
-    ch4_lfsr: u16,          // Linear Feedback Shift Register para noise
+    ch2_wave_position: u8,       // Posição na wave duty
+    ch3_wave_position: u8,       // Posição no wave pattern (0-31)
+    ch4_lfsr: u16,               // Linear Feedback Shift Register para noise
 
     // Timers de frequência
     ch1_frequency_timer: u32, // Timer de frequência do canal 1
@@ -169,25 +435,21 @@ impl APU {
             ch4_right: true,
             sound_enable: true, // NR52
 
-            // Estado interno
-            frame_sequencer: 0,
-            ch1_volume: 0,
+            // Estado interno com estruturas de precisão
+            frame_sequencer: FrameSequencer::new(),
+            ch1_envelope: Envelope::new(),
+            ch1_sweep: SweepUnit::new(),
+            ch1_length: LengthCounter::new(64),  // Canais 1, 2, 4 têm max 64
+            ch2_envelope: Envelope::new(),
+            ch2_length: LengthCounter::new(64),
+            ch3_length: LengthCounter::new(256), // Canal 3 tem max 256
+            ch4_envelope: Envelope::new(),
+            ch4_length: LengthCounter::new(64),
+            
             ch1_frequency_shadow: 0,
             ch1_wave_position: 0,
-            ch1_envelope_timer: 0,
-            ch1_length_counter: 0,
-            ch1_sweep_timer: 0,
-            ch1_sweep_enabled: false,
-            ch1_sweep_negate_used: false,
-            ch2_volume: 0,
             ch2_wave_position: 0,
-            ch2_envelope_timer: 0,
-            ch2_length_counter: 0,
             ch3_wave_position: 0,
-            ch3_length_counter: 0,
-            ch4_volume: 0,
-            ch4_envelope_timer: 0,
-            ch4_length_counter: 0,
             ch4_lfsr: 0x7FFF, // LFSR inicializado com todos os bits em 1
 
             // Timers de frequência
@@ -225,32 +487,25 @@ impl APU {
     /// Retorna true se o próximo step do frame sequencer vai clockar length counters
     /// Isso acontece nos steps 0, 2, 4, 6 (steps pares)
     fn is_length_clock_next(&self) -> bool {
-        // Length é clockado em steps pares (0, 2, 4, 6)
-        self.frame_sequencer % 2 == 0
+        self.frame_sequencer.is_length_clock_next()
     }
 
-    /// Frame sequencer (512Hz)
+    /// Frame sequencer (512Hz) com hardware precision
     fn step_frame_sequencer(&mut self) {
-        self.frame_sequencer = (self.frame_sequencer + 1) % 8;
+        let events = self.frame_sequencer.tick();
 
         // Length counters rodam SEMPRE (mesmo com APU desligada)
-        match self.frame_sequencer {
-            0 | 2 | 4 | 6 => {
-                self.step_length_counters();
-            }
-            _ => {}
+        if events.length_clock {
+            self.step_length_counters();
         }
 
         // Sweep e envelopes só rodam com APU ligada
         if self.sound_enable {
-            match self.frame_sequencer {
-                2 | 6 => {
-                    self.step_sweep();
-                }
-                7 => {
-                    self.step_envelopes();
-                }
-                _ => {}
+            if events.sweep_clock {
+                self.step_sweep();
+            }
+            if events.envelope_clock {
+                self.step_envelopes();
             }
         }
     }
@@ -267,13 +522,13 @@ impl APU {
         let mut right_sample = 0.0;
 
         // Canal 1: Square Wave (usando wave_position de hardware)
-        if self.ch1_enabled && self.ch1_volume > 0 {
+        if self.ch1_enabled && self.ch1_envelope.current_volume() > 0 {
             let duty = (self.ch1_wave_duty & 0x03) as usize;
             let step = (self.ch1_wave_position & 0x07) as usize;
             let bit = DUTY_TABLE[duty][step];
 
             let wave_out = if bit != 0 { 1.0 } else { -1.0 };
-            let volume = self.ch1_volume as f32 / 15.0;
+            let volume = self.ch1_envelope.current_volume() as f32 / 15.0;
             let final_output = wave_out * volume * 0.25;
 
             if self.ch1_left {
@@ -285,13 +540,13 @@ impl APU {
         }
 
         // Canal 2: Square Wave (usando wave_position)
-        if self.ch2_enabled && self.ch2_volume > 0 {
+        if self.ch2_enabled && self.ch2_envelope.current_volume() > 0 {
             let duty = (self.ch2_wave_duty & 0x03) as usize;
             let step = (self.ch2_wave_position & 0x07) as usize;
             let bit = DUTY_TABLE[duty][step];
 
             let wave_out = if bit != 0 { 1.0 } else { -1.0 };
-            let volume = self.ch2_volume as f32 / 15.0;
+            let volume = self.ch2_envelope.current_volume() as f32 / 15.0;
             let final_output = wave_out * volume * 0.25;
 
             if self.ch2_left {
@@ -316,9 +571,9 @@ impl APU {
         }
 
         // Canal 4: Noise Channel
-        if self.ch4_enabled && self.ch4_volume > 0 {
+        if self.ch4_enabled && self.ch4_envelope.current_volume() > 0 {
             let noise_output = self.generate_noise();
-            let volume = self.ch4_volume as f32 / 15.0;
+            let volume = self.ch4_envelope.current_volume() as f32 / 15.0;
             let final_output = noise_output * volume * 0.25;
 
             if self.ch4_left {
@@ -534,13 +789,19 @@ impl APU {
             // Canal 1
             0xFF10 => {
                 // NR10: Sweep
-                let old_negate = self.ch1_sweep_direction;
                 self.ch1_sweep_period = (value >> 4) & 0x07;
                 self.ch1_sweep_direction = (value & 0x08) != 0;
                 self.ch1_sweep_shift = value & 0x07;
+                
+                // Configurar sweep unit com hardware precision
+                self.ch1_sweep.configure(
+                    self.ch1_sweep_period,
+                    self.ch1_sweep_direction,
+                    self.ch1_sweep_shift
+                );
 
                 // Quirk: se estava em negate, fez cálculo, e agora mudou para add -> desabilita
-                if old_negate && !self.ch1_sweep_direction && self.ch1_sweep_negate_used {
+                if !self.ch1_sweep.handle_direction_change(self.ch1_sweep_direction) {
                     self.ch1_enabled = false;
                 }
             }
@@ -548,13 +809,20 @@ impl APU {
                 // NR11: Wave duty + length timer
                 self.ch1_wave_duty = (value >> 6) & 0x03;
                 self.ch1_length_timer = value & 0x3F;
-                self.ch1_length_counter = 64 - self.ch1_length_timer;
+                self.ch1_length.load_length(value & 0x3F);
             }
             0xFF12 => {
                 // NR12: Envelope
                 self.ch1_envelope_initial = (value >> 4) & 0x0F;
                 self.ch1_envelope_direction = (value & 0x08) != 0;
                 self.ch1_envelope_period = value & 0x07;
+                
+                // Configurar envelope com hardware precision
+                self.ch1_envelope.configure(
+                    self.ch1_envelope_initial,
+                    self.ch1_envelope_direction,
+                    self.ch1_envelope_period
+                );
 
                 // DAC enable check
                 if (value & 0xF8) == 0 {
@@ -571,14 +839,7 @@ impl APU {
 
                 // Extra length clocking: habilitando length na primeira metade do frame sequencer
                 let new_length_enable = (value & 0x40) != 0;
-                if new_length_enable && !self.ch1_length_enable && self.is_length_clock_next() {
-                    if self.ch1_length_counter > 0 {
-                        self.ch1_length_counter -= 1;
-                        if self.ch1_length_counter == 0 && (value & 0x80) == 0 {
-                            self.ch1_enabled = false;
-                        }
-                    }
-                }
+                self.ch1_length.handle_enable_write(new_length_enable, self.is_length_clock_next());
                 self.ch1_length_enable = new_length_enable;
 
                 if (value & 0x80) != 0 {
@@ -591,13 +852,20 @@ impl APU {
                 // NR21: Wave duty + length timer
                 self.ch2_wave_duty = (value >> 6) & 0x03;
                 self.ch2_length_timer = value & 0x3F;
-                self.ch2_length_counter = 64 - self.ch2_length_timer;
+                self.ch2_length.load_length(value & 0x3F);
             }
             0xFF17 => {
                 // NR22: Envelope
                 self.ch2_envelope_initial = (value >> 4) & 0x0F;
                 self.ch2_envelope_direction = (value & 0x08) != 0;
                 self.ch2_envelope_period = value & 0x07;
+                
+                // Configurar envelope com hardware precision
+                self.ch2_envelope.configure(
+                    self.ch2_envelope_initial,
+                    self.ch2_envelope_direction,
+                    self.ch2_envelope_period
+                );
 
                 // DAC enable check
                 if (value & 0xF8) == 0 {
@@ -614,14 +882,7 @@ impl APU {
 
                 // Extra length clocking
                 let new_length_enable = (value & 0x40) != 0;
-                if new_length_enable && !self.ch2_length_enable && self.is_length_clock_next() {
-                    if self.ch2_length_counter > 0 {
-                        self.ch2_length_counter -= 1;
-                        if self.ch2_length_counter == 0 && (value & 0x80) == 0 {
-                            self.ch2_enabled = false;
-                        }
-                    }
-                }
+                self.ch2_length.handle_enable_write(new_length_enable, self.is_length_clock_next());
                 self.ch2_length_enable = new_length_enable;
 
                 if (value & 0x80) != 0 {
@@ -640,7 +901,7 @@ impl APU {
             0xFF1B => {
                 // NR31: Length timer
                 self.ch3_length_timer = value;
-                self.ch3_length_counter = 256 - (value as u16);
+                self.ch3_length.load_length(value);
             }
             0xFF1C => {
                 // NR32: Output level
@@ -656,14 +917,7 @@ impl APU {
 
                 // Extra length clocking
                 let new_length_enable = (value & 0x40) != 0;
-                if new_length_enable && !self.ch3_length_enable && self.is_length_clock_next() {
-                    if self.ch3_length_counter > 0 {
-                        self.ch3_length_counter -= 1;
-                        if self.ch3_length_counter == 0 && (value & 0x80) == 0 {
-                            self.ch3_enabled = false;
-                        }
-                    }
-                }
+                self.ch3_length.handle_enable_write(new_length_enable, self.is_length_clock_next());
                 self.ch3_length_enable = new_length_enable;
 
                 if (value & 0x80) != 0 {
@@ -675,13 +929,20 @@ impl APU {
             0xFF20 => {
                 // NR41: Length timer
                 self.ch4_length_timer = value & 0x3F;
-                self.ch4_length_counter = 64 - self.ch4_length_timer;
+                self.ch4_length.load_length(value & 0x3F);
             }
             0xFF21 => {
                 // NR42: Envelope
                 self.ch4_envelope_initial = (value >> 4) & 0x0F;
                 self.ch4_envelope_direction = (value & 0x08) != 0;
                 self.ch4_envelope_period = value & 0x07;
+                
+                // Configurar envelope com hardware precision
+                self.ch4_envelope.configure(
+                    self.ch4_envelope_initial,
+                    self.ch4_envelope_direction,
+                    self.ch4_envelope_period
+                );
 
                 // DAC enable check
                 if (value & 0xF8) == 0 {
@@ -698,14 +959,7 @@ impl APU {
                 // NR44: Control
                 // Extra length clocking
                 let new_length_enable = (value & 0x40) != 0;
-                if new_length_enable && !self.ch4_length_enable && self.is_length_clock_next() {
-                    if self.ch4_length_counter > 0 {
-                        self.ch4_length_counter -= 1;
-                        if self.ch4_length_counter == 0 && (value & 0x80) == 0 {
-                            self.ch4_enabled = false;
-                        }
-                    }
-                }
+                self.ch4_length.handle_enable_write(new_length_enable, self.is_length_clock_next());
                 self.ch4_length_enable = new_length_enable;
 
                 if (value & 0x80) != 0 {
@@ -743,9 +997,9 @@ impl APU {
                 }
 
                 // Se o som foi habilitado, reseta o frame sequencer
-                // O frame sequencer começa em 7, então o primeiro step será 0
+                // HARDWARE PRECISION: O frame sequencer começa em 7, então o primeiro step será 0
                 if !old_enable && self.sound_enable {
-                    self.frame_sequencer = 7;
+                    self.frame_sequencer.reset();
                 }
             }
 
@@ -762,36 +1016,36 @@ impl APU {
         }
     }
 
-    /// Trigger do canal 1
+    /// Trigger do canal 1 com hardware precision
     fn trigger_channel1(&mut self) {
         self.ch1_enabled = true;
 
-        // Se length counter era 0, seta para máximo
-        // E se length_enable + primeira metade do frame seq, faz clock extra
-        if self.ch1_length_counter == 0 {
-            self.ch1_length_counter = 64;
-            if self.ch1_length_enable && self.is_length_clock_next() {
-                self.ch1_length_counter -= 1;
-            }
-        }
+        // Hardware precision: trigger com length counter = 0
+        self.ch1_length.handle_trigger(self.ch1_length_enable, self.is_length_clock_next());
 
-        self.ch1_envelope_timer = self.ch1_envelope_period;
-        self.ch1_volume = self.ch1_envelope_initial;
+        // Configurar envelope
+        self.ch1_envelope.configure(
+            self.ch1_envelope_initial,
+            self.ch1_envelope_direction,
+            self.ch1_envelope_period
+        );
 
-        // Inicializar sweep
+        // Inicializar sweep com hardware precision
         self.ch1_frequency_shadow = self.ch1_frequency;
-        self.ch1_sweep_timer = if self.ch1_sweep_period > 0 {
-            self.ch1_sweep_period
-        } else {
-            8
-        };
-        self.ch1_sweep_enabled = self.ch1_sweep_period > 0 || self.ch1_sweep_shift > 0;
-        self.ch1_sweep_negate_used = false; // Reset da flag no trigger
+        self.ch1_sweep.configure(
+            self.ch1_sweep_period,
+            self.ch1_sweep_direction,
+            self.ch1_sweep_shift
+        );
+        self.ch1_sweep.reset_negate_flag(); // Reset da flag no trigger
 
         // Se shift > 0, calcula frequência imediatamente (overflow check)
         if self.ch1_sweep_shift > 0 {
-            let new_freq = self.calculate_sweep_frequency();
-            if new_freq > 2047 {
+            if let Some(new_freq) = self.ch1_sweep.calculate_new_frequency(self.ch1_frequency) {
+                if new_freq > 2047 {
+                    self.ch1_enabled = false;
+                }
+            } else {
                 self.ch1_enabled = false;
             }
         }
@@ -806,19 +1060,19 @@ impl APU {
         }
     }
 
-    /// Trigger do canal 2
+    /// Trigger do canal 2 com hardware precision
     fn trigger_channel2(&mut self) {
         self.ch2_enabled = true;
 
-        if self.ch2_length_counter == 0 {
-            self.ch2_length_counter = 64;
-            if self.ch2_length_enable && self.is_length_clock_next() {
-                self.ch2_length_counter -= 1;
-            }
-        }
+        // Hardware precision: trigger com length counter = 0
+        self.ch2_length.handle_trigger(self.ch2_length_enable, self.is_length_clock_next());
 
-        self.ch2_envelope_timer = self.ch2_envelope_period;
-        self.ch2_volume = self.ch2_envelope_initial;
+        // Configurar envelope
+        self.ch2_envelope.configure(
+            self.ch2_envelope_initial,
+            self.ch2_envelope_direction,
+            self.ch2_envelope_period
+        );
 
         // Inicializar timer de frequência
         self.ch2_frequency_timer = 2048 - self.ch2_frequency as u32;
@@ -830,34 +1084,32 @@ impl APU {
         }
     }
 
-    /// Trigger do canal 3
+    /// Trigger do canal 3 com hardware precision
     fn trigger_channel3(&mut self) {
         self.ch3_enabled = self.ch3_dac_enable;
 
-        if self.ch3_length_counter == 0 {
-            self.ch3_length_counter = 256;
-            if self.ch3_length_enable && self.is_length_clock_next() {
-                self.ch3_length_counter -= 1;
-            }
-        }
+        // Hardware precision: trigger com length counter = 0
+        self.ch3_length.handle_trigger(self.ch3_length_enable, self.is_length_clock_next());
 
         // Inicializar timer de frequência
         self.ch3_frequency_timer = (2048 - self.ch3_frequency as u32) / 2;
         self.ch3_wave_position = 0;
     }
 
-    /// Trigger do canal 4
+    /// Trigger do canal 4 com hardware precision
     fn trigger_channel4(&mut self) {
         self.ch4_enabled = true;
 
-        if self.ch4_length_counter == 0 {
-            self.ch4_length_counter = 64;
-            if self.ch4_length_enable && self.is_length_clock_next() {
-                self.ch4_length_counter -= 1;
-            }
-        }
-        self.ch4_envelope_timer = self.ch4_envelope_period;
-        self.ch4_volume = self.ch4_envelope_initial;
+        // Hardware precision: trigger com length counter = 0
+        self.ch4_length.handle_trigger(self.ch4_length_enable, self.is_length_clock_next());
+
+        // Configurar envelope
+        self.ch4_envelope.configure(
+            self.ch4_envelope_initial,
+            self.ch4_envelope_direction,
+            self.ch4_envelope_period
+        );
+        
         self.ch4_lfsr = 0x7FFF;
 
         // Inicializar timer de frequência usando tabela oficial DMG
@@ -994,179 +1246,66 @@ impl APU {
         }
     }
 
-    /// Step dos length counters
+    /// Step dos length counters com hardware precision
     fn step_length_counters(&mut self) {
         // Canal 1
-        if self.ch1_length_enable && self.ch1_length_counter > 0 {
-            self.ch1_length_counter -= 1;
-            if self.ch1_length_counter == 0 {
-                self.ch1_enabled = false;
-            }
+        if !self.ch1_length.step() {
+            self.ch1_enabled = false;
         }
 
         // Canal 2
-        if self.ch2_length_enable && self.ch2_length_counter > 0 {
-            self.ch2_length_counter -= 1;
-            if self.ch2_length_counter == 0 {
-                self.ch2_enabled = false;
-            }
+        if !self.ch2_length.step() {
+            self.ch2_enabled = false;
         }
 
         // Canal 3
-        if self.ch3_length_enable && self.ch3_length_counter > 0 {
-            self.ch3_length_counter -= 1;
-            if self.ch3_length_counter == 0 {
-                self.ch3_enabled = false;
-            }
+        if !self.ch3_length.step() {
+            self.ch3_enabled = false;
         }
 
         // Canal 4
-        if self.ch4_length_enable && self.ch4_length_counter > 0 {
-            self.ch4_length_counter -= 1;
-            if self.ch4_length_counter == 0 {
-                self.ch4_enabled = false;
-            }
+        if !self.ch4_length.step() {
+            self.ch4_enabled = false;
         }
     }
 
     /// Step do sweep (apenas canal 1) com hardware precision
     fn step_sweep(&mut self) {
-        if !self.ch1_sweep_enabled {
+        if !self.ch1_sweep.step() {
             return;
         }
 
-        if self.ch1_sweep_timer > 0 {
-            self.ch1_sweep_timer -= 1;
-        }
+        if let Some(new_frequency) = self.ch1_sweep.calculate_new_frequency(self.ch1_frequency_shadow) {
+            // HARDWARE PRECISION: overflow check ANTES de aplicar
+            if new_frequency > 2047 {
+                self.ch1_enabled = false; // Disable channel imediatamente
+            } else if self.ch1_sweep_shift > 0 {
+                self.ch1_frequency = new_frequency;
+                self.ch1_frequency_shadow = new_frequency;
 
-        if self.ch1_sweep_timer == 0 {
-            self.ch1_sweep_timer = if self.ch1_sweep_period > 0 {
-                self.ch1_sweep_period
-            } else {
-                8
-            };
-
-            if self.ch1_sweep_enabled && self.ch1_sweep_period > 0 {
-                let new_frequency = self.calculate_sweep_frequency();
-
-                // HARDWARE PRECISION: overflow check ANTES de aplicar
-                if new_frequency > 2047 {
-                    self.ch1_enabled = false; // Disable channel imediatamente
-                } else if self.ch1_sweep_shift > 0 {
-                    self.ch1_frequency = new_frequency;
-                    self.ch1_frequency_shadow = new_frequency;
-
-                    // HARDWARE PRECISION: segundo overflow check
-                    let next_freq = self.calculate_sweep_frequency();
+                // HARDWARE PRECISION: segundo overflow check
+                if let Some(next_freq) = self.ch1_sweep.calculate_new_frequency(new_frequency) {
                     if next_freq > 2047 {
                         self.ch1_enabled = false;
                     }
+                } else {
+                    self.ch1_enabled = false;
                 }
             }
-        }
-    }
-
-    /// Calcula nova frequência para sweep com hardware precision
-    fn calculate_sweep_frequency(&mut self) -> u16 {
-        let freq_change = self.ch1_frequency_shadow >> self.ch1_sweep_shift;
-        if self.ch1_sweep_direction {
-            // HARDWARE PRECISION: subtração usa complemento de um
-            // Marca que negate foi usado (quirk do hardware)
-            self.ch1_sweep_negate_used = true;
-            self.ch1_frequency_shadow.wrapping_sub(freq_change)
         } else {
-            // HARDWARE PRECISION: pode overflow além de 2047
-            self.ch1_frequency_shadow.wrapping_add(freq_change)
+            self.ch1_enabled = false;
         }
     }
 
-    /// Step dos envelopes com hardware edge cases
+    /// Step dos envelopes com hardware precision (parada automática)
     fn step_envelopes(&mut self) {
         // Canal 1
-        if self.ch1_envelope_timer > 0 {
-            self.ch1_envelope_timer -= 1;
-        }
+        self.ch1_envelope.step();
 
-        if self.ch1_envelope_timer == 0 {
-            self.ch1_envelope_timer = if self.ch1_envelope_period > 0 {
-                self.ch1_envelope_period
-            } else {
-                8
-            };
+        // Canal 2
+        self.ch2_envelope.step();
 
-            if self.ch1_envelope_period > 0 {
-                if self.ch1_envelope_direction && self.ch1_volume < 15 {
-                    self.ch1_volume += 1;
-                    // HARDWARE EDGE CASE: para envelope quando atinge máximo
-                    if self.ch1_volume == 15 {
-                        self.ch1_envelope_period = 0;
-                    }
-                } else if !self.ch1_envelope_direction && self.ch1_volume > 0 {
-                    self.ch1_volume -= 1;
-                    // HARDWARE EDGE CASE: para envelope quando atinge zero
-                    if self.ch1_volume == 0 {
-                        self.ch1_envelope_period = 0;
-                    }
-                }
-            }
-        }
-
-        // Canal 2 (com mesmas edge cases)
-        if self.ch2_envelope_timer > 0 {
-            self.ch2_envelope_timer -= 1;
-        }
-
-        if self.ch2_envelope_timer == 0 {
-            self.ch2_envelope_timer = if self.ch2_envelope_period > 0 {
-                self.ch2_envelope_period
-            } else {
-                8
-            };
-
-            if self.ch2_envelope_period > 0 {
-                if self.ch2_envelope_direction && self.ch2_volume < 15 {
-                    self.ch2_volume += 1;
-                    // HARDWARE EDGE CASE: para envelope quando atinge máximo
-                    if self.ch2_volume == 15 {
-                        self.ch2_envelope_period = 0;
-                    }
-                } else if !self.ch2_envelope_direction && self.ch2_volume > 0 {
-                    self.ch2_volume -= 1;
-                    // HARDWARE EDGE CASE: para envelope quando atinge zero
-                    if self.ch2_volume == 0 {
-                        self.ch2_envelope_period = 0;
-                    }
-                }
-            }
-        }
-
-        // Canal 4 (com mesmas edge cases)
-        if self.ch4_envelope_timer > 0 {
-            self.ch4_envelope_timer -= 1;
-        }
-
-        if self.ch4_envelope_timer == 0 {
-            self.ch4_envelope_timer = if self.ch4_envelope_period > 0 {
-                self.ch4_envelope_period
-            } else {
-                8
-            };
-
-            if self.ch4_envelope_period > 0 {
-                if self.ch4_envelope_direction && self.ch4_volume < 15 {
-                    self.ch4_volume += 1;
-                    // HARDWARE EDGE CASE: para envelope quando atinge máximo
-                    if self.ch4_volume == 15 {
-                        self.ch4_envelope_period = 0;
-                    }
-                } else if !self.ch4_envelope_direction && self.ch4_volume > 0 {
-                    self.ch4_volume -= 1;
-                    // HARDWARE EDGE CASE: para envelope quando atinge zero
-                    if self.ch4_volume == 0 {
-                        self.ch4_envelope_period = 0;
-                    }
-                }
-            }
-        }
+        // Canal 4
+        self.ch4_envelope.step();
     }
 }
