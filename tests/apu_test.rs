@@ -1,7 +1,7 @@
 // Integration tests para APU
 // cargo test apu_test
 
-use gb_emu::GB::APU::{APU, FrameSequencer, Envelope};
+use gb_emu::GB::APU::{APU, Envelope, FrameSequencer};
 
 #[cfg(test)]
 mod apu_tests {
@@ -381,52 +381,64 @@ mod apu_tests {
         envelope_up.configure(14, true, 1);
         assert_eq!(envelope_up.current_volume(), 14);
         assert!(!envelope_up.is_stopped());
-        
+
         // Com period = 1, precisa de 2 steps para mudar volume
         envelope_up.step(); // Decrementa timer
         assert_eq!(envelope_up.current_volume(), 14);
         assert!(!envelope_up.is_stopped());
-        
+
         envelope_up.step(); // Muda volume para 15 e para
         assert_eq!(envelope_up.current_volume(), 15);
-        assert!(envelope_up.is_stopped(), "Envelope deve parar ao atingir volume 15");
-        
+        assert!(
+            envelope_up.is_stopped(),
+            "Envelope deve parar ao atingir volume 15"
+        );
+
         // Teste 2: Envelope diminuindo até volume mínimo (0)
         let mut envelope_down = Envelope::new();
         envelope_down.configure(1, false, 1);
         assert_eq!(envelope_down.current_volume(), 1);
         assert!(!envelope_down.is_stopped());
-        
+
         envelope_down.step(); // Decrementa timer
         assert_eq!(envelope_down.current_volume(), 1);
         assert!(!envelope_down.is_stopped());
-        
+
         envelope_down.step(); // Muda volume para 0 e para
         assert_eq!(envelope_down.current_volume(), 0);
-        assert!(envelope_down.is_stopped(), "Envelope deve parar ao atingir volume 0");
-        
+        assert!(
+            envelope_down.is_stopped(),
+            "Envelope deve parar ao atingir volume 0"
+        );
+
         // Teste 3: Envelope já no limite deve parar imediatamente
         let mut envelope_max = Envelope::new();
         envelope_max.configure(15, true, 1); // Volume 15, tentando aumentar
         assert_eq!(envelope_max.current_volume(), 15);
-        assert!(envelope_max.is_stopped(), "Envelope no volume 15 tentando aumentar deve parar imediatamente");
-        
+        assert!(
+            envelope_max.is_stopped(),
+            "Envelope no volume 15 tentando aumentar deve parar imediatamente"
+        );
+
         let mut envelope_min = Envelope::new();
         envelope_min.configure(0, false, 1); // Volume 0, tentando diminuir
         assert_eq!(envelope_min.current_volume(), 0);
-        assert!(envelope_min.is_stopped(), "Envelope no volume 0 tentando diminuir deve parar imediatamente");
-        
+        assert!(
+            envelope_min.is_stopped(),
+            "Envelope no volume 0 tentando diminuir deve parar imediatamente"
+        );
+
         // Teste 4: Envelope com period = 0 (desabilitado)
         let mut envelope_disabled = Envelope::new();
         envelope_disabled.configure(5, true, 0);
-        
+
         let initial_vol = envelope_disabled.current_volume();
         let initial_stopped = envelope_disabled.is_stopped();
-        
+
         for _ in 0..5 {
             envelope_disabled.step();
         }
-        
+
         assert_eq!(envelope_disabled.current_volume(), initial_vol);
         assert_eq!(envelope_disabled.is_stopped(), initial_stopped);
     }
