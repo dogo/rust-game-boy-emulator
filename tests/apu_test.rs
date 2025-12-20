@@ -627,4 +627,65 @@ mod apu_tests {
         assert_eq!(envelope_disabled.current_volume(), initial_vol);
         assert_eq!(envelope_disabled.is_stopped(), initial_stopped);
     }
+
+    #[test]
+    fn property_sweep_overflow_channel_disable() {
+        use gb_emu::GB::APU::SweepUnit;
+
+        // Property-based testing manual: 100 iterações
+        for iteration in 0..100 {
+            let mut sweep = SweepUnit::new();
+
+            // Gerar configurações de sweep válidas
+            let period = 1 + (iteration % 7) as u8;
+            let shift = 1 + (iteration % 7) as u8;
+            let base_frequency = 1500 + (iteration % 548) as u16; // 1500..=2047
+
+            // Configurar sweep em modo add (direction=false) que pode causar overflow
+            sweep.configure(period, false, shift);
+
+            // Calcular nova frequência
+            let result = sweep.calculate_new_frequency(base_frequency);
+
+            // Calcular manualmente o que seria a nova frequência
+            let freq_change = base_frequency >> shift;
+            let would_be_frequency = base_frequency.wrapping_add(freq_change);
+
+            if would_be_frequency > 2047 {
+                // Se a frequência calculada seria > 2047, deve retornar None (overflow)
+                assert!(
+                    result.is_none(),
+                    "Iteração {}: Sweep overflow deve retornar None para freq {} + {} = {}",
+                    iteration,
+                    base_frequency,
+                    freq_change,
+                    would_be_frequency
+                );
+            } else {
+                // Se a frequência calculada seria <= 2047, deve retornar Some(freq)
+                assert!(
+                    result.is_some(),
+                    "Iteração {}: Sweep sem overflow deve retornar Some para freq {} + {} = {}",
+                    iteration,
+                    base_frequency,
+                    freq_change,
+                    would_be_frequency
+                );
+
+                let new_freq = result.unwrap();
+                assert_eq!(
+                    new_freq, would_be_frequency,
+                    "Iteração {}: Frequência calculada deve ser {} mas foi {}",
+                    iteration, would_be_frequency, new_freq
+                );
+
+                assert!(
+                    new_freq <= 2047,
+                    "Iteração {}: Frequência válida deve ser <= 2047, mas foi {}",
+                    iteration,
+                    new_freq
+                );
+            }
+        }
+    }
 }
