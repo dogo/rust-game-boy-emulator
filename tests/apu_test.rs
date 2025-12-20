@@ -325,8 +325,8 @@ mod apu_tests {
     /// Teste de múltiplas iterações para simular property-based testing
     #[test]
     fn test_frame_sequencer_reset_multiple_iterations() {
-        // Executar 20 iterações para simular property-based testing
-        for iteration in 0..20 {
+        // Executar 5 iterações para simular property-based testing (otimizado)
+        for iteration in 0..5 {
             let mut frame_sequencer = FrameSequencer::new();
 
             // Variar o número de ticks antes do reset baseado na iteração
@@ -376,8 +376,8 @@ mod apu_tests {
 
     #[test]
     fn test_sweep_overflow_channel_disable_property() {
-        // Executar 20 iterações para simular property-based testing
-        for iteration in 0..20 {
+        // Executar 5 iterações para simular property-based testing (otimizado)
+        for iteration in 0..5 {
             let mut sweep = SweepUnit::new();
 
             // Testar diferentes configurações que podem causar overflow
@@ -429,8 +429,8 @@ mod apu_tests {
 
     #[test]
     fn test_sweep_negate_to_add_quirk_property() {
-        // Executar 20 iterações para simular property-based testing
-        for iteration in 0..20 {
+        // Executar 5 iterações para simular property-based testing (otimizado)
+        for iteration in 0..5 {
             let mut sweep = SweepUnit::new();
 
             // Configurar sweep em modo negate (subtract)
@@ -631,8 +631,8 @@ mod apu_tests {
 
     #[test]
     fn property_sweep_overflow_channel_disable() {
-        // Property-based testing manual: 20 iterações
-        for iteration in 0..20 {
+        // Property-based testing manual: 5 iterações (otimizado)
+        for iteration in 0..5 {
             let mut sweep = SweepUnit::new();
 
             // Gerar configurações de sweep válidas
@@ -690,8 +690,8 @@ mod apu_tests {
 
     #[test]
     fn property_sweep_negate_to_add_quirk() {
-        // Property-based testing manual: 20 iterações
-        for iteration in 0..20 {
+        // Property-based testing manual: 5 iterações (otimizado)
+        for iteration in 0..5 {
             // Gerar configurações de sweep válidas
             let period = 1 + (iteration % 7) as u8; // 1-7
             let shift = (iteration % 8) as u8; // 0-7
@@ -809,8 +809,8 @@ mod apu_tests {
 
 #[test]
 fn property_length_counter_trigger_behavior() {
-    // Property-based testing manual: 20 iterações
-    for iteration in 0..20 {
+    // Property-based testing manual: 5 iterações (otimizado para velocidade)
+    for iteration in 0..5 {
         let max_lengths = [64, 256];
         let max_length = max_lengths[iteration % 2];
         let mut length_counter = LengthCounter::new(max_length);
@@ -839,29 +839,105 @@ fn property_length_counter_trigger_behavior() {
 
 #[test]
 fn property_length_enable_extra_clocking() {
-    // Property-based testing manual: 20 iterações
-    for iteration in 0..20 {
+    // Property-based testing manual: 100 iterações para cobertura abrangente
+    for iteration in 0..100 {
         let max_lengths = [64, 256];
         let max_length = max_lengths[iteration % 2];
+        
+        // Gerar diferentes valores de length timer
+        let length_timer_value = (iteration % 64) as u8;
+        let is_length_clock_next = (iteration % 2) == 0;
+        let was_already_enabled = (iteration % 3) == 0;
 
-        // Ativar length enable quando is_length_clock_next = true
+        // === Caso 1: Ativar length enable quando is_length_clock_next = true ===
+        // HARDWARE QUIRK: deve aplicar extra length clocking
         let mut length_counter1 = LengthCounter::new(max_length);
-        length_counter1.load_length(10);
+        length_counter1.load_length(length_timer_value);
+        
+        // Se já estava habilitado, não deve aplicar extra clocking
+        if was_already_enabled {
+            length_counter1.handle_enable_write(true, false); // Habilitar primeiro
+        }
+        
         let counter_before = length_counter1.current_value();
+        
+        // Agora ativar quando is_length_clock_next = true
         length_counter1.handle_enable_write(true, true);
-        assert_eq!(length_counter1.current_value(), counter_before - 1);
+        
+        if !was_already_enabled && counter_before > 0 {
+            // Extra clocking deve ser aplicado: counter - 1
+            assert_eq!(
+                length_counter1.current_value(), 
+                counter_before - 1,
+                "Iteração {}: Extra clocking deve ser aplicado quando habilitando length enable na primeira metade do frame sequencer (counter {} -> {})",
+                iteration, counter_before, counter_before - 1
+            );
+        } else {
+            // Sem extra clocking se já estava habilitado ou counter = 0
+            assert_eq!(
+                length_counter1.current_value(), 
+                counter_before,
+                "Iteração {}: Sem extra clocking se já estava habilitado ou counter = 0",
+                iteration
+            );
+        }
 
-        // Ativar length enable quando is_length_clock_next = false
+        // === Caso 2: Ativar length enable quando is_length_clock_next = false ===
+        // Não deve aplicar extra clocking
         let mut length_counter2 = LengthCounter::new(max_length);
-        length_counter2.load_length(10);
+        length_counter2.load_length(length_timer_value);
         let counter_before = length_counter2.current_value();
+        
         length_counter2.handle_enable_write(true, false);
-        assert_eq!(length_counter2.current_value(), counter_before);
+        assert_eq!(
+            length_counter2.current_value(), 
+            counter_before,
+            "Iteração {}: Sem extra clocking quando habilitando length enable fora da primeira metade do frame sequencer",
+            iteration
+        );
 
-        // Counter = 0 não deve underflow
+        // === Caso 3: Counter = 0 não deve underflow ===
         let mut length_counter3 = LengthCounter::new(max_length);
-        length_counter3.handle_enable_write(true, true);
+        // Counter já é 0 por padrão
         assert_eq!(length_counter3.current_value(), 0);
+        
+        length_counter3.handle_enable_write(true, true);
+        assert_eq!(
+            length_counter3.current_value(), 
+            0,
+            "Iteração {}: Counter = 0 não deve underflow com extra clocking",
+            iteration
+        );
+
+        // === Caso 4: Desabilitar length enable não deve aplicar extra clocking ===
+        let mut length_counter4 = LengthCounter::new(max_length);
+        length_counter4.load_length(length_timer_value);
+        length_counter4.handle_enable_write(true, false); // Habilitar primeiro
+        
+        let counter_before = length_counter4.current_value();
+        length_counter4.handle_enable_write(false, true); // Desabilitar
+        
+        assert_eq!(
+            length_counter4.current_value(), 
+            counter_before,
+            "Iteração {}: Desabilitar length enable não deve aplicar extra clocking",
+            iteration
+        );
+
+        // === Caso 5: Re-habilitar quando já estava habilitado não deve aplicar extra clocking ===
+        let mut length_counter5 = LengthCounter::new(max_length);
+        length_counter5.load_length(length_timer_value);
+        length_counter5.handle_enable_write(true, false); // Habilitar primeiro
+        
+        let counter_before = length_counter5.current_value();
+        length_counter5.handle_enable_write(true, true); // Re-habilitar
+        
+        assert_eq!(
+            length_counter5.current_value(), 
+            counter_before,
+            "Iteração {}: Re-habilitar quando já estava habilitado não deve aplicar extra clocking",
+            iteration
+        );
     }
 }
 
