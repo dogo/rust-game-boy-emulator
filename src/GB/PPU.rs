@@ -81,7 +81,7 @@ impl PPU {
         // LCD desligado -> ligado
         if !was_on && now_on {
             self.mode = 2;
-            self.mode_clock = 0;
+            self.mode_clock = 4; // Começa no modo 2 (OAM scan) mas com pequeno offset
             self.ly = 0;
             self.frame_ready = false;
             self.wy_trigger = false;
