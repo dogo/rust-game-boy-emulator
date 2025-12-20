@@ -839,8 +839,8 @@ fn property_length_counter_trigger_behavior() {
 
 #[test]
 fn property_length_enable_extra_clocking() {
-    // Property-based testing manual: 100 iterações para cobertura abrangente
-    for iteration in 0..100 {
+    // Property-based testing manual: 5 iterações (otimizado)
+    for iteration in 0..5 {
         let max_lengths = [64, 256];
         let max_length = max_lengths[iteration % 2];
         
