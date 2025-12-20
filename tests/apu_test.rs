@@ -843,7 +843,7 @@ fn property_length_enable_extra_clocking() {
     for iteration in 0..5 {
         let max_lengths = [64, 256];
         let max_length = max_lengths[iteration % 2];
-        
+
         // Gerar diferentes valores de length timer
         let length_timer_value = (iteration % 64) as u8;
         let is_length_clock_next = (iteration % 2) == 0;
@@ -853,29 +853,31 @@ fn property_length_enable_extra_clocking() {
         // HARDWARE QUIRK: deve aplicar extra length clocking
         let mut length_counter1 = LengthCounter::new(max_length);
         length_counter1.load_length(length_timer_value);
-        
+
         // Se já estava habilitado, não deve aplicar extra clocking
         if was_already_enabled {
             length_counter1.handle_enable_write(true, false); // Habilitar primeiro
         }
-        
+
         let counter_before = length_counter1.current_value();
-        
+
         // Agora ativar quando is_length_clock_next = true
         length_counter1.handle_enable_write(true, true);
-        
+
         if !was_already_enabled && counter_before > 0 {
             // Extra clocking deve ser aplicado: counter - 1
             assert_eq!(
-                length_counter1.current_value(), 
+                length_counter1.current_value(),
                 counter_before - 1,
                 "Iteração {}: Extra clocking deve ser aplicado quando habilitando length enable na primeira metade do frame sequencer (counter {} -> {})",
-                iteration, counter_before, counter_before - 1
+                iteration,
+                counter_before,
+                counter_before - 1
             );
         } else {
             // Sem extra clocking se já estava habilitado ou counter = 0
             assert_eq!(
-                length_counter1.current_value(), 
+                length_counter1.current_value(),
                 counter_before,
                 "Iteração {}: Sem extra clocking se já estava habilitado ou counter = 0",
                 iteration
@@ -887,10 +889,10 @@ fn property_length_enable_extra_clocking() {
         let mut length_counter2 = LengthCounter::new(max_length);
         length_counter2.load_length(length_timer_value);
         let counter_before = length_counter2.current_value();
-        
+
         length_counter2.handle_enable_write(true, false);
         assert_eq!(
-            length_counter2.current_value(), 
+            length_counter2.current_value(),
             counter_before,
             "Iteração {}: Sem extra clocking quando habilitando length enable fora da primeira metade do frame sequencer",
             iteration
@@ -900,10 +902,10 @@ fn property_length_enable_extra_clocking() {
         let mut length_counter3 = LengthCounter::new(max_length);
         // Counter já é 0 por padrão
         assert_eq!(length_counter3.current_value(), 0);
-        
+
         length_counter3.handle_enable_write(true, true);
         assert_eq!(
-            length_counter3.current_value(), 
+            length_counter3.current_value(),
             0,
             "Iteração {}: Counter = 0 não deve underflow com extra clocking",
             iteration
@@ -913,12 +915,12 @@ fn property_length_enable_extra_clocking() {
         let mut length_counter4 = LengthCounter::new(max_length);
         length_counter4.load_length(length_timer_value);
         length_counter4.handle_enable_write(true, false); // Habilitar primeiro
-        
+
         let counter_before = length_counter4.current_value();
         length_counter4.handle_enable_write(false, true); // Desabilitar
-        
+
         assert_eq!(
-            length_counter4.current_value(), 
+            length_counter4.current_value(),
             counter_before,
             "Iteração {}: Desabilitar length enable não deve aplicar extra clocking",
             iteration
@@ -928,12 +930,12 @@ fn property_length_enable_extra_clocking() {
         let mut length_counter5 = LengthCounter::new(max_length);
         length_counter5.load_length(length_timer_value);
         length_counter5.handle_enable_write(true, false); // Habilitar primeiro
-        
+
         let counter_before = length_counter5.current_value();
         length_counter5.handle_enable_write(true, true); // Re-habilitar
-        
+
         assert_eq!(
-            length_counter5.current_value(), 
+            length_counter5.current_value(),
             counter_before,
             "Iteração {}: Re-habilitar quando já estava habilitado não deve aplicar extra clocking",
             iteration
@@ -956,4 +958,210 @@ fn test_apu_length_counter_integration() {
     apu.write_register(0xFF14, 0xC7);
     let nr52 = apu.read_register(0xFF26);
     assert_eq!(nr52 & 0x01, 0x01);
+}
+
+#[test]
+fn property_wave_ram_read_quirk() {
+    // Property-based testing manual: 5 iterações para Wave RAM read quirk
+    for iteration in 0..5 {
+        let mut apu = APU::new();
+
+        // Configurar Wave RAM com padrão de teste
+        let test_pattern = [
+            0x01, 0x23, 0x45, 0x67, 0x89, 0xAB, 0xCD, 0xEF, 0xFE, 0xDC, 0xBA, 0x98, 0x76, 0x54,
+            0x32, 0x10,
+        ];
+
+        // Escrever padrão na Wave RAM (canal 3 desabilitado)
+        for (i, &byte) in test_pattern.iter().enumerate() {
+            apu.write_register(0xFF30 + i as u16, byte);
+        }
+
+        // Verificar que Wave RAM foi escrita corretamente (canal desabilitado)
+        for (i, &expected_byte) in test_pattern.iter().enumerate() {
+            let read_value = apu.read_register(0xFF30 + i as u16);
+            assert_eq!(
+                read_value, expected_byte,
+                "Iteração {}: Wave RAM[{}] deve ser {} quando canal desabilitado, mas foi {}",
+                iteration, i, expected_byte, read_value
+            );
+        }
+
+        // Habilitar canal 3 para ativar quirk de leitura
+        apu.write_register(0xFF1A, 0x80); // NR30: DAC enable
+        apu.write_register(0xFF1B, 0x00); // NR31: length timer
+        apu.write_register(0xFF1C, 0x20); // NR32: output level = 1 (100%)
+        apu.write_register(0xFF1D, 0x00); // NR33: frequency low
+        apu.write_register(0xFF1E, 0x80); // NR34: trigger
+
+        // Verificar que canal está habilitado
+        let nr52 = apu.read_register(0xFF26);
+        assert_eq!(
+            nr52 & 0x04,
+            0x04,
+            "Iteração {}: Canal 3 deve estar habilitado após trigger",
+            iteration
+        );
+
+        // HARDWARE QUIRK: Durante playback, leitura deve retornar byte sendo acessado
+        // Inicialmente, deve retornar o primeiro byte (posição 0)
+        let quirk_read = apu.read_register(0xFF30); // Qualquer endereço da Wave RAM
+        assert_eq!(
+            quirk_read, test_pattern[0],
+            "Iteração {}: Durante playback, leitura deve retornar byte da posição atual ({}), mas foi {}",
+            iteration, test_pattern[0], quirk_read
+        );
+
+        // Simular alguns ciclos para avançar posição da wave
+        for _ in 0..100 {
+            apu.tick_m_cycle();
+        }
+
+        // Gerar alguns samples para avançar wave position
+        for _ in 0..10 {
+            apu.generate_sample();
+        }
+
+        // Verificar que leitura ainda retorna byte da posição atual (pode ter mudado)
+        let quirk_read_after = apu.read_register(0xFF35); // Endereço diferente, mas deve retornar mesmo byte
+        let quirk_read_after2 = apu.read_register(0xFF3A); // Outro endereço diferente
+
+        // Durante playback, todos os endereços da Wave RAM devem retornar o mesmo byte
+        assert_eq!(
+            quirk_read_after, quirk_read_after2,
+            "Iteração {}: Durante playback, todos os endereços da Wave RAM devem retornar o mesmo byte",
+            iteration
+        );
+
+        // Desabilitar canal 3
+        apu.write_register(0xFF1A, 0x00); // NR30: DAC disable
+
+        // Verificar que canal está desabilitado
+        let nr52 = apu.read_register(0xFF26);
+        assert_eq!(
+            nr52 & 0x04,
+            0x00,
+            "Iteração {}: Canal 3 deve estar desabilitado após DAC disable",
+            iteration
+        );
+
+        // Após desabilitar, leitura deve voltar ao normal (acesso direto)
+        for (i, &expected_byte) in test_pattern.iter().enumerate() {
+            let read_value = apu.read_register(0xFF30 + i as u16);
+            assert_eq!(
+                read_value, expected_byte,
+                "Iteração {}: Após desabilitar canal, Wave RAM[{}] deve retornar valor original {} mas foi {}",
+                iteration, i, expected_byte, read_value
+            );
+        }
+    }
+}
+
+#[test]
+fn property_wave_ram_write_protection() {
+    // Property-based testing manual: 5 iterações para Wave RAM write protection
+    for iteration in 0..5 {
+        let mut apu = APU::new();
+
+        // Padrão inicial da Wave RAM
+        let initial_pattern = [
+            0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE,
+            0xFF, 0x00,
+        ];
+
+        // Escrever padrão inicial (canal desabilitado)
+        for (i, &byte) in initial_pattern.iter().enumerate() {
+            apu.write_register(0xFF30 + i as u16, byte);
+        }
+
+        // Verificar que escrita funcionou
+        for (i, &expected_byte) in initial_pattern.iter().enumerate() {
+            let read_value = apu.read_register(0xFF30 + i as u16);
+            assert_eq!(
+                read_value, expected_byte,
+                "Iteração {}: Wave RAM[{}] deve ser {} após escrita inicial",
+                iteration, i, expected_byte
+            );
+        }
+
+        // Habilitar canal 3 para ativar proteção de escrita
+        apu.write_register(0xFF1A, 0x80); // NR30: DAC enable
+        apu.write_register(0xFF1B, 0x00); // NR31: length timer
+        apu.write_register(0xFF1C, 0x20); // NR32: output level = 1
+        apu.write_register(0xFF1D, 0x00); // NR33: frequency low
+        apu.write_register(0xFF1E, 0x80); // NR34: trigger
+
+        // Verificar que canal está habilitado
+        let nr52 = apu.read_register(0xFF26);
+        assert_eq!(
+            nr52 & 0x04,
+            0x04,
+            "Iteração {}: Canal 3 deve estar habilitado",
+            iteration
+        );
+
+        // Tentar escrever novos valores (deve ser ignorado devido à proteção)
+        let blocked_pattern = [
+            0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF, 0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
+            0x88, 0x99,
+        ];
+
+        for (i, &byte) in blocked_pattern.iter().enumerate() {
+            apu.write_register(0xFF30 + i as u16, byte);
+        }
+
+        // HARDWARE QUIRK: Escritas devem ter sido ignoradas, Wave RAM deve manter valores originais
+        // Mas leitura durante playback retorna byte da posição atual, não o valor do endereço
+        // Então vamos desabilitar o canal primeiro para verificar os valores reais
+        apu.write_register(0xFF1A, 0x00); // NR30: DAC disable
+
+        // Verificar que Wave RAM mantém valores originais (escritas foram bloqueadas)
+        for (i, &expected_byte) in initial_pattern.iter().enumerate() {
+            let read_value = apu.read_register(0xFF30 + i as u16);
+            assert_eq!(
+                read_value, expected_byte,
+                "Iteração {}: Wave RAM[{}] deve manter valor original {} após tentativa de escrita durante playback, mas foi {}",
+                iteration, i, expected_byte, read_value
+            );
+        }
+
+        // Agora com canal desabilitado, escritas devem funcionar normalmente
+        for (i, &byte) in blocked_pattern.iter().enumerate() {
+            apu.write_register(0xFF30 + i as u16, byte);
+        }
+
+        // Verificar que escritas funcionaram com canal desabilitado
+        for (i, &expected_byte) in blocked_pattern.iter().enumerate() {
+            let read_value = apu.read_register(0xFF30 + i as u16);
+            assert_eq!(
+                read_value, expected_byte,
+                "Iteração {}: Wave RAM[{}] deve ser {} após escrita com canal desabilitado",
+                iteration, i, expected_byte
+            );
+        }
+
+        // Teste adicional: Habilitar canal novamente e verificar proteção
+        apu.write_register(0xFF1A, 0x80); // NR30: DAC enable
+        apu.write_register(0xFF1E, 0x80); // NR34: trigger novamente
+
+        // Tentar sobrescrever com padrão diferente
+        let final_pattern = [0x5A; 16]; // Todos os bytes = 0x5A
+
+        for (i, &byte) in final_pattern.iter().enumerate() {
+            apu.write_register(0xFF30 + i as u16, byte);
+        }
+
+        // Desabilitar para verificar se escritas foram bloqueadas
+        apu.write_register(0xFF1A, 0x00); // NR30: DAC disable
+
+        // Wave RAM deve manter o padrão anterior (blocked_pattern)
+        for (i, &expected_byte) in blocked_pattern.iter().enumerate() {
+            let read_value = apu.read_register(0xFF30 + i as u16);
+            assert_eq!(
+                read_value, expected_byte,
+                "Iteração {}: Wave RAM[{}] deve manter valor {} após segunda tentativa de escrita bloqueada",
+                iteration, i, expected_byte
+            );
+        }
+    }
 }

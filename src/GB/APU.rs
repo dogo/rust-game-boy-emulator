@@ -60,7 +60,7 @@ pub struct Envelope {
     direction: bool, // true = increase, false = decrease
     period: u8,
     timer: u8,
-    stopped: bool, // NOVO: para parar envelope automaticamente
+    stopped: bool, // para envelope automaticamente
 }
 
 impl Envelope {
@@ -130,7 +130,7 @@ pub struct SweepUnit {
     shift: u8,
     timer: u8,
     enabled: bool,
-    negate_used: bool, // NOVO: track se negate foi usado
+    negate_used: bool, //  track se negate foi usado
 }
 
 impl SweepUnit {
@@ -305,12 +305,13 @@ pub struct APU {
 
     // === Canal 3: Wave pattern ===
     ch3_enabled: bool,
-    ch3_dac_enable: bool,    // NR30 bit 7: DAC enable
-    ch3_length_timer: u8,    // NR31: length timer (0-255)
-    ch3_output_level: u8,    // NR32 bits 6-5: output level (0-3)
-    ch3_frequency: u16,      // NR33/NR34: frequência (0-2047)
-    ch3_length_enable: bool, // NR34 bit 6: length enable
-    ch3_wave_ram: [u8; 16],  // Wave RAM (0xFF30-0xFF3F): 32 samples de 4 bits
+    ch3_dac_enable: bool,        // NR30 bit 7: DAC enable
+    ch3_length_timer: u8,        // NR31: length timer (0-255)
+    ch3_output_level: u8,        // NR32 bits 6-5: output level (0-3)
+    ch3_frequency: u16,          // NR33/NR34: frequência (0-2047)
+    ch3_length_enable: bool,     // NR34 bit 6: length enable
+    ch3_wave_ram: [u8; 16],      // Wave RAM (0xFF30-0xFF3F): 32 samples de 4 bits
+    ch3_current_sample_byte: u8, // Wave RAM: byte sendo lido atualmente (para quirk de leitura)
 
     // === Canal 4: Noise ===
     ch4_enabled: bool,
@@ -413,6 +414,7 @@ impl APU {
             ch3_frequency: 0,
             ch3_length_enable: false,
             ch3_wave_ram: [0; 16],
+            ch3_current_sample_byte: 0,
 
             // Canal 4
             ch4_enabled: false,
@@ -619,6 +621,10 @@ impl APU {
 
         // Ler sample da Wave RAM (32 samples de 4 bits)
         let byte_index = (self.ch3_wave_position / 2) as usize;
+
+        // HARDWARE QUIRK: Atualizar byte sendo acessado atualmente para quirk de leitura
+        self.ch3_current_sample_byte = self.ch3_wave_ram[byte_index];
+
         let nibble = if self.ch3_wave_position & 1 == 0 {
             // Nibble superior (bits 7-4)
             (self.ch3_wave_ram[byte_index] >> 4) & 0x0F
@@ -764,11 +770,11 @@ impl APU {
             // Wave RAM - HARDWARE QUIRK: durante playback, retorna byte sendo acessado
             0xFF30..=0xFF3F => {
                 if self.ch3_enabled && self.ch3_dac_enable {
-                    // Durante playback, retorna o byte que o canal está acessando
-                    let byte_index = (self.ch3_wave_position / 2) as usize;
-                    self.ch3_wave_ram[byte_index]
+                    // HARDWARE QUIRK: Durante playback, retorna o byte que o canal está acessando atualmente
+                    // Este é o byte que está sendo lido pelo canal 3 na posição atual da wave
+                    self.ch3_current_sample_byte
                 } else {
-                    // Normal: Wave RAM acessível
+                    // Normal: acesso direto à Wave RAM quando canal não está tocando
                     self.ch3_wave_ram[(address - 0xFF30) as usize]
                 }
             }
@@ -1020,10 +1026,12 @@ impl APU {
             // Wave RAM - HARDWARE QUIRK: write bloqueado durante playback
             0xFF30..=0xFF3F => {
                 if !(self.ch3_enabled && self.ch3_dac_enable) {
-                    // Só permite write quando canal 3 não está tocando
+                    // HARDWARE QUIRK: Só permite write quando canal 3 não está tocando
+                    // Durante playback, todas as escritas são ignoradas para proteger a Wave RAM
                     self.ch3_wave_ram[(address - 0xFF30) as usize] = value;
                 }
-                // Durante playback: write ignorado (quirk do hardware)
+                // HARDWARE QUIRK: Durante playback, write é completamente ignorado (proteção de escrita)
+                // Isso previne corrupção da Wave RAM durante reprodução de áudio
             }
 
             _ => {} // Registradores não implementados
@@ -1115,6 +1123,9 @@ impl APU {
         // Inicializar timer de frequência
         self.ch3_frequency_timer = (2048 - self.ch3_frequency as u32) / 2;
         self.ch3_wave_position = 0;
+
+        // HARDWARE QUIRK: Inicializar byte atual para quirk de leitura
+        self.ch3_current_sample_byte = self.ch3_wave_ram[0];
     }
 
     /// Trigger do canal 4 com hardware precision
@@ -1244,6 +1255,10 @@ impl APU {
             } else {
                 self.ch3_frequency_timer = (2048 - self.ch3_frequency as u32) / 2;
                 self.ch3_wave_position = (self.ch3_wave_position + 1) % 32;
+
+                // HARDWARE QUIRK: Atualizar byte atual quando posição muda
+                let byte_index = (self.ch3_wave_position / 2) as usize;
+                self.ch3_current_sample_byte = self.ch3_wave_ram[byte_index];
             }
         } // Canal 4 - Timer de frequência (mais complexo)
         if self.ch4_enabled {
