@@ -437,7 +437,7 @@ impl MemoryBus {
 
     #[inline]
     pub fn cpu_read(&mut self, address: u16) -> u8 {
-        // Sincronizar PPU antes de aplicar OAM bug (como no SameBoy)
+        // Sincronizar PPU antes de aplicar OAM bug (hardware behavior)
         // OAM bug é aplicado automaticamente dentro de trigger_oam_bug_read
         if (0xFE00..=0xFEFF).contains(&address) {
             if self.lcd_on() && (self.ppu.mode == 2 || self.ppu.mode == 3) {
@@ -453,7 +453,7 @@ impl MemoryBus {
 
     #[inline]
     pub fn cpu_write(&mut self, address: u16, value: u8) {
-        // Sincronizar PPU antes de aplicar OAM bug (como no SameBoy)
+        // Sincronizar PPU antes de aplicar OAM bug (hardware behavior)
         // OAM bug é aplicado automaticamente dentro de trigger_oam_bug_write
         if (0xFE00..=0xFEFF).contains(&address) {
             if self.lcd_on() && (self.ppu.mode == 2 || self.ppu.mode == 3) {

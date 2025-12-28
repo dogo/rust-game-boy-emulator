@@ -120,6 +120,14 @@ impl Envelope {
     pub fn is_stopped(&self) -> bool {
         self.stopped
     }
+
+    pub fn reset(&mut self) {
+        self.volume = 0;
+        self.direction = false;
+        self.period = 0;
+        self.timer = 0;
+        self.stopped = false;
+    }
 }
 
 /// Sweep Unit com quirks de hardware (overflow e negate-to-add)
@@ -236,11 +244,16 @@ impl LengthCounter {
         }
     }
 
-    pub fn handle_enable_write(&mut self, new_enable: bool, is_length_clock_next: bool) {
+    pub fn handle_enable_write(&mut self, new_enable: bool, is_length_clock_next: bool, has_trigger: bool) {
         // HARDWARE QUIRK: extra length clocking
         if new_enable && !self.enable && is_length_clock_next {
             if self.counter > 0 {
                 self.counter -= 1;
+                // Se counter chegou a 0 após decremento e há trigger, resetar para máximo-1
+                // HARDWARE PRECISION: no extra length clocking, reseta para 0x3F (63) em vez de 0x40 (64)
+                if self.counter == 0 && has_trigger {
+                    self.counter = self.max_length - 1;
+                }
             }
         }
         self.enable = new_enable;
@@ -254,18 +267,28 @@ impl LengthCounter {
         true
     }
 
-    pub fn handle_trigger(&mut self, length_enable: bool, is_length_clock_next: bool) {
+    pub fn handle_trigger(&mut self, _length_enable: bool, _is_length_clock_next: bool) -> bool {
         // HARDWARE PRECISION: trigger com length counter = 0
-        if self.counter == 0 {
+        // Retorna true se resetou counter de 0 para máximo (para setar length_enable = false depois)
+        let was_zero = self.counter == 0;
+        if was_zero {
             self.counter = self.max_length;
-            if length_enable && is_length_clock_next {
-                self.counter -= 1;
-            }
         }
+        was_zero
     }
 
     pub fn current_value(&self) -> u16 {
         self.counter
+    }
+
+    pub fn set_to_max(&mut self) {
+        self.counter = self.max_length;
+    }
+
+    pub fn decrement(&mut self) {
+        if self.counter > 0 {
+            self.counter -= 1;
+        }
     }
 
     pub fn is_enabled(&self) -> bool {
@@ -341,6 +364,9 @@ pub struct APU {
     ch4_right: bool,
 
     sound_enable: bool, // NR52 bit 7: master sound enable
+
+    // === Modelo do Game Boy ===
+    is_cgb: bool, // true se for CGB, false se for DMG
 
     // === Estado interno com estruturas de precisão ===
     frame_sequencer: FrameSequencer, // Frame sequencer com hardware precision
@@ -441,6 +467,9 @@ impl APU {
             ch4_left: true,
             ch4_right: true,
             sound_enable: true, // NR52
+
+            // Modelo do Game Boy (default: CGB para testes de som CGB)
+            is_cgb: true,
 
             // Estado interno com estruturas de precisão
             frame_sequencer: FrameSequencer::new(),
@@ -650,30 +679,42 @@ impl APU {
 
     /// Lê um registrador do APU com máscaras de bits corretas conforme Pan Docs
     pub fn read_register(&self, address: u16) -> u8 {
-        // HARDWARE PRECISION: Quando APU está desligada, todos os registradores
-        // (exceto NR52, length timers e Wave RAM) retornam 0xFF
+        // HARDWARE PRECISION: Quando APU está desligada, registradores retornam valores de máscara
+        // (valores padrão com bits que sempre são 1 setados)
         if !self.sound_enable {
             match address {
+                0xFF10 => 0x80, // NR10: bit 7 sempre 1
+                0xFF11 => 0x3F, // NR11: bits 5-0 não utilizados (sempre 1)
+                0xFF12 => 0x00, // NR12: todos os bits zerados quando APU off
+                0xFF13 => 0xFF, // NR13: write-only (sempre 0xFF)
+                0xFF14 => 0xBF, // NR14: bits 7,5-3,2-0 sempre 1
+                0xFF15 => 0xFF, // NR15: não existe (sempre 0xFF)
+                0xFF16 => 0x3F, // NR21: bits 5-0 não utilizados (sempre 1)
+                0xFF17 => 0x00, // NR22: todos os bits zerados quando APU off
+                0xFF18 => 0xFF, // NR23: write-only (sempre 0xFF)
+                0xFF19 => 0xBF, // NR24: bits 7,5-3,2-0 sempre 1
+                0xFF1A => 0x7F, // NR30: bits 6-0 sempre 1
+                0xFF1B => 0xFF, // NR31: write-only (sempre 0xFF)
+                0xFF1C => 0x9F, // NR32: bits 7,4-0 sempre 1
+                0xFF1D => 0xFF, // NR33: write-only (sempre 0xFF)
+                0xFF1E => 0xBF, // NR34: bits 7,5-3,2-0 sempre 1
+                0xFF1F => 0xFF, // NR40: não existe (sempre 0xFF)
+                0xFF20 => 0xFF, // NR41: write-only (sempre 0xFF)
+                0xFF21 => 0x00, // NR42: todos os bits zerados quando APU off
+                0xFF22 => 0x00, // NR43: todos os bits zerados quando APU off
+                0xFF23 => 0xBF, // NR44: bits 7,5-3,2-0 sempre 1
+                0xFF24 => 0x00, // NR50: todos os bits zerados quando APU off
+                0xFF25 => 0x00, // NR51: todos os bits zerados quando APU off
                 0xFF26 => {
                     // NR52: Sempre readable, mesmo com APU desligada
                     // Bits 6-4 sempre 1, bits 3-0 sempre 0 quando APU desligada
                     0x70
                 }
-                0xFF11 | 0xFF16 | 0xFF1B | 0xFF20 => {
-                    // Length timers: readable mesmo com APU desligada (bits não utilizados = 1)
-                    match address {
-                        0xFF11 => 0x3F, // NR11: bits 5-0 não utilizados para leitura
-                        0xFF16 => 0x3F, // NR21: bits 5-0 não utilizados para leitura
-                        0xFF1B => 0xFF, // NR31: completamente write-only
-                        0xFF20 => 0xFF, // NR41: bits 5-0 não utilizados para leitura
-                        _ => 0xFF,
-                    }
-                }
                 0xFF30..=0xFF3F => {
-                    // Wave RAM: sempre accessible
+                    // Wave RAM: sempre accessible (não é afetada quando APU está desligada)
                     self.ch3_wave_ram[(address - 0xFF30) as usize]
                 }
-                _ => 0xFF, // Todos os outros registradores retornam 0xFF quando APU desligada
+                _ => 0xFF, // Registradores não implementados
             }
         } else {
             // APU ligada: comportamento normal com máscaras corretas
@@ -815,15 +856,26 @@ impl APU {
 
     /// Escreve em um registrador do APU
     pub fn write_register(&mut self, address: u16, value: u8) {
-        // No DMG, quando o som está desabilitado (NR52 bit 7 = 0),
-        // escritas em NR10-NR51 são ignoradas (exceto NR52, NR41 e Wave RAM)
-        // NR41 (0xFF20) é especial: pode ser escrito mesmo com APU desligada
+        // Quando o som está desabilitado (NR52 bit 7 = 0):
+        // - No CGB: TODAS as escritas são ignoradas EXCETO NR52 e Wave RAM
+        // - No DMG: escritas são ignoradas EXCETO NR52, NR11, NR21, NR31, NR41 e Wave RAM
+        // NR41 (0xFF20) é especial: pode ser escrito mesmo com APU desligada em DMG
         if !self.sound_enable
             && address != 0xFF26
-            && address != 0xFF20
             && !(0xFF30..=0xFF3F).contains(&address)
         {
-            return;
+            // Verificar se é um registrador que pode ser escrito quando APU está off
+            let writable_when_off = if self.is_cgb {
+                // CGB: NENHUMA escrita é permitida (exceto NR52 e Wave RAM, já checados acima)
+                false
+            } else {
+                // DMG: NR11, NR21, NR31, NR41 podem ser escritos
+                address == 0xFF11 || address == 0xFF16 || address == 0xFF1B || address == 0xFF20
+            };
+
+            if !writable_when_off {
+                return;
+            }
         }
 
         match address {
@@ -883,15 +935,34 @@ impl APU {
                 // NR14: Frequency high + control
                 self.ch1_frequency = (self.ch1_frequency & 0x00FF) | (((value & 0x07) as u16) << 8);
 
-                // Extra length clocking: habilitando length na primeira metade do frame sequencer
                 let new_length_enable = (value & 0x40) != 0;
-                self.ch1_length
-                    .handle_enable_write(new_length_enable, self.is_length_clock_next());
-                self.ch1_length_enable = new_length_enable;
+                let has_trigger = (value & 0x80) != 0;
 
-                if (value & 0x80) != 0 {
+                // IMPORTANTE: Ordem conforme hardware real:
+                // 1. Trigger primeiro (pode resetar counter 0 -> máximo e setar length_enabled = false temporariamente)
+                // 2. Extra length clocking depois (verifica estado antigo do length_enable)
+                // 3. Finalmente atualiza length_enable flag
+
+                // Se trigger reseta counter 0 -> máximo, precisamos setar length_enable = false temporariamente
+                // para permitir que o extra length clocking aconteça depois (quirk do hardware)
+                let trigger_reset_to_max = if has_trigger {
+                    let was_zero = self.ch1_length.current_value() == 0;
                     self.trigger_channel1();
-                }
+                    if was_zero {
+                        // Resetou counter de 0 para máximo - setar length_enable = false temporariamente
+                        self.ch1_length_enable = false;
+                        self.ch1_length.enable = false;
+                    }
+                    was_zero
+                } else {
+                    false
+                };
+
+                // Extra length clocking: habilitando length na primeira metade do frame sequencer
+                // Usa o estado ANTIGO do length_enable (antes da atualização)
+                self.ch1_length
+                    .handle_enable_write(new_length_enable, self.is_length_clock_next(), has_trigger);
+                self.ch1_length_enable = new_length_enable;
             }
 
             // Canal 2
@@ -927,15 +998,17 @@ impl APU {
                 // NR24: Frequency high + control
                 self.ch2_frequency = (self.ch2_frequency & 0x00FF) | (((value & 0x07) as u16) << 8);
 
-                // Extra length clocking
                 let new_length_enable = (value & 0x40) != 0;
-                self.ch2_length
-                    .handle_enable_write(new_length_enable, self.is_length_clock_next());
-                self.ch2_length_enable = new_length_enable;
+                let has_trigger = (value & 0x80) != 0;
 
-                if (value & 0x80) != 0 {
+                // Ordem: trigger primeiro, depois extra length clocking
+                if has_trigger {
                     self.trigger_channel2();
                 }
+
+                self.ch2_length
+                    .handle_enable_write(new_length_enable, self.is_length_clock_next(), has_trigger);
+                self.ch2_length_enable = new_length_enable;
             }
 
             // Canal 3
@@ -963,15 +1036,17 @@ impl APU {
                 // NR34: Frequency high + control
                 self.ch3_frequency = (self.ch3_frequency & 0x00FF) | (((value & 0x07) as u16) << 8);
 
-                // Extra length clocking
                 let new_length_enable = (value & 0x40) != 0;
-                self.ch3_length
-                    .handle_enable_write(new_length_enable, self.is_length_clock_next());
-                self.ch3_length_enable = new_length_enable;
+                let has_trigger = (value & 0x80) != 0;
 
-                if (value & 0x80) != 0 {
+                // Ordem: trigger primeiro, depois extra length clocking
+                if has_trigger {
                     self.trigger_channel3();
                 }
+
+                self.ch3_length
+                    .handle_enable_write(new_length_enable, self.is_length_clock_next(), has_trigger);
+                self.ch3_length_enable = new_length_enable;
             }
 
             // Canal 4
@@ -1008,11 +1083,12 @@ impl APU {
                 // NR44: Control
                 // Extra length clocking
                 let new_length_enable = (value & 0x40) != 0;
+                let has_trigger = (value & 0x80) != 0;
                 self.ch4_length
-                    .handle_enable_write(new_length_enable, self.is_length_clock_next());
+                    .handle_enable_write(new_length_enable, self.is_length_clock_next(), has_trigger);
                 self.ch4_length_enable = new_length_enable;
 
-                if (value & 0x80) != 0 {
+                if has_trigger {
                     self.trigger_channel4();
                 }
             }
@@ -1073,6 +1149,7 @@ impl APU {
         self.ch1_enabled = true;
 
         // Hardware precision: trigger com length counter = 0
+        // handle_trigger já faz o reset para máximo quando counter == 0
         self.ch1_length
             .handle_trigger(self.ch1_length_enable, self.is_length_clock_next());
 
@@ -1187,7 +1264,9 @@ impl APU {
     }
 
     /// Desabilita todos os canais quando o som é desligado (NR52 bit 7 = 0)
-    /// HARDWARE PRECISION: Limpa todos os registradores EXCETO length timers e Wave RAM
+    /// HARDWARE PRECISION: Limpa todos os registradores EXCETO Wave RAM
+    /// Em CGB: length timers também são limpos
+    /// Em DMG: length timers são preservados (mas serão restaurados quando APU ligar novamente)
     fn disable_all_channels(&mut self) {
         // Desabilitar todos os canais imediatamente
         self.ch1_enabled = false;
@@ -1197,38 +1276,59 @@ impl APU {
 
         // HARDWARE PRECISION: Quando APU é desligada (NR52 bit 7 = 0):
         // - Todos os registradores NR10-NR51 são zerados
-        // - EXCETO: length timers (NRx1) e Wave RAM (0xFF30-0xFF3F)
-        // - Length counters internos também são preservados
+        // - EXCETO: Wave RAM (0xFF30-0xFF3F) - sempre preservada
+        // - Em CGB: length timers são zerados
+        // - Em DMG: length timers são preservados (mas serão restaurados quando APU ligar)
 
-        // Canal 1 - Limpar tudo EXCETO ch1_length_timer
+        // Canal 1 - Limpar tudo (incluindo length timer em CGB)
         self.ch1_sweep_period = 0;
         self.ch1_sweep_direction = false;
         self.ch1_sweep_shift = 0;
+        self.ch1_sweep = SweepUnit::new();
         self.ch1_wave_duty = 0;
+        if self.is_cgb {
+            self.ch1_length_timer = 0;
+            self.ch1_length = LengthCounter::new(64);
+        }
         self.ch1_envelope_initial = 0;
         self.ch1_envelope_direction = false;
         self.ch1_envelope_period = 0;
+        self.ch1_envelope.reset();
         self.ch1_frequency = 0;
         self.ch1_length_enable = false;
 
-        // Canal 2 - Limpar tudo EXCETO ch2_length_timer
+        // Canal 2 - Limpar tudo (incluindo length timer em CGB)
         self.ch2_wave_duty = 0;
+        if self.is_cgb {
+            self.ch2_length_timer = 0;
+            self.ch2_length = LengthCounter::new(64);
+        }
         self.ch2_envelope_initial = 0;
         self.ch2_envelope_direction = false;
         self.ch2_envelope_period = 0;
+        self.ch2_envelope.reset();
         self.ch2_frequency = 0;
         self.ch2_length_enable = false;
 
-        // Canal 3 - Limpar tudo EXCETO ch3_length_timer e Wave RAM
+        // Canal 3 - Limpar tudo (incluindo length timer em CGB), EXCETO Wave RAM
         self.ch3_dac_enable = false;
+        if self.is_cgb {
+            self.ch3_length_timer = 0;
+            self.ch3_length = LengthCounter::new(256);
+        }
         self.ch3_output_level = 0;
         self.ch3_frequency = 0;
         self.ch3_length_enable = false;
 
-        // Canal 4 - Limpar tudo EXCETO ch4_length_timer
+        // Canal 4 - Limpar tudo (incluindo length timer em CGB)
+        if self.is_cgb {
+            self.ch4_length_timer = 0;
+            self.ch4_length = LengthCounter::new(64);
+        }
         self.ch4_envelope_initial = 0;
         self.ch4_envelope_direction = false;
         self.ch4_envelope_period = 0;
+        self.ch4_envelope.reset();
         self.ch4_clock_shift = 0;
         self.ch4_width_mode = false;
         self.ch4_divisor_code = 0;

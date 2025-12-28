@@ -1,5 +1,5 @@
 /// Emula o timer/divisor do Game Boy
-/// Baseado na implementação do SameBoy
+/// Timer implementation following Game Boy hardware behavior
 /// Ref: https://gbdev.io/pandocs/Timer_Obscure_Behaviour.html
 
 // Bits do div_counter que trigeram TIMA para cada valor de TAC & 0x03
