@@ -327,6 +327,7 @@ fn process_joypad_input(cpu: &mut CPU, state: &Arc<SharedState>) {
 fn init_sdl() -> Result<sdl3::Sdl, String> {
     sdl3::hint::set("SDL_VIDEO_X11_NET_WM_BYPASS_COMPOSITOR", "0");
     sdl3::hint::set("SDL_HINT_RENDER_SCALE_QUALITY", "nearest");
+    sdl3::hint::set("SDL_HINT_RENDER_VSYNC", "1");
     sdl3::init().map_err(|e| format!("{:?}", e))
 }
 
@@ -430,18 +431,6 @@ pub fn run(cpu: &mut CPU) {
         .build()
         .expect("Falha ao criar janela");
     let mut canvas = window.into_canvas();
-
-    unsafe {
-        let renderer = canvas.raw();
-        unsafe extern "C" {
-            fn SDL_SetRenderVSync(renderer: *mut std::ffi::c_void, vsync: std::ffi::c_int) -> bool;
-        }
-        if SDL_SetRenderVSync(renderer as *mut std::ffi::c_void, 1) {
-            println!("✅ VSync habilitado");
-        } else {
-            println!("⚠️  VSync não disponível - usando frame limiter");
-        }
-    }
 
     let texture_creator = canvas.texture_creator();
     let mut texture = texture_creator
