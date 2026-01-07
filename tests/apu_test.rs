@@ -856,13 +856,13 @@ fn property_length_enable_extra_clocking() {
 
         // Se já estava habilitado, não deve aplicar extra clocking
         if was_already_enabled {
-            length_counter1.handle_enable_write(true, false); // Habilitar primeiro
+            length_counter1.handle_enable_write(true, false, false); // Habilitar primeiro
         }
 
         let counter_before = length_counter1.current_value();
 
         // Agora ativar quando is_length_clock_next = true
-        length_counter1.handle_enable_write(true, true);
+        length_counter1.handle_enable_write(true, true, false);
 
         if !was_already_enabled && counter_before > 0 {
             // Extra clocking deve ser aplicado: counter - 1
@@ -890,7 +890,7 @@ fn property_length_enable_extra_clocking() {
         length_counter2.load_length(length_timer_value);
         let counter_before = length_counter2.current_value();
 
-        length_counter2.handle_enable_write(true, false);
+        length_counter2.handle_enable_write(true, false, false);
         assert_eq!(
             length_counter2.current_value(),
             counter_before,
@@ -903,7 +903,7 @@ fn property_length_enable_extra_clocking() {
         // Counter já é 0 por padrão
         assert_eq!(length_counter3.current_value(), 0);
 
-        length_counter3.handle_enable_write(true, true);
+        length_counter3.handle_enable_write(true, true, false);
         assert_eq!(
             length_counter3.current_value(),
             0,
@@ -914,10 +914,10 @@ fn property_length_enable_extra_clocking() {
         // === Caso 4: Desabilitar length enable não deve aplicar extra clocking ===
         let mut length_counter4 = LengthCounter::new(max_length);
         length_counter4.load_length(length_timer_value);
-        length_counter4.handle_enable_write(true, false); // Habilitar primeiro
+        length_counter4.handle_enable_write(true, false, false); // Habilitar primeiro
 
         let counter_before = length_counter4.current_value();
-        length_counter4.handle_enable_write(false, true); // Desabilitar
+        length_counter4.handle_enable_write(false, true, false); // Desabilitar
 
         assert_eq!(
             length_counter4.current_value(),
@@ -929,10 +929,10 @@ fn property_length_enable_extra_clocking() {
         // === Caso 5: Re-habilitar quando já estava habilitado não deve aplicar extra clocking ===
         let mut length_counter5 = LengthCounter::new(max_length);
         length_counter5.load_length(length_timer_value);
-        length_counter5.handle_enable_write(true, false); // Habilitar primeiro
+        length_counter5.handle_enable_write(true, false, false); // Habilitar primeiro
 
         let counter_before = length_counter5.current_value();
-        length_counter5.handle_enable_write(true, true); // Re-habilitar
+        length_counter5.handle_enable_write(true, true, false); // Re-habilitar
 
         assert_eq!(
             length_counter5.current_value(),

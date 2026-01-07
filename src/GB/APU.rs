@@ -244,7 +244,12 @@ impl LengthCounter {
         }
     }
 
-    pub fn handle_enable_write(&mut self, new_enable: bool, is_length_clock_next: bool, has_trigger: bool) {
+    pub fn handle_enable_write(
+        &mut self,
+        new_enable: bool,
+        is_length_clock_next: bool,
+        has_trigger: bool,
+    ) {
         // HARDWARE QUIRK: extra length clocking
         if new_enable && !self.enable && is_length_clock_next {
             if self.counter > 0 {
@@ -860,10 +865,7 @@ impl APU {
         // - No CGB: TODAS as escritas são ignoradas EXCETO NR52 e Wave RAM
         // - No DMG: escritas são ignoradas EXCETO NR52, NR11, NR21, NR31, NR41 e Wave RAM
         // NR41 (0xFF20) é especial: pode ser escrito mesmo com APU desligada em DMG
-        if !self.sound_enable
-            && address != 0xFF26
-            && !(0xFF30..=0xFF3F).contains(&address)
-        {
+        if !self.sound_enable && address != 0xFF26 && !(0xFF30..=0xFF3F).contains(&address) {
             // Verificar se é um registrador que pode ser escrito quando APU está off
             let writable_when_off = if self.is_cgb {
                 // CGB: NENHUMA escrita é permitida (exceto NR52 e Wave RAM, já checados acima)
@@ -960,8 +962,11 @@ impl APU {
 
                 // Extra length clocking: habilitando length na primeira metade do frame sequencer
                 // Usa o estado ANTIGO do length_enable (antes da atualização)
-                self.ch1_length
-                    .handle_enable_write(new_length_enable, self.is_length_clock_next(), has_trigger);
+                self.ch1_length.handle_enable_write(
+                    new_length_enable,
+                    self.is_length_clock_next(),
+                    has_trigger,
+                );
                 self.ch1_length_enable = new_length_enable;
             }
 
@@ -1006,8 +1011,11 @@ impl APU {
                     self.trigger_channel2();
                 }
 
-                self.ch2_length
-                    .handle_enable_write(new_length_enable, self.is_length_clock_next(), has_trigger);
+                self.ch2_length.handle_enable_write(
+                    new_length_enable,
+                    self.is_length_clock_next(),
+                    has_trigger,
+                );
                 self.ch2_length_enable = new_length_enable;
             }
 
@@ -1044,8 +1052,11 @@ impl APU {
                     self.trigger_channel3();
                 }
 
-                self.ch3_length
-                    .handle_enable_write(new_length_enable, self.is_length_clock_next(), has_trigger);
+                self.ch3_length.handle_enable_write(
+                    new_length_enable,
+                    self.is_length_clock_next(),
+                    has_trigger,
+                );
                 self.ch3_length_enable = new_length_enable;
             }
 
@@ -1084,8 +1095,11 @@ impl APU {
                 // Extra length clocking
                 let new_length_enable = (value & 0x40) != 0;
                 let has_trigger = (value & 0x80) != 0;
-                self.ch4_length
-                    .handle_enable_write(new_length_enable, self.is_length_clock_next(), has_trigger);
+                self.ch4_length.handle_enable_write(
+                    new_length_enable,
+                    self.is_length_clock_next(),
+                    has_trigger,
+                );
                 self.ch4_length_enable = new_length_enable;
 
                 if has_trigger {
