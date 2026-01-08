@@ -46,6 +46,11 @@ impl RAM {
         }
     }
 
+    /// Configura o modelo do Game Boy baseado na ROM
+    pub fn set_cgb_mode(&mut self, is_cgb: bool) {
+        self.apu.set_cgb_mode(is_cgb);
+    }
+
     pub fn read(&self, address: u16) -> u8 {
         if address == 0xFF00 {
             return self.joypad.read();

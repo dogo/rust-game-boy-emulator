@@ -473,8 +473,8 @@ impl APU {
             ch4_right: true,
             sound_enable: true, // NR52
 
-            // Modelo do Game Boy (default: CGB para testes de som CGB)
-            is_cgb: true,
+            // Modelo do Game Boy (default: DMG, será configurado baseado na ROM)
+            is_cgb: false,
 
             // Estado interno com estruturas de precisão
             frame_sequencer: FrameSequencer::new(),
@@ -499,6 +499,11 @@ impl APU {
             ch3_frequency_timer: 0,
             ch4_frequency_timer: 0,
         }
+    }
+
+    /// Configura o modelo do Game Boy (DMG ou CGB) baseado na ROM
+    pub fn set_cgb_mode(&mut self, is_cgb: bool) {
+        self.is_cgb = is_cgb;
     }
 
     /// Evento do DIV - chamado em falling edge do bit 12 (ou 13 em double speed)

@@ -141,6 +141,11 @@ impl MemoryBus {
         }
     }
 
+    /// Configura o modelo do Game Boy baseado na ROM
+    pub fn set_cgb_mode(&mut self, is_cgb: bool) {
+        self.apu.set_cgb_mode(is_cgb);
+    }
+
     pub fn read(&self, address: u16) -> u8 {
         // 🔒 Durante DMA de OAM, a CPU só pode acessar HRAM/IE
         if self.oam_dma_active && !self.dma_cpu_can_access(address) {

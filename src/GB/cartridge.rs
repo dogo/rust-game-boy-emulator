@@ -47,6 +47,13 @@ pub fn get_title(data: &[u8]) -> String {
     title
 }
 
+/// Detecta se a ROM é Game Boy Color baseada na flag CGB (0x143)
+pub fn is_cgb_rom(data: &[u8]) -> bool {
+    let cgb_flag = data.get(0x143).copied().unwrap_or(0x00);
+    // 0x80 = CGB compatible, 0xC0 = CGB only
+    (cgb_flag & 0x80) != 0
+}
+
 /// Retorna o nome do tipo de cartucho
 pub fn get_cart_type_name(cart_type: u8) -> &'static str {
     match cart_type {

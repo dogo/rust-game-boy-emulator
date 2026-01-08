@@ -16,8 +16,9 @@ pub struct CPU {
 
 impl CPU {
     pub fn new(rom: Vec<u8>) -> Self {
+        let is_cgb = crate::GB::cartridge::is_cgb_rom(&rom);
         let mbc = crate::GB::mbc::create_mbc(rom);
-        CPU {
+        let mut cpu = CPU {
             registers: registers::Registers::new(),
             bus: crate::GB::bus::MemoryBus::new(mbc),
             ime: false,
@@ -27,7 +28,11 @@ impl CPU {
             stopped: false,
             opcode: 0,
             cycles: 0,
-        }
+        };
+        
+        // Configurar APU baseado no tipo de ROM
+        cpu.bus.apu.set_cgb_mode(is_cgb);
+        cpu
     }
 
     // Stack operations
