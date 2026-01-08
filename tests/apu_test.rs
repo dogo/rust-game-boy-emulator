@@ -1368,16 +1368,12 @@ fn property_apu_power_off_register_clearing() {
 
         // === VERIFICAR QUE REGISTRADORES FORAM LIMPOS ===
 
-        // Registradores que devem retornar 0xFF quando APU desligada (exceto casos especiais)
-        let registers_to_check = [
-            0xFF10, 0xFF12, 0xFF13, 0xFF14, // Canal 1 (exceto NR11)
-            0xFF17, 0xFF18, 0xFF19, // Canal 2 (exceto NR16)
-            0xFF1A, 0xFF1C, 0xFF1D, 0xFF1E, // Canal 3 (exceto NR1B)
-            0xFF21, 0xFF22, 0xFF23, // Canal 4 (exceto NR20)
-            0xFF24, 0xFF25, // Controles gerais
+        // Registradores que retornam 0xFF quando APU desligada
+        let registers_0xff = [
+            0xFF13, 0xFF15, 0xFF18, 0xFF1B, 0xFF1D, 0xFF1F, 0xFF20, // Write-only e não existentes
         ];
 
-        for &reg_addr in &registers_to_check {
+        for &reg_addr in &registers_0xff {
             let reg_value = apu.read_register(reg_addr);
             assert_eq!(
                 reg_value, 0xFF,
@@ -1385,6 +1381,70 @@ fn property_apu_power_off_register_clearing() {
                 iteration, reg_addr, reg_value
             );
         }
+
+        // Registradores que retornam 0x00 quando APU desligada (envelope e controles)
+        let registers_0x00 = [
+            0xFF12, 0xFF17, 0xFF21, 0xFF22, 0xFF24, 0xFF25,
+        ];
+
+        for &reg_addr in &registers_0x00 {
+            let reg_value = apu.read_register(reg_addr);
+            assert_eq!(
+                reg_value, 0x00,
+                "Iteração {}: Registrador 0x{:04X} deve retornar 0x00 com APU desligada, mas foi 0x{:02X}",
+                iteration, reg_addr, reg_value
+            );
+        }
+
+        // Registradores com valores específicos de máscara
+        let nr10_after = apu.read_register(0xFF10);
+        assert_eq!(
+            nr10_after, 0x80,
+            "Iteração {}: NR10 deve retornar 0x80 com APU desligada (bit 7 sempre 1), mas foi 0x{:02X}",
+            iteration, nr10_after
+        );
+
+        let nr14_after = apu.read_register(0xFF14);
+        assert_eq!(
+            nr14_after, 0xBF,
+            "Iteração {}: NR14 deve retornar 0xBF com APU desligada (bits 7,5-3,2-0 sempre 1), mas foi 0x{:02X}",
+            iteration, nr14_after
+        );
+
+        let nr19_after = apu.read_register(0xFF19);
+        assert_eq!(
+            nr19_after, 0xBF,
+            "Iteração {}: NR19 deve retornar 0xBF com APU desligada (bits 7,5-3,2-0 sempre 1), mas foi 0x{:02X}",
+            iteration, nr19_after
+        );
+
+        let nr1a_after = apu.read_register(0xFF1A);
+        assert_eq!(
+            nr1a_after, 0x7F,
+            "Iteração {}: NR1A deve retornar 0x7F com APU desligada (bits 6-0 sempre 1), mas foi 0x{:02X}",
+            iteration, nr1a_after
+        );
+
+        let nr1c_after = apu.read_register(0xFF1C);
+        assert_eq!(
+            nr1c_after, 0x9F,
+            "Iteração {}: NR1C deve retornar 0x9F com APU desligada (bits 7,4-0 sempre 1), mas foi 0x{:02X}",
+            iteration, nr1c_after
+        );
+
+        let nr1e_after = apu.read_register(0xFF1E);
+        assert_eq!(
+            nr1e_after, 0xBF,
+            "Iteração {}: NR1E deve retornar 0xBF com APU desligada (bits 7,5-3,2-0 sempre 1), mas foi 0x{:02X}",
+            iteration, nr1e_after
+        );
+
+        let nr23_after = apu.read_register(0xFF23);
+        assert_eq!(
+            nr23_after, 0xBF,
+            "Iteração {}: NR23 deve retornar 0xBF com APU desligada (bits 7,5-3,2-0 sempre 1), mas foi 0x{:02X}",
+            iteration, nr23_after
+        );
 
         // Registradores de length timer devem ter comportamento especial
         let nr11_after = apu.read_register(0xFF11);
