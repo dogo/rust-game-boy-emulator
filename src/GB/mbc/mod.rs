@@ -6,7 +6,7 @@ pub mod none;
 
 pub fn create_mbc(rom: Vec<u8>) -> Box<dyn MBC + Send> {
     let cart_type = rom.get(0x0147).copied().unwrap_or(0x00);
-    let ram_size = get_ram_size(&rom);
+    let ram_size = get_ram_size_for_type(&rom, cart_type);
     match cart_type {
         0x00 => Box::new(none::NoMBC::new(rom)),
         0x01..=0x03 => Box::new(mbc1::MBC1::new(rom, ram_size)),
@@ -17,8 +17,12 @@ pub fn create_mbc(rom: Vec<u8>) -> Box<dyn MBC + Send> {
     }
 }
 
-fn get_ram_size(rom: &[u8]) -> usize {
-    match rom.get(0x0149).copied().unwrap_or(0x00) {
+fn cart_type_has_ram(cart_type: u8) -> bool {
+    matches!(cart_type, 0x02 | 0x03 | 0x08 | 0x09 | 0x0C | 0x0D | 0x10 | 0x12 | 0x13 | 0x1A | 0x1B | 0x1D | 0x1E | 0x22 | 0xFF)
+}
+
+fn get_ram_size_for_type(rom: &[u8], cart_type: u8) -> usize {
+    let size = match rom.get(0x0149).copied().unwrap_or(0x00) {
         0x00 => 0,
         0x01 => 2 * 1024,
         0x02 => 8 * 1024,
@@ -26,6 +30,13 @@ fn get_ram_size(rom: &[u8]) -> usize {
         0x04 => 128 * 1024,
         0x05 => 64 * 1024,
         _ => 0,
+    };
+    // Alguns ROMs de teste declaram ram_size=0 mas cart_type indica RAM presente
+    // Aloca 8KB por padrão nesses casos
+    if size == 0 && cart_type_has_ram(cart_type) {
+        8 * 1024
+    } else {
+        size
     }
 }
 pub trait MBC: Send {
