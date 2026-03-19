@@ -47,7 +47,6 @@ pub fn run(cpu: &mut CPU) -> TestResult {
     const MAX_INSTRUCTIONS: u64 = 300_000_000; // 300M instruções max
     const STUCK_THRESHOLD: u32 = 200000; // 200k instruções no mesmo PC = travado
     const MEMORY_CHECK_INTERVAL: u64 = 1000; // Verifica memória a cada 1k instruções
-    const SERIAL_CHECK_INTERVAL: u64 = 50; // Verifica serial a cada 50 instruções
     const FINAL_CHECK_INTERVAL: u64 = 50000; // Verificação final mais frequente
 
     loop {
@@ -83,14 +82,12 @@ pub fn run(cpu: &mut CPU) -> TestResult {
                         }
                     }
 
-                    // Verifica serial uma última vez
-                    let if_reg = cpu.bus.read(0xFF0F);
-                    if (if_reg & 0x08) != 0 {
-                        let byte = cpu.bus.read(0xFF01);
+                    // Drena buffer serial restante
+                    let bytes: Vec<u8> = cpu.bus.serial_output_buffer.drain(..).collect();
+                    for byte in bytes {
                         if (0x20..=0x7E).contains(&byte) || byte == b'\n' || byte == b'\r' {
                             serial_output.push(byte as char);
                         }
-                        cpu.bus.clear_if_bits(0x08);
                     }
                 }
 
@@ -132,26 +129,24 @@ pub fn run(cpu: &mut CPU) -> TestResult {
             }
         }
 
-        // Verifica saída serial com alta frequência
-        if instruction_count % SERIAL_CHECK_INTERVAL == 0 {
-            let if_reg = cpu.bus.read(0xFF0F);
-            if (if_reg & 0x08) != 0 {
-                let byte = cpu.bus.read(0xFF01);
+        // Drena buffer serial (bytes capturados no momento da transferência)
+        if !cpu.bus.serial_output_buffer.is_empty() {
+            let bytes: Vec<u8> = cpu.bus.serial_output_buffer.drain(..).collect();
+            for byte in bytes {
                 if (0x20..=0x7E).contains(&byte) || byte == b'\n' || byte == b'\r' {
                     serial_output.push(byte as char);
                 }
-                cpu.bus.clear_if_bits(0x08);
+            }
 
-                // Verifica padrões de sucesso/falha imediatamente
-                let lower = serial_output.to_lowercase();
-                if lower.contains("passed") || lower.contains("pass") {
-                    println!("{}", serial_output);
-                    return TestResult::Passed;
-                }
-                if lower.contains("failed") || lower.contains("fail") {
-                    println!("{}", serial_output);
-                    return TestResult::Failed(1);
-                }
+            // Verifica padrões de sucesso/falha imediatamente
+            let lower = serial_output.to_lowercase();
+            if lower.contains("passed") || lower.contains("pass") {
+                println!("{}", serial_output);
+                return TestResult::Passed;
+            }
+            if lower.contains("failed") || lower.contains("fail") {
+                println!("{}", serial_output);
+                return TestResult::Failed(1);
             }
         }
 

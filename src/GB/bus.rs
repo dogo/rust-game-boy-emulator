@@ -35,6 +35,7 @@ pub struct MemoryBus {
     serial_transfer_cycles: u32,  // Ciclos acumulados da transferência
     serial_clock_source: bool,    // true = internal clock (master), false = external clock (slave)
     serial_last_transmitted: u8,  // Último byte transmitido (para debug/testes)
+    pub serial_output_buffer: Vec<u8>, // Bytes capturados ao completar transferências seriais
 
     // Contagem de ciclos consumidos pela CPU nesta instrução
     cpu_cycle_log: u32,
@@ -137,6 +138,7 @@ impl MemoryBus {
             serial_transfer_cycles: 0,
             serial_clock_source: false,
             serial_last_transmitted: 0x00,
+            serial_output_buffer: Vec::new(),
             cpu_cycle_log: 0,
         }
     }
@@ -565,9 +567,11 @@ impl MemoryBus {
         self.serial_transfer_active = false;
         self.serial_transfer_cycles = 0;
 
-        // Para testes: preserva o byte transmitido em SB para que possa ser lido
-        // Em modo loopback real, seria 0xFF, mas para testes queremos o byte original
-        // self.serial_sb permanece com o valor transmitido
+        // Captura o byte transmitido no buffer antes que o ROM possa limpar IF
+        self.serial_output_buffer.push(self.serial_last_transmitted);
+
+        // SB recebe 0xFF (nenhum byte recebido, sem cabo serial)
+        self.serial_sb = 0xFF;
 
         // Dispara interrupção serial (bit 3 do IF)
         self.if_ |= 0x08;
