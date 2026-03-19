@@ -38,11 +38,7 @@ jobs:
           sudo make install
 
       - name: Set up Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          profile: minimal
-          override: true
+        uses: dtolnay/rust-toolchain@1.93.0
 
       - name: Run tests
         run: cargo test --all --verbose
