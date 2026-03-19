@@ -843,7 +843,6 @@ fn property_length_enable_extra_clocking() {
 
         // Gerar diferentes valores de length timer
         let length_timer_value = (iteration % 64) as u8;
-        let is_length_clock_next = (iteration % 2) == 0;
         let was_already_enabled = (iteration % 3) == 0;
 
         // === Caso 1: Ativar length enable quando is_length_clock_next = true ===

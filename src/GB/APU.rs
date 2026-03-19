@@ -953,7 +953,7 @@ impl APU {
 
                 // Se trigger reseta counter 0 -> máximo, precisamos setar length_enable = false temporariamente
                 // para permitir que o extra length clocking aconteça depois (quirk do hardware)
-                let trigger_reset_to_max = if has_trigger {
+                if has_trigger {
                     let was_zero = self.ch1_length.current_value() == 0;
                     self.trigger_channel1();
                     if was_zero {
@@ -961,9 +961,6 @@ impl APU {
                         self.ch1_length_enable = false;
                         self.ch1_length.enable = false;
                     }
-                    was_zero
-                } else {
-                    false
                 };
 
                 // Extra length clocking: habilitando length na primeira metade do frame sequencer
