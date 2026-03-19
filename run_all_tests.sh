@@ -3,6 +3,7 @@
 # Script para executar TODOS os testes disponíveis
 
 # Encerra tudo ao apertar Ctrl+C
+# shellcheck disable=SC2329
 cleanup() {
     trap - INT TERM
     echo ""
@@ -12,7 +13,6 @@ cleanup() {
 }
 
 trap cleanup INT TERM
-
 
 echo "=========================================="
 echo "Executando TODOS os Testes"
