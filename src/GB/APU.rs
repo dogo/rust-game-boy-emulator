@@ -871,18 +871,19 @@ impl APU {
         // - No DMG: escritas são ignoradas EXCETO NR52, NR11, NR21, NR31, NR41 e Wave RAM
         // NR41 (0xFF20) é especial: pode ser escrito mesmo com APU desligada em DMG
         if !self.sound_enable && address != 0xFF26 && !(0xFF30..=0xFF3F).contains(&address) {
-            // Verificar se é um registrador que pode ser escrito quando APU está off
-            let writable_when_off = if self.is_cgb {
-                // CGB: NENHUMA escrita é permitida (exceto NR52 e Wave RAM, já checados acima)
-                false
-            } else {
-                // DMG: NR11, NR21, NR31, NR41 podem ser escritos
-                address == 0xFF11 || address == 0xFF16 || address == 0xFF1B || address == 0xFF20
-            };
-
-            if !writable_when_off {
+            if self.is_cgb {
+                // CGB: nenhuma escrita permitida exceto NR52 e Wave RAM
                 return;
             }
+            // DMG: apenas NR11, NR21, NR31, NR41 permitidos, e somente os bits de length timer
+            match address {
+                0xFF11 => { self.ch1_length_timer = value & 0x3F; self.ch1_length.load_length(value & 0x3F); }
+                0xFF16 => { self.ch2_length_timer = value & 0x3F; self.ch2_length.load_length(value & 0x3F); }
+                0xFF1B => { self.ch3_length_timer = value; self.ch3_length.load_length(value); }
+                0xFF20 => { self.ch4_length_timer = value & 0x3F; self.ch4_length.load_length(value & 0x3F); }
+                _ => {}
+            }
+            return;
         }
 
         match address {
@@ -1308,6 +1309,8 @@ impl APU {
         if self.is_cgb {
             self.ch1_length_timer = 0;
             self.ch1_length = LengthCounter::new(64);
+        } else {
+            self.ch1_length.enable = false;
         }
         self.ch1_envelope_initial = 0;
         self.ch1_envelope_direction = false;
@@ -1321,6 +1324,8 @@ impl APU {
         if self.is_cgb {
             self.ch2_length_timer = 0;
             self.ch2_length = LengthCounter::new(64);
+        } else {
+            self.ch2_length.enable = false;
         }
         self.ch2_envelope_initial = 0;
         self.ch2_envelope_direction = false;
@@ -1334,6 +1339,8 @@ impl APU {
         if self.is_cgb {
             self.ch3_length_timer = 0;
             self.ch3_length = LengthCounter::new(256);
+        } else {
+            self.ch3_length.enable = false;
         }
         self.ch3_output_level = 0;
         self.ch3_frequency = 0;
@@ -1343,6 +1350,8 @@ impl APU {
         if self.is_cgb {
             self.ch4_length_timer = 0;
             self.ch4_length = LengthCounter::new(64);
+        } else {
+            self.ch4_length.enable = false;
         }
         self.ch4_envelope_initial = 0;
         self.ch4_envelope_direction = false;
