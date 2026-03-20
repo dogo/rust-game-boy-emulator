@@ -303,7 +303,7 @@ impl MemoryBus {
             0xFF04 => {
                 let (new_tima, new_if, events) = self
                     .timer
-                    .reset_div(self.tima, self.tma, self.tac, self.if_, false);
+                    .reset_div(self.tima, self.tac, self.if_, false);
                 self.tima = new_tima;
                 self.if_ = new_if;
                 // Processa eventos do APU
@@ -338,7 +338,7 @@ impl MemoryBus {
             0xFF07 => {
                 let (new_tima, new_if) = self
                     .timer
-                    .write_tac(self.tima, self.tma, self.tac, value, self.if_);
+                    .write_tac(self.tima, self.tac, value, self.if_);
                 self.tima = new_tima;
                 self.if_ = new_if;
                 self.tac = value;
@@ -411,7 +411,7 @@ impl MemoryBus {
         // Timer otimizado - processa cycles em bulk
         let (new_tima, new_if, events) = self
             .timer
-            .tick(cycles, self.tima, self.tma, self.tac, self.if_, false);
+            .tick(cycles, self.tima, self.tac, self.if_, false);
         self.tima = new_tima;
         self.if_ = new_if;
 

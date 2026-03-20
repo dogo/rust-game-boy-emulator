@@ -45,7 +45,6 @@ impl Timer {
         &mut self,
         cycles: u32,
         mut tima: u8,
-        tma: u8,
         tac: u8,
         if_reg: u8,
         double_speed: bool,
@@ -152,12 +151,11 @@ impl Timer {
     pub fn tick_m_cycle(
         &mut self,
         tima: u8,
-        tma: u8,
         tac: u8,
         if_reg: u8,
         double_speed: bool,
     ) -> (u8, u8, TimerEvents) {
-        self.tick(4, tima, tma, tac, if_reg, double_speed)
+        self.tick(4, tima, tac, if_reg, double_speed)
     }
 
     pub fn read_div(&self) -> u8 {
@@ -179,7 +177,6 @@ impl Timer {
     pub fn reset_div(
         &mut self,
         mut tima: u8,
-        tma: u8,
         tac: u8,
         if_reg: u8,
         double_speed: bool,
@@ -223,7 +220,6 @@ impl Timer {
     pub fn write_tac(
         &mut self,
         mut tima: u8,
-        tma: u8,
         old_tac: u8,
         new_tac: u8,
         if_reg: u8,
