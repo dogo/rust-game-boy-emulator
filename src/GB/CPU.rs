@@ -111,7 +111,8 @@ impl CPU {
         self.bus.write(0xFF4A, 0x00); // WY
         self.bus.write(0xFF4B, 0x00); // WX
 
-        self.bus.set_div(0xAB);
+        // Boot ROM do DMG termina com div_counter = 0xABCC (valor exato do hardware)
+        self.bus.set_div_counter(0xABCC);
     }
 
     pub fn fetch_next(&mut self) -> u8 {
@@ -275,31 +276,28 @@ impl CPU {
 
         let old_pc = self.registers.get_pc();
 
-        self.bus
-            .cpu_write(self.registers.get_sp().wrapping_sub(1), (old_pc >> 8) as u8);
-        self.registers
-            .set_sp(self.registers.get_sp().wrapping_sub(1));
+        // ISR leva exatamente 20 T-cycles (5 M-cycles):
+        // - 2 M-cycles internos (8 T)
+        // - Push PC alto (4 T via cpu_write)
+        // - Push PC baixo (4 T via cpu_write)
+        // - Salto para o vetor (4 T)
+        self.bus.tick(8); // 2 M-cycles internos
 
-        let sp_after_high = self.registers.get_sp();
-        if sp_after_high == 0xFF0F + 1 {
-            self.registers.set_sp(sp_after_high.wrapping_sub(1));
-            self.bus.cpu_write(0xFF0F, (old_pc & 0xFF) as u8);
-        } else {
-            self.bus.cpu_write(
-                self.registers.get_sp().wrapping_sub(1),
-                (old_pc & 0xFF) as u8,
-            );
-            self.registers
-                .set_sp(self.registers.get_sp().wrapping_sub(1));
-        }
+        let mut sp = self.registers.get_sp().wrapping_sub(1);
+        self.registers.set_sp(sp);
+        self.bus.cpu_write(sp, (old_pc >> 8) as u8);
 
+        sp = self.registers.get_sp().wrapping_sub(1);
+        self.registers.set_sp(sp);
+        self.bus.cpu_write(sp, (old_pc & 0xFF) as u8);
+
+        self.bus.tick(4); // 1 M-cycle para carregar o vetor no PC
         self.registers.set_pc(vector);
 
         self.bus.clear_if_bits(mask);
         self.ime = false;
 
         self.cycles += 20;
-        self.bus.tick(20);
 
         true
     }

@@ -309,10 +309,9 @@ pub fn execute(program: &MicroProgram, regs: &mut Registers, bus: &mut MemoryBus
             }
             MicroAction::CopyReg { dest, src } => {
                 // Transfere valor entre registradores (sem acesso à memória)
+                // LD r,r é 4T total (apenas o fetch); nenhum ciclo adicional
                 let value = src.read(regs);
                 dest.write(regs, value);
-                // Transferência entre registradores não acessa memória, apenas espera ciclos
-                bus.cpu_idle(4);
             }
             MicroAction::FetchImm8 { dest } => {
                 // Busca byte imediato do PC e armazena no registrador
@@ -957,7 +956,7 @@ pub fn execute(program: &MicroProgram, regs: &mut Registers, bus: &mut MemoryBus
                 bus.cpu_idle(4); // 8 ciclos totais
             }
             MicroAction::AddSpToSignedImm8 => {
-                // ADD SP,r8: Adiciona byte assinado a SP
+                // ADD SP,r8: Adiciona byte assinado a SP (16 ciclos: 4 fetch + 4 ler imm + 4 calcular + 4 idle)
                 let pc = regs.get_pc();
                 let offset = bus.cpu_read(pc) as i8;
                 regs.set_pc(pc.wrapping_add(1));
@@ -969,7 +968,8 @@ pub fn execute(program: &MicroProgram, regs: &mut Registers, bus: &mut MemoryBus
                 // Half-carry e carry são calculados nos 4 bits baixos
                 regs.set_flag_h(((sp & 0x0F) as u16 + (offset as u8 & 0x0F) as u16) > 0x0F);
                 regs.set_flag_c(((sp & 0xFF) as u16 + (offset as u8 as u16)) > 0xFF);
-                bus.cpu_idle(4); // 16 ciclos totais: 4 fetch + 4 ler imm + 4 calcular + 4 idle
+                bus.cpu_idle(4); // 4 calcular
+                bus.cpu_idle(4); // 4 idle (total: 16T)
             }
             MicroAction::PushReg16 { idx } => {
                 // PUSH rr: Empilha registrador 16-bit (16 ciclos)

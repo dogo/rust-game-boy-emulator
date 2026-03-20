@@ -75,6 +75,11 @@ impl MemoryBus {
         self.timer.set_div(value);
     }
 
+    /// Inicializa o div_counter completo (16-bit) para o estado pós-boot exato
+    pub fn set_div_counter(&mut self, value: u16) {
+        self.timer.set_div_counter(value);
+    }
+
     #[inline]
     pub fn get_if(&self) -> u8 {
         self.if_
@@ -317,8 +322,6 @@ impl MemoryBus {
                 //   mas será sobrescrita no final do ciclo se TMA mudar.
                 //   Para o teste funcionar, precisamos atualizar TIMA imediatamente.
                 self.timer.notify_tima_write(self.tac);
-                // Só atualiza TIMA se não estiver no ciclo B (quando será recarregado de qualquer forma)
-                // Mas o teste espera que a escrita funcione imediatamente, então sempre atualizamos
                 self.tima = value;
             }
             0xFF06 => {
