@@ -39,6 +39,11 @@ pub struct MemoryBus {
 
     // Contagem de ciclos consumidos pela CPU nesta instrução
     cpu_cycle_log: u32,
+
+    // ===== CGB =====
+    pub cgb_mode: bool,    // true se ROM é CGB
+    pub cgb_speed: bool,   // false = velocidade normal, true = velocidade dupla
+    pub key1: u8,          // 0xFF4D: bit 0 = solicitação de troca de velocidade
 }
 
 impl MemoryBus {
@@ -145,12 +150,16 @@ impl MemoryBus {
             serial_last_transmitted: 0x00,
             serial_output_buffer: Vec::new(),
             cpu_cycle_log: 0,
+            cgb_mode: false,
+            cgb_speed: false,
+            key1: 0,
         }
     }
 
     /// Configura o modelo do Game Boy baseado na ROM
     pub fn set_cgb_mode(&mut self, is_cgb: bool) {
         self.apu.set_cgb_mode(is_cgb);
+        self.cgb_mode = is_cgb;
     }
 
     pub fn read(&self, address: u16) -> u8 {
@@ -210,6 +219,16 @@ impl MemoryBus {
             0xFF40..=0xFF45 => self.ppu.read_register(address),
             0xFF46 => self.oam_dma_value,
             0xFF47..=0xFF4B => self.ppu.read_register(address),
+            0xFF4D => {
+                // KEY1: registrador de troca de velocidade (apenas CGB)
+                // Bit 7 = velocidade atual (0=normal, 1=dupla), Bit 0 = solicitação pendente
+                // Bits 1-6 sempre leem como 1
+                if self.cgb_mode {
+                    (self.cgb_speed as u8) << 7 | 0x7E | (self.key1 & 0x01)
+                } else {
+                    0xFF
+                }
+            }
             0xFF80..=0xFFFE => self.hram[(address - 0xFF80) as usize],
             0xFFFF => self.ie,
             _ => 0xFF,
@@ -303,7 +322,7 @@ impl MemoryBus {
             0xFF04 => {
                 let (new_tima, new_if, events) = self
                     .timer
-                    .reset_div(self.tima, self.tac, self.if_, false);
+                    .reset_div(self.tima, self.tac, self.if_, self.cgb_speed);
                 self.tima = new_tima;
                 self.if_ = new_if;
                 // Processa eventos do APU
@@ -349,6 +368,12 @@ impl MemoryBus {
             }
             0xFF10..=0xFF3F => self.apu.write_register(address, value),
             0xFF40..=0xFF4B => self.ppu.write_register(address, value, &mut self.if_),
+            0xFF4D => {
+                // KEY1: apenas bit 0 é gravável (solicitação de troca de velocidade)
+                if self.cgb_mode {
+                    self.key1 = value & 0x01;
+                }
+            }
             0xFF80..=0xFFFE => self.hram[(address - 0xFF80) as usize] = value,
             0xFFFF => {
                 self.ie = value;
@@ -411,7 +436,7 @@ impl MemoryBus {
         // Timer otimizado - processa cycles em bulk
         let (new_tima, new_if, events) = self
             .timer
-            .tick(cycles, self.tima, self.tac, self.if_, false);
+            .tick(cycles, self.tima, self.tac, self.if_, self.cgb_speed);
         self.tima = new_tima;
         self.if_ = new_if;
 

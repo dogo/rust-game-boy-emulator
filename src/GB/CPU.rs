@@ -30,8 +30,8 @@ impl CPU {
             cycles: 0,
         };
         
-        // Configurar APU baseado no tipo de ROM
-        cpu.bus.apu.set_cgb_mode(is_cgb);
+        // Configurar modo CGB baseado no tipo de ROM
+        cpu.bus.set_cgb_mode(is_cgb);
         cpu
     }
 
@@ -58,8 +58,11 @@ impl CPU {
     }
 
     pub fn init_post_boot(&mut self) {
-        // Estados típicos pós BIOS (DMG)
-        self.registers.set_af(0x01B0);
+        // Estados típicos pós BIOS
+        // CGB: A=$11 (identificador CGB usado por ROMs para detectar hardware)
+        // DMG: A=$01
+        let a_value: u16 = if self.bus.cgb_mode { 0x11 } else { 0x01 };
+        self.registers.set_af(a_value << 8 | 0xB0);
         self.registers.set_bc(0x0013);
         self.registers.set_de(0x00D8);
         self.registers.set_hl(0x014D);
@@ -238,7 +241,13 @@ impl CPU {
                 }
             }
             0x10 => {
-                self.stopped = true;
+                // Em modo CGB com KEY1 bit 0 setado, STOP troca a velocidade da CPU
+                if self.bus.cgb_mode && (self.bus.key1 & 0x01) != 0 {
+                    self.bus.cgb_speed = !self.bus.cgb_speed;
+                    self.bus.key1 = 0; // limpa solicitação de troca
+                } else {
+                    self.stopped = true;
+                }
             }
             0xD9 => {
                 self.ime = true;
