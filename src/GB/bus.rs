@@ -205,7 +205,7 @@ impl MemoryBus {
             0xFF05 => self.tima,
             0xFF06 => self.tma,
             0xFF07 => (self.tac & 0x07) | 0xF8, // bits 0-2 são TAC real, bits 3-7 leem como 1
-            0xFF0F => self.if_,
+            0xFF0F => self.if_ | 0xE0, // bits 5-7 sempre leem como 1 no DMG
             0xFF10..=0xFF3F => self.apu.read_register(address),
             0xFF40..=0xFF45 => self.ppu.read_register(address),
             0xFF46 => self.oam_dma_value,

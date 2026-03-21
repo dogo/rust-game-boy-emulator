@@ -150,8 +150,8 @@ impl CPU {
             let if_reg = self.bus.read(0xFF0F);
             let ie_reg = self.bus.read(0xFFFF);
 
-            if (if_reg & ie_reg) != 0 {
-                // Acorda da HALT normal
+            if (if_reg & ie_reg & 0x1F) != 0 {
+                // Acorda da HALT normal (somente bits 0-4 são interrupções reais)
                 self.halted = false;
             } else {
                 // CPU ainda halted, simula 4 ciclos de espera
@@ -226,7 +226,8 @@ impl CPU {
                 let if_reg = self.bus.read(0xFF0F);
                 let ie_reg = self.bus.read(0xFFFF);
 
-                let pending = if_reg & ie_reg;
+                // Somente bits 0-4 são interrupções reais; bits 5-7 são ignorados
+                let pending = if_reg & ie_reg & 0x1F;
 
                 if !self.ime && pending != 0 {
                     // HALT bug: PC já foi incrementado pelo fetch, então a próxima
