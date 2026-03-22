@@ -49,6 +49,9 @@ pub struct PPU {
     // Flag para indicar quando um frame foi completado (VBlank)
     pub frame_ready: bool,
 
+    /// Modo headless: desabilita renderização gráfica para ganho de performance
+    pub headless: bool,
+
     // Ciclos acumulados na linha atual (456 ciclos por linha)
     pub mode: u8,        // 0=HBlank, 1=VBlank, 2=OAM, 3=Transfer
     pub mode_clock: u32, // Acumula ciclos para controle de modo
@@ -119,6 +122,7 @@ impl PPU {
             wx: 0,
             oam,
             frame_ready: false,
+            headless: false,
             mode: 2, // Começa em OAM Search
             mode_clock: 0,
             wy_trigger: false,
@@ -633,10 +637,12 @@ impl PPU {
 
         let stat_irq = match new_mode {
             0 => {
-                // HBlank: renderiza scanline
-                self.render_bg_scanline();
-                self.render_window_scanline();
-                self.render_sprites_scanline(self.ly);
+                // HBlank: renderiza scanline (apenas em modo não-headless)
+                if !self.headless {
+                    self.render_bg_scanline();
+                    self.render_window_scanline();
+                    self.render_sprites_scanline(self.ly);
+                }
                 (self.stat & 0x08) != 0
             }
             1 => {

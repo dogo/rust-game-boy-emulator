@@ -38,6 +38,9 @@ fn check_memory_result(cpu: &CPU) -> Option<(u8, String)> {
 
 /// Executa ROM de teste em modo headless
 pub fn run(cpu: &mut CPU) -> TestResult {
+    // Desabilita renderização gráfica para ganho de performance em testes
+    cpu.bus.ppu.headless = true;
+
     let mut instruction_count = 0u64;
     let mut last_pc = 0u16;
     let mut stuck_count = 0u32;
