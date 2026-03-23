@@ -46,10 +46,9 @@ pub fn run(cpu: &mut CPU) -> TestResult {
     let mut stuck_count = 0u32;
     let mut serial_output = String::new();
 
-    // Limites otimizados para captura melhor
-    const MAX_INSTRUCTIONS: u64 = 300_000_000; // 300M instruções max
+    const MAX_INSTRUCTIONS: u64 = 300_000_000;
     const STUCK_THRESHOLD: u32 = 200000; // 200k instruções no mesmo PC = travado
-    const MEMORY_CHECK_INTERVAL: u64 = 1000; // Verifica memória a cada 1k instruções
+    const MEMORY_CHECK_INTERVAL: u64 = 1_000; // Verifica memória a cada 1k instruções
     const FINAL_CHECK_INTERVAL: u64 = 50000; // Verificação final mais frequente
 
     loop {

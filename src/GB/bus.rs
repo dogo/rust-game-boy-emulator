@@ -472,12 +472,11 @@ impl MemoryBus {
 
     #[inline]
     pub fn cpu_read(&mut self, address: u16) -> u8 {
-        // Sincronizar PPU antes de aplicar OAM bug (hardware behavior)
-        // OAM bug é aplicado automaticamente dentro de trigger_oam_bug_read
-        if (0xFE00..=0xFEFF).contains(&address) {
+        // OAM bug de leitura: só dispara para OAM real ($FE00-$FE9F)
+        // Área proibida ($FEA0-$FEFF) não aciona corrupção adicional
+        // (PUSH/POP com SP em $FEA0-$FEFF usa oam_bug_inc_dec, não cpu_read)
+        if (0xFE00..=0xFE9F).contains(&address) {
             if self.lcd_on() && (self.ppu.mode == 2 || self.ppu.mode == 3) {
-                // Sincronizar PPU para garantir que mode_clock está atualizado
-                // (isso é feito implicitamente pelo tick, mas garantimos aqui)
                 self.ppu.trigger_oam_bug_read();
             }
         }
@@ -488,12 +487,11 @@ impl MemoryBus {
 
     #[inline]
     pub fn cpu_write(&mut self, address: u16, value: u8) {
-        // Sincronizar PPU antes de aplicar OAM bug (hardware behavior)
-        // OAM bug é aplicado automaticamente dentro de trigger_oam_bug_write
-        if (0xFE00..=0xFEFF).contains(&address) {
+        // OAM bug de escrita: só dispara para OAM real ($FE00-$FE9F)
+        // Área proibida ($FEA0-$FEFF) não aciona corrupção via cpu_write
+        // PUSH com SP em $FEA0-$FEFF usa oam_bug_inc_dec para o terceiro trigger
+        if (0xFE00..=0xFE9F).contains(&address) {
             if self.lcd_on() && (self.ppu.mode == 2 || self.ppu.mode == 3) {
-                // Sincronizar PPU para garantir que mode_clock está atualizado
-                // (isso é feito implicitamente pelo tick, mas garantimos aqui)
                 self.ppu.trigger_oam_bug_write();
             }
         }

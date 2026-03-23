@@ -747,10 +747,6 @@ impl PPU {
         let c = self.read_oam_word(prev_row, 2);
         let corrupted = b | (a & c);
         self.write_oam_word(row, 0, corrupted);
-        for word_idx in 1..4 {
-            let value = self.read_oam_word(prev_row, word_idx);
-            self.write_oam_word(row, word_idx, value);
-        }
     }
 
     /// Aplica a corrupção complexa de read durante increment/decrement
