@@ -56,7 +56,7 @@ I'm following the excellent guide at [https://aquova.net/emudev/gb/index.html](h
 | 01-registers                             | ✅ Passou       |
 | 02-len ctr                               | ❌ Falhou       |
 | 03-trigger                               | ❌ Falhou       |
-| 04-sweep                                 | ❌ Falhou       |
+| 04-sweep                                 | ✅ Passou       |
 | 05-sweep details                         | ❌ Falhou       |
 | 06-overflow on trigger                   | ✅ Passou       |
 | 07-len sweep period sync                 | ✅ Passou       |
@@ -69,9 +69,9 @@ I'm following the excellent guide at [https://aquova.net/emudev/gb/index.html](h
 | 01-registers                             | ✅ Passou       |
 | 02-len ctr                               | ❌ Falhou       |
 | 03-trigger                               | ❌ Falhou       |
-| 04-sweep                                 | ❌ Falhou       |
+| 04-sweep                                 | ✅ Passou       |
 | 05-sweep details                         | ❌ Falhou       |
-| 06-overflow on trigger                   | ❌ Falhou       |
+| 06-overflow on trigger                   | ✅ Passou       |
 | 07-len sweep period sync                 | ✅ Passou       |
 | 08-len ctr during power                  | ❌ Falhou       |
 | 09-wave read while on                    | ❌ Falhou       |

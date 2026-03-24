@@ -190,22 +190,30 @@ impl SweepUnit {
 
     pub fn step(&mut self) -> bool {
         if !self.enabled {
-            return true;
+            return false;
         }
 
         if self.timer > 0 {
             self.timer -= 1;
-            return true;
         }
 
-        self.timer = if self.period > 0 { self.period } else { 8 };
+        if self.timer == 0 {
+            // Timer expirou: recarrega e sinaliza cálculo apenas se period > 0
+            self.timer = if self.period > 0 { self.period } else { 8 };
+            return self.period > 0;
+        }
 
-        // Retorna true se deve continuar, false se deve fazer sweep calculation
-        self.enabled && self.period > 0
+        false
     }
 
     pub fn is_enabled(&self) -> bool {
         self.enabled
+    }
+
+    /// Atualiza período e shift sem alterar enabled/timer (para escrita no NR10)
+    pub fn update_period_shift(&mut self, period: u8, shift: u8) {
+        self.period = period;
+        self.shift = shift;
     }
 
     pub fn was_negate_used(&self) -> bool {
@@ -904,12 +912,8 @@ impl APU {
                 self.ch1_sweep_direction = new_direction;
                 self.ch1_sweep_shift = new_shift;
 
-                // Configurar sweep unit com precisão de hardware
-                self.ch1_sweep.configure(
-                    self.ch1_sweep_period,
-                    self.ch1_sweep_direction,
-                    self.ch1_sweep_shift,
-                );
+                // Atualiza período e shift sem resetar timer/enabled (hardware: só trigger reconfigura)
+                self.ch1_sweep.update_period_shift(self.ch1_sweep_period, self.ch1_sweep_shift);
             }
             0xFF11 => {
                 // NR11: Wave duty + length timer
@@ -1186,8 +1190,7 @@ impl APU {
         );
         self.ch1_sweep.reset_negate_flag(); // Reset da flag no trigger
 
-        // Se shift > 0, calcula frequência imediatamente (overflow check)
-        // HARDWARE PRECISION: usar shadow register para cálculo
+        // Overflow check no trigger: apenas quando shift > 0
         if self.ch1_sweep_shift > 0 {
             if let Some(new_freq) = self
                 .ch1_sweep
@@ -1473,14 +1476,13 @@ impl APU {
             .ch1_sweep
             .calculate_new_frequency(self.ch1_frequency_shadow)
         {
-            // HARDWARE PRECISION: overflow check ANTES de aplicar
             if new_frequency > 2047 {
-                self.ch1_enabled = false; // Disable channel imediatamente
+                self.ch1_enabled = false;
             } else if self.ch1_sweep_shift > 0 {
                 self.ch1_frequency = new_frequency;
                 self.ch1_frequency_shadow = new_frequency;
 
-                // HARDWARE PRECISION: segundo overflow check
+                // Segundo overflow check
                 if let Some(next_freq) = self.ch1_sweep.calculate_new_frequency(new_frequency) {
                     if next_freq > 2047 {
                         self.ch1_enabled = false;
