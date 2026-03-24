@@ -1160,15 +1160,17 @@ impl APU {
                 }
             }
 
-            // Wave RAM - HARDWARE QUIRK: write bloqueado durante playback
+            // Wave RAM - HARDWARE QUIRK: write redireciona para byte atual durante playback
             0xFF30..=0xFF3F => {
-                if !(self.ch3_enabled && self.ch3_dac_enable) {
-                    // HARDWARE QUIRK: Só permite write quando canal 3 não está tocando
-                    // Durante playback, todas as escritas são ignoradas para proteger a Wave RAM
+                if self.ch3_enabled && self.ch3_dac_enable {
+                    // DMG/CGB: escrita vai para o byte sendo tocado atualmente (não o endereço acessado)
+                    let byte_index = (self.ch3_wave_position / 2) as usize;
+                    self.ch3_wave_ram[byte_index] = value;
+                    self.ch3_current_sample_byte = value;
+                } else {
+                    // Canal parado: escrita normal no endereço acessado
                     self.ch3_wave_ram[(address - 0xFF30) as usize] = value;
                 }
-                // HARDWARE QUIRK: Durante playback, write é completamente ignorado (proteção de escrita)
-                // Isso previne corrupção da Wave RAM durante reprodução de áudio
             }
 
             _ => {} // Registradores não implementados
@@ -1253,6 +1255,13 @@ impl APU {
 
     /// Trigger do canal 3 com hardware precision
     fn trigger_channel3(&mut self, new_length_enable: bool) {
+        // DMG quirk: retrigger enquanto tocando corrompe a wave RAM
+        // O byte sendo tocado no momento é copiado para wave_ram[0]
+        if !self.is_cgb && self.ch3_enabled {
+            let byte_index = (self.ch3_wave_position / 2) as usize;
+            self.ch3_wave_ram[0] = self.ch3_wave_ram[byte_index];
+        }
+
         self.ch3_enabled = self.ch3_dac_enable;
 
         // Hardware precision: trigger com length counter = 0
@@ -1420,13 +1429,14 @@ impl APU {
         }
 
         // Canal 3 - Timer de frequência (2x mais rápido que canais 1/2)
-        // No hardware real: período do canal 3 = (2048 - freq) * 2 / 4.194304MHz.
-        // Como update_channel_timers() roda a 4MHz/4 = ~1MHz,
-        // usar (2048 - freq) / 2 dá a mesma frequência final.
+        // Hardware: período = (2048 - freq) * 2 T-cycles = (2048 - freq) / 2 M-cycles.
+        // IMPORTANTE: avança quando timer CHEGA a zero (não quando JÁ estava zero),
+        // garantindo que o primeiro advance ocorra exatamente após 'período' M-cycles.
         if self.ch3_enabled {
             if self.ch3_frequency_timer > 0 {
                 self.ch3_frequency_timer -= 1;
-            } else {
+            }
+            if self.ch3_frequency_timer == 0 {
                 self.ch3_frequency_timer = (2048 - self.ch3_frequency as u32) / 2;
                 self.ch3_wave_position = (self.ch3_wave_position + 1) % 32;
 
