@@ -295,30 +295,30 @@ mod apu_tests {
         frame_sequencer.reset();
         assert_eq!(frame_sequencer.current_step(), 7);
 
-        // Step 7 -> próximo é 0 (par) -> length clock next = true
+        // Step 7 (ímpar) -> step atual NÃO é de clock -> false
         assert!(
-            frame_sequencer.is_length_clock_next(),
-            "Step 7 deve indicar que próximo é length clock"
+            !frame_sequencer.is_length_clock_next(),
+            "Step 7 (ímpar) não é step de length clock"
         );
 
         // Tick para step 0
         frame_sequencer.tick();
         assert_eq!(frame_sequencer.current_step(), 0);
 
-        // Step 0 -> próximo é 1 (ímpar) -> length clock next = false
+        // Step 0 (par) -> step atual É de clock -> true
         assert!(
-            !frame_sequencer.is_length_clock_next(),
-            "Step 0 deve indicar que próximo não é length clock"
+            frame_sequencer.is_length_clock_next(),
+            "Step 0 (par) é step de length clock"
         );
 
         // Tick para step 1
         frame_sequencer.tick();
         assert_eq!(frame_sequencer.current_step(), 1);
 
-        // Step 1 -> próximo é 2 (par) -> length clock next = true
+        // Step 1 (ímpar) -> step atual NÃO é de clock -> false
         assert!(
-            frame_sequencer.is_length_clock_next(),
-            "Step 1 deve indicar que próximo é length clock"
+            !frame_sequencer.is_length_clock_next(),
+            "Step 1 (ímpar) não é step de length clock"
         );
     }
 

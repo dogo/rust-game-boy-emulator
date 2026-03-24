@@ -54,28 +54,28 @@ I'm following the excellent guide at [https://aquova.net/emudev/gb/index.html](h
 | 8-instr_effect                           | ❌ Falhou       |
 | **dmg_sound**                            | ❌ Falhou       |
 | 01-registers                             | ✅ Passou       |
-| 02-len ctr                               | ❌ Falhou       |
+| 02-len ctr                               | ✅ Passou       |
 | 03-trigger                               | ❌ Falhou       |
 | 04-sweep                                 | ✅ Passou       |
-| 05-sweep details                         | ❌ Falhou       |
+| 05-sweep details                         | ✅ Passou       |
 | 06-overflow on trigger                   | ✅ Passou       |
 | 07-len sweep period sync                 | ✅ Passou       |
-| 08-len ctr during power                  | ❌ Falhou       |
+| 08-len ctr during power                  | ✅ Passou       |
 | 09-wave read while on                    | ❌ Falhou       |
 | 10-wave trigger while on                 | ❌ Falhou       |
-| 11-regs after power                      | ❌ Falhou       |
+| 11-regs after power                      | ✅ Passou       |
 | 12-wave write while on                   | ❌ Falhou       |
 | **cgb_sound**                            | ❌ Falhou       |
 | 01-registers                             | ✅ Passou       |
-| 02-len ctr                               | ❌ Falhou       |
+| 02-len ctr                               | ✅ Passou       |
 | 03-trigger                               | ❌ Falhou       |
 | 04-sweep                                 | ✅ Passou       |
-| 05-sweep details                         | ❌ Falhou       |
+| 05-sweep details                         | ✅ Passou       |
 | 06-overflow on trigger                   | ✅ Passou       |
 | 07-len sweep period sync                 | ✅ Passou       |
-| 08-len ctr during power                  | ❌ Falhou       |
+| 08-len ctr during power                  | ✅ Passou       |
 | 09-wave read while on                    | ❌ Falhou       |
-| 10-wave trigger while on                 | ✅ Passou       |
+| 10-wave trigger while on                 | ❌ Falhou       |
 | 11-regs after power                      | ✅ Passou       |
 | 12-wave                                  | ❌ Falhou       |
 

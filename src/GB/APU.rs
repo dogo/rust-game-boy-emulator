@@ -39,10 +39,10 @@ impl FrameSequencer {
         self.step
     }
 
-    /// Retorna true se o próximo step vai clockar length counters
+    /// Retorna true se o step atual é um step de clock de length (0, 2, 4, 6)
+    /// HARDWARE: o extra clock do length dispara quando o step ATUAL é par (acaba de clockar)
     pub fn is_length_clock_next(&self) -> bool {
-        // Length é clockado em steps pares (0, 2, 4, 6)
-        (self.step + 1) % 2 == 0
+        self.step % 2 == 0
     }
 }
 
@@ -951,27 +951,19 @@ impl APU {
                 let has_trigger = (value & 0x80) != 0;
 
                 // IMPORTANTE: Ordem conforme hardware real:
-                // 1. Trigger primeiro (pode resetar counter 0 -> máximo e setar length_enabled = false temporariamente)
-                // 2. Extra length clocking depois (verifica estado antigo do length_enable)
+                // 1. Trigger primeiro (reseta counter 0 -> máximo internamente)
+                // 2. Extra length clocking depois (usa estado REAL do length_enable antes da escrita)
                 // 3. Finalmente atualiza length_enable flag
-
-                // Se trigger reseta counter 0 -> máximo, precisamos setar length_enable = false temporariamente
-                // para permitir que o extra length clocking aconteça depois (quirk do hardware)
                 if has_trigger {
-                    let was_zero = self.ch1_length.current_value() == 0;
                     self.trigger_channel1();
-                    if was_zero {
-                        // Resetou counter de 0 para máximo - setar length_enable = false temporariamente
-                        self.ch1_length_enable = false;
-                        self.ch1_length.enable = false;
-                    }
                 };
 
                 // Extra length clocking: habilitando length na primeira metade do frame sequencer
                 // Usa o estado ANTIGO do length_enable (antes da atualização)
+                let lcn = self.is_length_clock_next();
                 self.ch1_length.handle_enable_write(
                     new_length_enable,
-                    self.is_length_clock_next(),
+                    lcn,
                     has_trigger,
                 );
                 self.ch1_length_enable = new_length_enable;
