@@ -55,7 +55,7 @@ I'm following the excellent guide at [https://aquova.net/emudev/gb/index.html](h
 | **dmg_sound**                            | ❌ Falhou       |
 | 01-registers                             | ✅ Passou       |
 | 02-len ctr                               | ✅ Passou       |
-| 03-trigger                               | ❌ Falhou       |
+| 03-trigger                               | ✅ Passou       |
 | 04-sweep                                 | ✅ Passou       |
 | 05-sweep details                         | ✅ Passou       |
 | 06-overflow on trigger                   | ✅ Passou       |
@@ -68,7 +68,7 @@ I'm following the excellent guide at [https://aquova.net/emudev/gb/index.html](h
 | **cgb_sound**                            | ❌ Falhou       |
 | 01-registers                             | ✅ Passou       |
 | 02-len ctr                               | ✅ Passou       |
-| 03-trigger                               | ❌ Falhou       |
+| 03-trigger                               | ✅ Passou       |
 | 04-sweep                                 | ✅ Passou       |
 | 05-sweep details                         | ✅ Passou       |
 | 06-overflow on trigger                   | ✅ Passou       |

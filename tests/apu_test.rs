@@ -817,11 +817,16 @@ fn property_length_counter_trigger_behavior() {
         let is_length_clock_next = (iteration % 2) == 0;
         let length_enable = (iteration % 3) != 0;
 
-        // Trigger com counter = 0 - deve sempre setar para max_length
+        // Trigger com counter = 0 - deve setar para max_length
+        // e aplicar extra clock se length_enable=true E is_length_clock_next=true
         length_counter.handle_trigger(length_enable, is_length_clock_next);
 
-        // Comportamento atual: sempre seta para max_length quando counter era 0
-        let expected_counter = max_length;
+        // HARDWARE PRECISION: se was_zero=true, length_enable=true e step par → extra clock
+        let expected_counter = if length_enable && is_length_clock_next {
+            max_length - 1
+        } else {
+            max_length
+        };
 
         assert_eq!(length_counter.current_value(), expected_counter);
 

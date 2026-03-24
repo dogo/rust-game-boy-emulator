@@ -280,12 +280,18 @@ impl LengthCounter {
         true
     }
 
-    pub fn handle_trigger(&mut self, _length_enable: bool, _is_length_clock_next: bool) -> bool {
-        // HARDWARE PRECISION: trigger com length counter = 0
-        // Retorna true se resetou counter de 0 para máximo (para setar length_enable = false depois)
+    pub fn handle_trigger(&mut self, length_enable: bool, is_length_clock_now: bool) -> bool {
+        // HARDWARE PRECISION: trigger com length counter = 0 reseta para máximo
         let was_zero = self.counter == 0;
         if was_zero {
             self.counter = self.max_length;
+            // Trigger extra clock: APENAS quando recarregando de 0, se length enable e step par
+            if length_enable && is_length_clock_now && self.counter > 0 {
+                self.counter -= 1;
+                // Marcar como habilitado para que handle_enable_write não aplique
+                // outro extra clock (evita double-clock em write trigger+enable simultâneo)
+                self.enable = true;
+            }
         }
         was_zero
     }
@@ -955,7 +961,7 @@ impl APU {
                 // 2. Extra length clocking depois (usa estado REAL do length_enable antes da escrita)
                 // 3. Finalmente atualiza length_enable flag
                 if has_trigger {
-                    self.trigger_channel1();
+                    self.trigger_channel1(new_length_enable);
                 };
 
                 // Extra length clocking: habilitando length na primeira metade do frame sequencer
@@ -966,6 +972,10 @@ impl APU {
                     lcn,
                     has_trigger,
                 );
+                // Extra clock pode zerar o counter: desabilitar canal imediatamente
+                if new_length_enable && self.ch1_length.current_value() == 0 {
+                    self.ch1_enabled = false;
+                }
                 self.ch1_length_enable = new_length_enable;
             }
 
@@ -1007,7 +1017,7 @@ impl APU {
 
                 // Ordem: trigger primeiro, depois extra length clocking
                 if has_trigger {
-                    self.trigger_channel2();
+                    self.trigger_channel2(new_length_enable);
                 }
 
                 self.ch2_length.handle_enable_write(
@@ -1015,6 +1025,9 @@ impl APU {
                     self.is_length_clock_next(),
                     has_trigger,
                 );
+                if new_length_enable && self.ch2_length.current_value() == 0 {
+                    self.ch2_enabled = false;
+                }
                 self.ch2_length_enable = new_length_enable;
             }
 
@@ -1048,7 +1061,7 @@ impl APU {
 
                 // Ordem: trigger primeiro, depois extra length clocking
                 if has_trigger {
-                    self.trigger_channel3();
+                    self.trigger_channel3(new_length_enable);
                 }
 
                 self.ch3_length.handle_enable_write(
@@ -1056,6 +1069,9 @@ impl APU {
                     self.is_length_clock_next(),
                     has_trigger,
                 );
+                if new_length_enable && self.ch3_length.current_value() == 0 {
+                    self.ch3_enabled = false;
+                }
                 self.ch3_length_enable = new_length_enable;
             }
 
@@ -1094,16 +1110,18 @@ impl APU {
                 // Extra length clocking
                 let new_length_enable = (value & 0x40) != 0;
                 let has_trigger = (value & 0x80) != 0;
+                if has_trigger {
+                    self.trigger_channel4(new_length_enable);
+                }
                 self.ch4_length.handle_enable_write(
                     new_length_enable,
                     self.is_length_clock_next(),
                     has_trigger,
                 );
-                self.ch4_length_enable = new_length_enable;
-
-                if has_trigger {
-                    self.trigger_channel4();
+                if new_length_enable && self.ch4_length.current_value() == 0 {
+                    self.ch4_enabled = false;
                 }
+                self.ch4_length_enable = new_length_enable;
             }
 
             // Controle geral
@@ -1158,13 +1176,14 @@ impl APU {
     }
 
     /// Trigger do canal 1 com hardware precision
-    fn trigger_channel1(&mut self) {
+    fn trigger_channel1(&mut self, new_length_enable: bool) {
         self.ch1_enabled = true;
 
         // Hardware precision: trigger com length counter = 0
         // handle_trigger já faz o reset para máximo quando counter == 0
+        // IMPORTANTE: usa new_length_enable (valor da escrita atual), não o estado antigo
         self.ch1_length
-            .handle_trigger(self.ch1_length_enable, self.is_length_clock_next());
+            .handle_trigger(new_length_enable, self.is_length_clock_next());
 
         // Configurar envelope
         self.ch1_envelope.configure(
@@ -1207,12 +1226,13 @@ impl APU {
     }
 
     /// Trigger do canal 2 com hardware precision
-    fn trigger_channel2(&mut self) {
+    fn trigger_channel2(&mut self, new_length_enable: bool) {
         self.ch2_enabled = true;
 
         // Hardware precision: trigger com length counter = 0
+        // IMPORTANTE: usa new_length_enable (valor da escrita atual), não o estado antigo
         self.ch2_length
-            .handle_trigger(self.ch2_length_enable, self.is_length_clock_next());
+            .handle_trigger(new_length_enable, self.is_length_clock_next());
 
         // Configurar envelope
         self.ch2_envelope.configure(
@@ -1232,12 +1252,13 @@ impl APU {
     }
 
     /// Trigger do canal 3 com hardware precision
-    fn trigger_channel3(&mut self) {
+    fn trigger_channel3(&mut self, new_length_enable: bool) {
         self.ch3_enabled = self.ch3_dac_enable;
 
         // Hardware precision: trigger com length counter = 0
+        // IMPORTANTE: usa new_length_enable (valor da escrita atual), não o estado antigo
         self.ch3_length
-            .handle_trigger(self.ch3_length_enable, self.is_length_clock_next());
+            .handle_trigger(new_length_enable, self.is_length_clock_next());
 
         // Inicializar timer de frequência
         self.ch3_frequency_timer = (2048 - self.ch3_frequency as u32) / 2;
@@ -1248,12 +1269,13 @@ impl APU {
     }
 
     /// Trigger do canal 4 com hardware precision
-    fn trigger_channel4(&mut self) {
+    fn trigger_channel4(&mut self, new_length_enable: bool) {
         self.ch4_enabled = true;
 
         // Hardware precision: trigger com length counter = 0
+        // IMPORTANTE: usa new_length_enable (valor da escrita atual), não o estado antigo
         self.ch4_length
-            .handle_trigger(self.ch4_length_enable, self.is_length_clock_next());
+            .handle_trigger(new_length_enable, self.is_length_clock_next());
 
         // Configurar envelope
         self.ch4_envelope.configure(
