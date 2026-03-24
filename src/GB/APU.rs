@@ -861,14 +861,24 @@ impl APU {
                         | (if self.ch1_enabled { 0x01 } else { 0x00 })
                 }
 
-                // Wave RAM - HARDWARE QUIRK: durante playback, retorna byte sendo acessado
+                // Wave RAM - HARDWARE QUIRK: durante playback, comportamento varia por modelo
                 0xFF30..=0xFF3F => {
                     if self.ch3_enabled && self.ch3_dac_enable {
-                        // HARDWARE QUIRK: Durante playback, retorna o byte que o canal está acessando atualmente
-                        // Este é o byte que está sendo lido pelo canal 3 na posição atual da wave
-                        self.ch3_current_sample_byte
+                        if self.is_cgb {
+                            // CGB: qualquer endereço retorna o byte sendo tocado atualmente
+                            self.ch3_current_sample_byte
+                        } else {
+                            // DMG: apenas o endereço que a wave unit está acessando retorna o byte atual.
+                            // Endereços que não correspondem à posição atual retornam 0xFF.
+                            let current_byte_offset = (self.ch3_wave_position / 2) as u16;
+                            if (address - 0xFF30) == current_byte_offset {
+                                self.ch3_current_sample_byte
+                            } else {
+                                0xFF
+                            }
+                        }
                     } else {
-                        // Normal: acesso direto à Wave RAM quando canal não está tocando
+                        // Canal parado: acesso direto à Wave RAM
                         self.ch3_wave_ram[(address - 0xFF30) as usize]
                     }
                 }
@@ -1269,8 +1279,11 @@ impl APU {
         self.ch3_length
             .handle_trigger(new_length_enable, self.is_length_clock_next());
 
-        // Inicializar timer de frequência
-        self.ch3_frequency_timer = (2048 - self.ch3_frequency as u32) / 2;
+        // Inicializar timer de frequência.
+        // O +1 compensa o tick imediato que dispara no mesmo M-cycle da escrita do trigger
+        // (via consume_cpu_cycles após cpu_write), garantindo que a posição 0 dure o período
+        // completo N antes de avançar para 1.
+        self.ch3_frequency_timer = (2048 - self.ch3_frequency as u32) / 2 + 1;
         self.ch3_wave_position = 0;
 
         // HARDWARE QUIRK: Inicializar byte atual para quirk de leitura
