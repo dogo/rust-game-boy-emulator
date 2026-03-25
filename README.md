@@ -18,67 +18,67 @@ I'm following the excellent guide at [https://aquova.net/emudev/gb/index.html](h
 
 ## Blargg Test Status
 
-| Teste                                    | Status          |
-|------------------------------------------|-----------------|
-| **cpu_instrs**                           |                 |
-| 01-special                               | ✅ Passou       |
-| 02-interrupts                            | ✅ Passou       |
-| 03-op sp,hl                              | ✅ Passou       |
-| 04-op r,imm                              | ✅ Passou       |
-| 05-op rp                                 | ✅ Passou       |
-| 06-ld r,r                                | ✅ Passou       |
-| 07-jr,jp,call,ret,rst                    | ✅ Passou       |
-| 08-misc instrs                           | ✅ Passou       |
-| 09-op r,r                                | ✅ Passou       |
-| 10-bit ops                               | ✅ Passou       |
-| 11-op a,(hl)                             | ✅ Passou       |
-| **Outros testes**                        |                 |
-| halt_bug                                 | ✅ Passou       |
-| instr_timing                             | ✅ Passou       |
-| interrupt_time                           | ✅ Passou       |
-| **mem_timing**                           |                 |
-| 01-read_timing                           | ✅ Passou       |
-| 02-write_timing                          | ✅ Passou       |
-| 03-modify_timing                         | ✅ Passou       |
-| **mem_timing-2**                         |                 |
-| 01-read_timing                           | ✅ Passou       |
-| 02-write_timing                          | ✅ Passou       |
-| 03-modify_timing                         | ✅ Passou       |
-| **oam_bug**                              |                 |
-| 1-lcd_sync                               | ✅ Passou       |
-| 2-causes                                 | ✅ Passou       |
-| 3-non_causes                             | ✅ Passou       |
-| 4-scanline_timing                        | ✅ Passou       |
-| 5-timing_bug                             | ✅ Passou       |
-| 6-timing_no_bug                          | ✅ Passou       |
-| 7-timing_effect                          | ⏱️ Timeout     |
-| 8-instr_effect                           | ❌ Falhou       |
-| **dmg_sound**                            |                 |
-| 01-registers                             | ✅ Passou       |
-| 02-len ctr                               | ✅ Passou       |
-| 03-trigger                               | ✅ Passou       |
-| 04-sweep                                 | ✅ Passou       |
-| 05-sweep details                         | ✅ Passou       |
-| 06-overflow on trigger                   | ✅ Passou       |
-| 07-len sweep period sync                 | ✅ Passou       |
-| 08-len ctr during power                  | ✅ Passou       |
-| 09-wave read while on                    | ❌ Falhou       |
-| 10-wave trigger while on                 | ❌ Falhou       |
-| 11-regs after power                      | ✅ Passou       |
-| 12-wave write while on                   | ❌ Falhou       |
-| **cgb_sound**                            |                 |
-| 01-registers                             | ✅ Passou       |
-| 02-len ctr                               | ✅ Passou       |
-| 03-trigger                               | ✅ Passou       |
-| 04-sweep                                 | ✅ Passou       |
-| 05-sweep details                         | ✅ Passou       |
-| 06-overflow on trigger                   | ✅ Passou       |
-| 07-len sweep period sync                 | ✅ Passou       |
-| 08-len ctr during power                  | ✅ Passou       |
-| 09-wave read while on                    | ✅ Passou       |
-| 10-wave trigger while on                 | ✅ Passou       |
-| 11-regs after power                      | ✅ Passou       |
-| 12-wave                                  | ✅ Passou       |
+| Test                                     | Status         |
+|------------------------------------------|----------------|
+| **cpu_instrs**                           |                |
+| 01-special                               | ✅ Passed      |
+| 02-interrupts                            | ✅ Passed      |
+| 03-op sp,hl                              | ✅ Passed      |
+| 04-op r,imm                              | ✅ Passed      |
+| 05-op rp                                 | ✅ Passed      |
+| 06-ld r,r                                | ✅ Passed      |
+| 07-jr,jp,call,ret,rst                    | ✅ Passed      |
+| 08-misc instrs                           | ✅ Passed      |
+| 09-op r,r                                | ✅ Passed      |
+| 10-bit ops                               | ✅ Passed      |
+| 11-op a,(hl)                             | ✅ Passed      |
+| **Other tests**                          |                |
+| halt_bug                                 | ✅ Passed      |
+| instr_timing                             | ✅ Passed      |
+| interrupt_time                           | ✅ Passed      |
+| **mem_timing**                           |                |
+| 01-read_timing                           | ✅ Passed      |
+| 02-write_timing                          | ✅ Passed      |
+| 03-modify_timing                         | ✅ Passed      |
+| **mem_timing-2**                         |                |
+| 01-read_timing                           | ✅ Passed      |
+| 02-write_timing                          | ✅ Passed      |
+| 03-modify_timing                         | ✅ Passed      |
+| **oam_bug**                              |                |
+| 1-lcd_sync                               | ✅ Passed      |
+| 2-causes                                 | ✅ Passed      |
+| 3-non_causes                             | ✅ Passed      |
+| 4-scanline_timing                        | ✅ Passed      |
+| 5-timing_bug                             | ✅ Passed      |
+| 6-timing_no_bug                          | ✅ Passed      |
+| 7-timing_effect                          | ⏱️ Timeout    |
+| 8-instr_effect                           | ❌ Failed      |
+| **dmg_sound**                            |                |
+| 01-registers                             | ✅ Passed      |
+| 02-len ctr                               | ✅ Passed      |
+| 03-trigger                               | ✅ Passed      |
+| 04-sweep                                 | ✅ Passed      |
+| 05-sweep details                         | ✅ Passed      |
+| 06-overflow on trigger                   | ✅ Passed      |
+| 07-len sweep period sync                 | ✅ Passed      |
+| 08-len ctr during power                  | ✅ Passed      |
+| 09-wave read while on                    | ❌ Failed      |
+| 10-wave trigger while on                 | ❌ Failed      |
+| 11-regs after power                      | ✅ Passed      |
+| 12-wave write while on                   | ❌ Failed      |
+| **cgb_sound**                            |                |
+| 01-registers                             | ✅ Passed      |
+| 02-len ctr                               | ✅ Passed      |
+| 03-trigger                               | ✅ Passed      |
+| 04-sweep                                 | ✅ Passed      |
+| 05-sweep details                         | ✅ Passed      |
+| 06-overflow on trigger                   | ✅ Passed      |
+| 07-len sweep period sync                 | ✅ Passed      |
+| 08-len ctr during power                  | ✅ Passed      |
+| 09-wave read while on                    | ✅ Passed      |
+| 10-wave trigger while on                 | ✅ Passed      |
+| 11-regs after power                      | ✅ Passed      |
+| 12-wave                                  | ✅ Passed      |
 
 ## Resources
 
