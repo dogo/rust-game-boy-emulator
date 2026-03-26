@@ -53,6 +53,12 @@ pub struct FrameSequencerEvents {
     pub sweep_clock: bool,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Ch3FetchPhase {
+    Idle,
+    Opening,
+}
+
 /// Envelope com parada automática nos limites (hardware precision)
 #[derive(Debug, Clone)]
 pub struct Envelope {
@@ -353,7 +359,16 @@ pub struct APU {
     ch3_frequency: u16,          // NR33/NR34: frequência (0-2047)
     ch3_length_enable: bool,     // NR34 bit 6: length enable
     ch3_wave_ram: [u8; 16],      // Wave RAM (0xFF30-0xFF3F): 32 samples de 4 bits
-    ch3_current_sample_byte: u8, // Wave RAM: byte sendo lido atualmente (para quirk de leitura)
+    ch3_current_sample_byte: u8, // Sample buffer do CH3
+    ch3_sample_index: u8,        // Índice atual do sample (0-31)
+    ch3_wave_accessible: bool,   // true durante o fetch da wave RAM no DMG
+    ch3_wave_accessible_idx: usize,
+    ch3_wave_access_window: u8,  // Janela restante de acesso da CPU em T-cycles
+    ch3_trigger_corrupt_window: u8,
+    ch3_buffer_byte_idx: usize,
+    ch3_last_fetched_idx: usize,
+    ch3_fetch_phase: Ch3FetchPhase,
+    ch3_fetch_pending_idx: usize,
 
     // === Canal 4: Noise ===
     ch4_enabled: bool,
@@ -460,6 +475,15 @@ impl APU {
             ch3_length_enable: false,
             ch3_wave_ram: [0; 16],
             ch3_current_sample_byte: 0,
+            ch3_sample_index: 0,
+            ch3_wave_accessible: false,
+            ch3_wave_accessible_idx: 0,
+            ch3_wave_access_window: 0,
+            ch3_trigger_corrupt_window: 0,
+            ch3_buffer_byte_idx: 0,
+            ch3_last_fetched_idx: 0,
+            ch3_fetch_phase: Ch3FetchPhase::Idle,
+            ch3_fetch_pending_idx: 0,
 
             // Canal 4
             ch4_enabled: false,
@@ -542,6 +566,51 @@ impl APU {
 
         // Timers de frequência dos canais
         self.update_channel_timers();
+    }
+
+    pub fn tick_t_cycles(&mut self, t_cycles: u32) {
+        if !self.sound_enable || !self.ch3_enabled || t_cycles == 0 {
+            return;
+        }
+
+        for _ in 0..(t_cycles / 2) {
+            if self.ch3_wave_access_window >= 2 {
+                self.ch3_wave_access_window -= 2;
+            } else {
+                self.ch3_wave_access_window = 0;
+            }
+            if self.ch3_trigger_corrupt_window >= 2 {
+                self.ch3_trigger_corrupt_window -= 2;
+            } else {
+                self.ch3_trigger_corrupt_window = 0;
+            }
+            self.ch3_wave_accessible = self.ch3_wave_access_window > 0;
+
+            if self.ch3_fetch_phase == Ch3FetchPhase::Opening {
+                let byte_index = self.ch3_fetch_pending_idx;
+                self.ch3_current_sample_byte = self.ch3_wave_ram[byte_index];
+                self.ch3_buffer_byte_idx = byte_index;
+                self.ch3_last_fetched_idx = byte_index;
+                self.ch3_fetch_phase = Ch3FetchPhase::Idle;
+            }
+
+            if self.ch3_frequency_timer > 2 {
+                self.ch3_frequency_timer -= 2;
+                continue;
+            }
+
+            self.ch3_frequency_timer = ((2048 - self.ch3_frequency as u32) * 2).max(2);
+            self.ch3_sample_index = (self.ch3_sample_index + 1) % 32;
+            self.ch3_wave_position = self.ch3_sample_index;
+
+            let byte_index = (self.ch3_sample_index / 2) as usize;
+            self.ch3_fetch_phase = Ch3FetchPhase::Opening;
+            self.ch3_fetch_pending_idx = byte_index;
+            self.ch3_wave_accessible = true;
+            self.ch3_wave_accessible_idx = byte_index;
+            self.ch3_wave_access_window = 2;
+            self.ch3_trigger_corrupt_window = 4;
+        }
     }
 
     /// Retorna true se o próximo step do frame sequencer vai clockar length counters
@@ -669,21 +738,10 @@ impl APU {
 
     /// === FASE 5: Geração de Wave usando Wave RAM ===
     fn generate_wave(&mut self) -> f32 {
-        // Wave position é avançada apenas via update_channel_timers()
-        // Aqui apenas lemos o sample da posição atual
-
-        // Ler sample da Wave RAM (32 samples de 4 bits)
-        let byte_index = (self.ch3_wave_position / 2) as usize;
-
-        // HARDWARE QUIRK: Atualizar byte sendo acessado atualmente para quirk de leitura
-        self.ch3_current_sample_byte = self.ch3_wave_ram[byte_index];
-
-        let nibble = if self.ch3_wave_position & 1 == 0 {
-            // Nibble superior (bits 7-4)
-            (self.ch3_wave_ram[byte_index] >> 4) & 0x0F
+        let nibble = if self.ch3_sample_index & 1 == 0 {
+            (self.ch3_current_sample_byte >> 4) & 0x0F
         } else {
-            // Nibble inferior (bits 3-0)
-            self.ch3_wave_ram[byte_index] & 0x0F
+            self.ch3_current_sample_byte & 0x0F
         };
 
         // Converter 4-bit sample para float (-1.0 a 1.0)
@@ -865,17 +923,9 @@ impl APU {
                 0xFF30..=0xFF3F => {
                     if self.ch3_enabled && self.ch3_dac_enable {
                         if self.is_cgb {
-                            // CGB: qualquer endereço retorna o byte sendo tocado atualmente
-                            self.ch3_current_sample_byte
+                            self.ch3_wave_ram[((self.ch3_sample_index as usize) / 2) & 0x0F]
                         } else {
-                            // DMG: apenas o endereço que a wave unit está acessando retorna o byte atual.
-                            // Endereços que não correspondem à posição atual retornam 0xFF.
-                            let current_byte_offset = (self.ch3_wave_position / 2) as u16;
-                            if (address - 0xFF30) == current_byte_offset {
-                                self.ch3_current_sample_byte
-                            } else {
-                                0xFF
-                            }
+                            self.ch3_current_sample_byte
                         }
                     } else {
                         // Canal parado: acesso direto à Wave RAM
@@ -1064,25 +1114,8 @@ impl APU {
             }
             0xFF1E => {
                 // NR34: Frequency high + control
-                self.ch3_frequency = (self.ch3_frequency & 0x00FF) | (((value & 0x07) as u16) << 8);
-
-                let new_length_enable = (value & 0x40) != 0;
-                let has_trigger = (value & 0x80) != 0;
-
-                // Ordem: trigger primeiro, depois extra length clocking
-                if has_trigger {
-                    self.trigger_channel3(new_length_enable);
-                }
-
-                self.ch3_length.handle_enable_write(
-                    new_length_enable,
-                    self.is_length_clock_next(),
-                    has_trigger,
-                );
-                if new_length_enable && self.ch3_length.current_value() == 0 {
-                    self.ch3_enabled = false;
-                }
-                self.ch3_length_enable = new_length_enable;
+                self.write_nr34_latch(value);
+                self.write_nr34_trigger_phase(value);
             }
 
             // Canal 4
@@ -1173,10 +1206,11 @@ impl APU {
             // Wave RAM - HARDWARE QUIRK: write redireciona para byte atual durante playback
             0xFF30..=0xFF3F => {
                 if self.ch3_enabled && self.ch3_dac_enable {
-                    // DMG/CGB: escrita vai para o byte sendo tocado atualmente (não o endereço acessado)
-                    let byte_index = (self.ch3_wave_position / 2) as usize;
-                    self.ch3_wave_ram[byte_index] = value;
-                    self.ch3_current_sample_byte = value;
+                    if self.is_cgb {
+                        let byte_index = self.ch3_wave_accessible_idx.min(15);
+                        self.ch3_wave_ram[byte_index] = value;
+                        self.ch3_current_sample_byte = value;
+                    }
                 } else {
                     // Canal parado: escrita normal no endereço acessado
                     self.ch3_wave_ram[(address - 0xFF30) as usize] = value;
@@ -1185,6 +1219,31 @@ impl APU {
 
             _ => {} // Registradores não implementados
         }
+    }
+
+    pub fn write_nr34_latch(&mut self, value: u8) {
+        self.ch3_frequency = (self.ch3_frequency & 0x00FF) | (((value & 0x07) as u16) << 8);
+    }
+
+    pub fn write_nr34_trigger_phase(&mut self, value: u8) {
+        let new_length_enable = (value & 0x40) != 0;
+        let has_trigger = (value & 0x80) != 0;
+
+        if has_trigger {
+            self.trigger_channel3(new_length_enable);
+        }
+
+        self.ch3_frequency = (self.ch3_frequency & 0x00FF) | (((value & 0x07) as u16) << 8);
+
+        self.ch3_length.handle_enable_write(
+            new_length_enable,
+            self.is_length_clock_next(),
+            has_trigger,
+        );
+        if new_length_enable && self.ch3_length.current_value() == 0 {
+            self.ch3_enabled = false;
+        }
+        self.ch3_length_enable = new_length_enable;
     }
 
     /// Trigger do canal 1 com hardware precision
@@ -1268,8 +1327,21 @@ impl APU {
         // DMG quirk: retrigger enquanto tocando corrompe a wave RAM
         // O byte sendo tocado no momento é copiado para wave_ram[0]
         if !self.is_cgb && self.ch3_enabled {
-            let byte_index = (self.ch3_wave_position / 2) as usize;
-            self.ch3_wave_ram[0] = self.ch3_wave_ram[byte_index];
+            if self.ch3_frequency_timer <= 2 {
+                let byte_index = (((self.ch3_sample_index as usize) + 1) >> 1) & 0x0F;
+                if byte_index < 4 {
+                    self.ch3_wave_ram[0] = self.ch3_wave_ram[byte_index];
+                } else {
+                    let base = byte_index & !0x03;
+                    let block = [
+                        self.ch3_wave_ram[base],
+                        self.ch3_wave_ram[base + 1],
+                        self.ch3_wave_ram[base + 2],
+                        self.ch3_wave_ram[base + 3],
+                    ];
+                    self.ch3_wave_ram[0..4].copy_from_slice(&block);
+                }
+            }
         }
 
         self.ch3_enabled = self.ch3_dac_enable;
@@ -1279,15 +1351,61 @@ impl APU {
         self.ch3_length
             .handle_trigger(new_length_enable, self.is_length_clock_next());
 
-        // Inicializar timer de frequência.
-        // O +1 compensa o tick imediato que dispara no mesmo M-cycle da escrita do trigger
-        // (via consume_cpu_cycles após cpu_write), garantindo que a posição 0 dure o período
-        // completo N antes de avançar para 1.
-        self.ch3_frequency_timer = (2048 - self.ch3_frequency as u32) / 2 + 1;
+        self.ch3_frequency_timer = ((2048 - self.ch3_frequency as u32) * 2) + 6;
+        self.ch3_sample_index = 0;
         self.ch3_wave_position = 0;
+        if self.ch3_enabled && self.ch3_frequency_timer <= 2 {
+            self.ch3_current_sample_byte = self.ch3_wave_ram[0];
+        }
+        self.ch3_wave_accessible = true;
+        self.ch3_wave_accessible_idx = 0;
+        self.ch3_wave_access_window = 8;
+        self.ch3_trigger_corrupt_window = 0;
+        self.ch3_buffer_byte_idx = 0;
+        self.ch3_last_fetched_idx = 0;
+        self.ch3_fetch_phase = Ch3FetchPhase::Idle;
+        self.ch3_fetch_pending_idx = 0;
+    }
 
-        // HARDWARE QUIRK: Inicializar byte atual para quirk de leitura
-        self.ch3_current_sample_byte = self.ch3_wave_ram[0];
+    pub fn read_wave_ram_cpu(&self, address: u16) -> u8 {
+        if self.ch3_enabled && self.ch3_dac_enable {
+            if self.is_cgb {
+                self.ch3_wave_ram[((self.ch3_sample_index as usize) / 2) & 0x0F]
+            } else if self.ch3_wave_accessible {
+                if self.ch3_fetch_phase == Ch3FetchPhase::Opening {
+                    self.ch3_wave_ram[self.ch3_fetch_pending_idx.min(15)]
+                } else {
+                    self.ch3_current_sample_byte
+                }
+            } else {
+                0xFF
+            }
+        } else {
+            self.ch3_wave_ram[(address - 0xFF30) as usize]
+        }
+    }
+
+    pub fn write_wave_ram_cpu(&mut self, address: u16, value: u8) {
+        if self.ch3_enabled && self.ch3_dac_enable {
+            let byte_index = if self.is_cgb {
+                ((self.ch3_sample_index as usize) / 2) & 0x0F
+            } else if self.ch3_wave_accessible {
+                if self.ch3_fetch_phase == Ch3FetchPhase::Opening {
+                    self.ch3_fetch_pending_idx
+                } else {
+                    self.ch3_wave_accessible_idx
+                }
+            } else {
+                usize::MAX
+            };
+
+            if byte_index < 16 {
+                self.ch3_wave_ram[byte_index] = value;
+                self.ch3_current_sample_byte = value;
+            }
+        } else {
+            self.ch3_wave_ram[(address - 0xFF30) as usize] = value;
+        }
     }
 
     /// Trigger do canal 4 com hardware precision
@@ -1381,6 +1499,18 @@ impl APU {
         self.ch3_output_level = 0;
         self.ch3_frequency = 0;
         self.ch3_length_enable = false;
+        self.ch3_current_sample_byte = 0;
+        self.ch3_sample_index = 0;
+        self.ch3_wave_position = 0;
+        self.ch3_wave_accessible = false;
+        self.ch3_wave_accessible_idx = 0;
+        self.ch3_wave_access_window = 0;
+        self.ch3_trigger_corrupt_window = 0;
+        self.ch3_buffer_byte_idx = 0;
+        self.ch3_last_fetched_idx = 0;
+        self.ch3_fetch_phase = Ch3FetchPhase::Idle;
+        self.ch3_fetch_pending_idx = 0;
+        self.ch3_frequency_timer = 0;
 
         // Canal 4 - Limpar tudo (incluindo length timer em CGB)
         if self.is_cgb {
@@ -1441,23 +1571,7 @@ impl APU {
             }
         }
 
-        // Canal 3 - Timer de frequência (2x mais rápido que canais 1/2)
-        // Hardware: período = (2048 - freq) * 2 T-cycles = (2048 - freq) / 2 M-cycles.
-        // IMPORTANTE: avança quando timer CHEGA a zero (não quando JÁ estava zero),
-        // garantindo que o primeiro advance ocorra exatamente após 'período' M-cycles.
-        if self.ch3_enabled {
-            if self.ch3_frequency_timer > 0 {
-                self.ch3_frequency_timer -= 1;
-            }
-            if self.ch3_frequency_timer == 0 {
-                self.ch3_frequency_timer = (2048 - self.ch3_frequency as u32) / 2;
-                self.ch3_wave_position = (self.ch3_wave_position + 1) % 32;
-
-                // HARDWARE QUIRK: Atualizar byte atual quando posição muda
-                let byte_index = (self.ch3_wave_position / 2) as usize;
-                self.ch3_current_sample_byte = self.ch3_wave_ram[byte_index];
-            }
-        } // Canal 4 - Timer de frequência (mais complexo)
+        // Canal 4 - Timer de frequência (mais complexo)
         if self.ch4_enabled {
             if self.ch4_frequency_timer > 0 {
                 self.ch4_frequency_timer -= 1;

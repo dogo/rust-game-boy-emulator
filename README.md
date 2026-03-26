@@ -62,10 +62,10 @@ I'm following the excellent guide at [https://aquova.net/emudev/gb/index.html](h
 | 06-overflow on trigger                   | ✅ Passed      |
 | 07-len sweep period sync                 | ✅ Passed      |
 | 08-len ctr during power                  | ✅ Passed      |
-| 09-wave read while on                    | ❌ Failed      |
-| 10-wave trigger while on                 | ❌ Failed      |
+| 09-wave read while on                    | ✅ Passed      |
+| 10-wave trigger while on                 | ✅ Passed      |
 | 11-regs after power                      | ✅ Passed      |
-| 12-wave write while on                   | ❌ Failed      |
+| 12-wave write while on                   | ✅ Passed      |
 | **cgb_sound**                            |                |
 | 01-registers                             | ✅ Passed      |
 | 02-len ctr                               | ✅ Passed      |

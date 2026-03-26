@@ -448,6 +448,8 @@ impl MemoryBus {
             self.apu.div_secondary_event();
         }
 
+        self.apu.tick_t_cycles(cycles);
+
         // APU channel timers - otimizado para processar múltiplos M-cycles de uma vez
         let m_cycles = cycles / 4;
         if m_cycles > 0 {
@@ -480,6 +482,14 @@ impl MemoryBus {
                 self.ppu.trigger_oam_bug_read();
             }
         }
+        if (0xFF30..=0xFF3F).contains(&address) {
+            self.tick(2);
+            let value = self.apu.read_wave_ram_cpu(address);
+            self.tick(2);
+            self.cpu_cycle_log = self.cpu_cycle_log.saturating_add(4);
+            return value;
+        }
+
         let value = self.read(address);
         self.consume_cpu_cycles(4);
         value
@@ -495,6 +505,22 @@ impl MemoryBus {
                 self.ppu.trigger_oam_bug_write();
             }
         }
+        if address == 0xFF1E {
+            self.tick(2);
+            self.apu.write_register(address, value);
+            self.tick(2);
+            self.cpu_cycle_log = self.cpu_cycle_log.saturating_add(4);
+            return;
+        }
+
+        if (0xFF30..=0xFF3F).contains(&address) {
+            self.tick(2);
+            self.apu.write_wave_ram_cpu(address, value);
+            self.tick(2);
+            self.cpu_cycle_log = self.cpu_cycle_log.saturating_add(4);
+            return;
+        }
+
         self.write(address, value);
         self.consume_cpu_cycles(4);
     }
