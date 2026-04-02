@@ -52,7 +52,7 @@ I'm following the excellent guide at [https://aquova.net/emudev/gb/index.html](h
 | 5-timing_bug                             | ✅ Passed      |
 | 6-timing_no_bug                          | ✅ Passed      |
 | 7-timing_effect                          | ⏱️ Timeout    |
-| 8-instr_effect                           | ❌ Failed      |
+| 8-instr_effect                           | ✅ Passed      |
 | **dmg_sound**                            |                |
 | 01-registers                             | ✅ Passed      |
 | 02-len ctr                               | ✅ Passed      |

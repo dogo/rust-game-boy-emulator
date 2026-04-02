@@ -11,29 +11,32 @@ pub enum TestResult {
     Timeout,
 }
 
-/// Verifica resultado na memória $A000 (formato Blargg)
-fn check_memory_result(cpu: &CPU) -> Option<(u8, String)> {
+/// Verifica status do resultado na memória $A000 (formato Blargg)
+fn check_memory_status(cpu: &CPU) -> Option<u8> {
     let sig1 = cpu.bus.read(0xA001);
     let sig2 = cpu.bus.read(0xA002);
     let sig3 = cpu.bus.read(0xA003);
 
     // Formato Blargg padrão: assinatura DE B0 61
     if sig1 == 0xDE && sig2 == 0xB0 && sig3 == 0x61 {
-        let status = cpu.bus.read(0xA000);
-        let mut text = String::new();
-        for i in 0..1024 {
-            let ch = cpu.bus.read(0xA004 + i);
-            if ch == 0 {
-                break;
-            }
-            if ch.is_ascii() {
-                text.push(ch as char);
-            }
-        }
-        Some((status, text))
+        Some(cpu.bus.read(0xA000))
     } else {
         None
     }
+}
+
+fn read_memory_text(cpu: &CPU) -> String {
+    let mut text = String::new();
+    for i in 0..4096 {
+        let ch = cpu.bus.read(0xA004 + i);
+        if ch == 0 {
+            break;
+        }
+        if ch.is_ascii() {
+            text.push(ch as char);
+        }
+    }
+    text
 }
 
 /// Executa ROM de teste em modo headless
@@ -46,10 +49,10 @@ pub fn run(cpu: &mut CPU) -> TestResult {
     let mut stuck_count = 0u32;
     let mut serial_output = String::new();
 
-    const MAX_INSTRUCTIONS: u64 = 300_000_000;
+    const MAX_INSTRUCTIONS: u64 = 3_000_000_000;
     const STUCK_THRESHOLD: u32 = 200000; // 200k instruções no mesmo PC = travado
-    const MEMORY_CHECK_INTERVAL: u64 = 1_000; // Verifica memória a cada 1k instruções
-    const FINAL_CHECK_INTERVAL: u64 = 50000; // Verificação final mais frequente
+    const MEMORY_CHECK_INTERVAL: u64 = 100_000; // Verifica memória a cada 100k instruções
+    const FINAL_CHECK_INTERVAL: u64 = 1_000_000; // Intensifica checks só perto do limite
 
     loop {
         // Executa uma instrução
@@ -68,8 +71,9 @@ pub fn run(cpu: &mut CPU) -> TestResult {
             if stuck_count >= STUCK_THRESHOLD {
                 // Verificação final intensiva antes de desistir
                 for _ in 0..20 {
-                    if let Some((status, text)) = check_memory_result(cpu) {
+                    if let Some(status) = check_memory_status(cpu) {
                         if status != 0x80 {
+                            let text = read_memory_text(cpu);
                             if !text.is_empty() {
                                 println!("{}", text);
                             }
@@ -113,9 +117,10 @@ pub fn run(cpu: &mut CPU) -> TestResult {
 
         // Verifica resultado na memória periodicamente
         if instruction_count % MEMORY_CHECK_INTERVAL == 0 {
-            if let Some((status, text)) = check_memory_result(cpu) {
+            if let Some(status) = check_memory_status(cpu) {
                 if status != 0x80 {
                     // 0x80 = ainda executando
+                    let text = read_memory_text(cpu);
                     if !text.is_empty() {
                         println!("{}", text);
                     }
@@ -156,8 +161,9 @@ pub fn run(cpu: &mut CPU) -> TestResult {
         if instruction_count > MAX_INSTRUCTIONS - FINAL_CHECK_INTERVAL {
             if instruction_count % 100 == 0 {
                 // Verifica a cada 100 instruções no final
-                if let Some((status, text)) = check_memory_result(cpu) {
+                if let Some(status) = check_memory_status(cpu) {
                     if status != 0x80 {
+                        let text = read_memory_text(cpu);
                         if !text.is_empty() {
                             println!("{}", text);
                         }
@@ -178,8 +184,9 @@ pub fn run(cpu: &mut CPU) -> TestResult {
         if instruction_count >= MAX_INSTRUCTIONS {
             // Última verificação intensiva
             for _ in 0..1000 {
-                if let Some((status, text)) = check_memory_result(cpu) {
+                if let Some(status) = check_memory_status(cpu) {
                     if status != 0x80 {
+                        let text = read_memory_text(cpu);
                         if !text.is_empty() {
                             println!("{}", text);
                         }
@@ -211,8 +218,9 @@ pub fn run(cpu: &mut CPU) -> TestResult {
 
     // Última tentativa de capturar resultado da memória
     for _ in 0..100 {
-        if let Some((status, text)) = check_memory_result(cpu) {
+        if let Some(status) = check_memory_status(cpu) {
             if status != 0x80 {
+                let text = read_memory_text(cpu);
                 if !text.is_empty() {
                     println!("{}", text);
                 }
@@ -221,6 +229,15 @@ pub fn run(cpu: &mut CPU) -> TestResult {
                 } else {
                     TestResult::Failed(status)
                 };
+            }
+        }
+    }
+
+    if let Some(status) = check_memory_status(cpu) {
+        if status == 0x80 {
+            let text = read_memory_text(cpu);
+            if !text.is_empty() {
+                eprintln!("timeout-debug-text:\n{text}");
             }
         }
     }
