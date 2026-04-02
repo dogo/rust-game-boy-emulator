@@ -973,7 +973,10 @@ pub fn execute(program: &MicroProgram, regs: &mut Registers, bus: &mut MemoryBus
             }
             MicroAction::PushReg16 { idx } => {
                 // PUSH rr: Empilha registrador 16-bit (16 ciclos)
-                // OAM Bug: glitched writes do dec SP
+                // OAM Bug: PUSH se comporta como três escritas efetivas:
+                // uma escrita "glitched" do primeiro DEC SP, uma escrita normal
+                // no M-cycle em que o segundo DEC SP também acontece, e a
+                // escrita final do byte baixo.
                 // idx: 0=BC, 1=DE, 2=HL, 3=AF
                 let val = match idx {
                     0 => regs.get_bc(),
@@ -984,14 +987,13 @@ pub fn execute(program: &MicroProgram, regs: &mut Registers, bus: &mut MemoryBus
                 };
                 let mut sp = regs.get_sp();
                 // Primeiro decremento de SP (glitched write)
-                bus.cpu_idle(2);
                 bus.oam_bug_inc_dec(sp);
                 sp = sp.wrapping_sub(1);
-                bus.cpu_idle(2);
+                bus.cpu_idle(4);
                 // Write byte alto
+                // O segundo DEC SP compartilha este M-cycle com a escrita e
+                // se comporta como uma única write corruption.
                 bus.cpu_write(sp, (val >> 8) as u8);
-                // Segundo decremento de SP (glitched write)
-                bus.oam_bug_inc_dec(sp);
                 sp = sp.wrapping_sub(1);
                 // Write byte baixo
                 bus.cpu_write(sp, (val & 0xFF) as u8);
@@ -999,18 +1001,18 @@ pub fn execute(program: &MicroProgram, regs: &mut Registers, bus: &mut MemoryBus
             }
             MicroAction::PopReg16 { idx } => {
                 // POP rr: Desempilha para registrador 16-bit (12 ciclos)
-                // OAM Bug: glitched writes do inc SP
+                // OAM Bug: POP dispara exatamente três eventos de OAM. Modela
+                // a leitura do byte baixo e o primeiro INC SP compartilhando
+                // um M-cycle, e a leitura do byte alto como leitura pura no
+                // M-cycle seguinte.
                 // idx: 0=BC, 1=DE, 2=HL, 3=AF
                 let mut sp = regs.get_sp();
-                // Read byte baixo
-                let lo = bus.cpu_read(sp) as u16;
-                // Primeiro incremento de SP (glitched write)
-                bus.oam_bug_inc_dec(sp);
+                // Primeiro M-cycle: read + implied INC SP
+                bus.oam_bug_read_inc_dec(sp);
+                let lo = bus.cpu_read_no_oam_bug(sp) as u16;
                 sp = sp.wrapping_add(1);
                 // Read byte alto
                 let hi = bus.cpu_read(sp) as u16;
-                // Segundo incremento de SP (glitched write)
-                bus.oam_bug_inc_dec(sp);
                 sp = sp.wrapping_add(1);
                 regs.set_sp(sp);
                 let val = (hi << 8) | lo;
@@ -1219,36 +1221,36 @@ pub fn execute(program: &MicroProgram, regs: &mut Registers, bus: &mut MemoryBus
                 // Total: 8 ciclos
             }
             MicroAction::WriteAToHlAndIncrement => {
-                // LDI (HL),A: Escreve A em (HL) e incrementa HL (8 ciclos)
-                // OAM Bug: write + inc triggera corrupção
+                // LDI (HL),A: write+INC no mesmo M-cycle se comporta como uma
+                // única write corruption, então cpu_write já modela isso.
                 let hl = regs.get_hl();
-                bus.oam_bug_write_inc_dec(hl);
                 bus.cpu_write(hl, regs.get_a());
                 regs.set_hl(hl.wrapping_add(1));
             }
             MicroAction::ReadFromHlToAAndIncrement => {
                 // LDI A,(HL): Lê de (HL) para A e incrementa HL (8 ciclos)
-                // OAM Bug: read + inc triggera corrupção complexa
+                // OAM Bug: read + inc é um caso combinado de corrupção; evita
+                // uma read corruption extra disparada por cpu_read.
                 let hl = regs.get_hl();
                 bus.oam_bug_read_inc_dec(hl);
-                let val = bus.cpu_read(hl);
+                let val = bus.cpu_read_no_oam_bug(hl);
                 regs.set_a(val);
                 regs.set_hl(hl.wrapping_add(1));
             }
             MicroAction::WriteAToHlAndDecrement => {
-                // LDD (HL),A: Escreve A em (HL) e decrementa HL (8 ciclos)
-                // OAM Bug: write + dec triggera corrupção
+                // LDD (HL),A: write+DEC no mesmo M-cycle se comporta como uma
+                // única write corruption, então cpu_write já modela isso.
                 let hl = regs.get_hl();
-                bus.oam_bug_write_inc_dec(hl);
                 bus.cpu_write(hl, regs.get_a());
                 regs.set_hl(hl.wrapping_sub(1));
             }
             MicroAction::ReadFromHlToAAndDecrement => {
                 // LDD A,(HL): Lê de (HL) para A e decrementa HL (8 ciclos)
-                // OAM Bug: read + dec triggera corrupção complexa
+                // OAM Bug: read + dec é um caso combinado de corrupção; evita
+                // uma read corruption extra disparada por cpu_read.
                 let hl = regs.get_hl();
                 bus.oam_bug_read_inc_dec(hl);
-                let val = bus.cpu_read(hl);
+                let val = bus.cpu_read_no_oam_bug(hl);
                 regs.set_a(val);
                 regs.set_hl(hl.wrapping_sub(1));
             }

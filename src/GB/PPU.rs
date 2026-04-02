@@ -685,17 +685,19 @@ impl PPU {
     // ========== OAM CORRUPTION BUG ==========
     // Referência: https://gbdev.io/pandocs/OAM_Corruption_Bug.html
 
-    /// Retorna true se o PPU está no modo 2 (OAM scan) e LCD está ligado
-    /// Mode 2 dura exatamente 80 ciclos (20 M-cycles)
-    pub fn is_oam_scan_mode(&self) -> bool {
+    /// Retorna true se o PPU está no modo 2 (OAM scan) e LCD está ligado.
+    /// O OAM bug é amostrado no meio do ciclo relevante de barramento/IDU,
+    /// não no início da instrução.
+    fn oam_bug_row(&self, cycle_offset: u32) -> Option<usize> {
         let lcd_on = (self.lcdc & 0x80) != 0;
-        lcd_on && self.mode == 2 && self.mode_clock < 80
-    }
-
-    /// Retorna a row atual sendo acessada pelo PPU durante mode 2
-    fn get_current_oam_row(&self) -> usize {
-        let m_cycles = self.mode_clock / 4;
-        (m_cycles as usize).min(19)
+        if !lcd_on || self.mode != 2 {
+            return None;
+        }
+        let effective_clock = self.mode_clock.saturating_add(cycle_offset);
+        if effective_clock >= 80 {
+            return None;
+        }
+        Some(((effective_clock / 4) as usize).min(19))
     }
 
     /// Lê uma palavra de 16 bits da OAM (little-endian)
@@ -747,6 +749,10 @@ impl PPU {
         let c = self.read_oam_word(prev_row, 2);
         let corrupted = b | (a & c);
         self.write_oam_word(row, 0, corrupted);
+        for word_idx in 1..4 {
+            let value = self.read_oam_word(prev_row, word_idx);
+            self.write_oam_word(row, word_idx, value);
+        }
     }
 
     /// Aplica a corrupção complexa de read durante increment/decrement
@@ -771,28 +777,22 @@ impl PPU {
 
     /// Função pública para triggerar OAM bug por write
     pub fn trigger_oam_bug_write(&mut self) {
-        if !self.is_oam_scan_mode() {
-            return;
+        if let Some(row) = self.oam_bug_row(2) {
+            self.apply_write_corruption(row);
         }
-        let row = self.get_current_oam_row();
-        self.apply_write_corruption(row);
     }
 
     /// Função pública para triggerar OAM bug por read
     pub fn trigger_oam_bug_read(&mut self) {
-        if !self.is_oam_scan_mode() {
-            return;
+        if let Some(row) = self.oam_bug_row(2) {
+            self.apply_read_corruption(row);
         }
-        let row = self.get_current_oam_row();
-        self.apply_read_corruption(row);
     }
 
     /// Função pública para triggerar OAM bug por read durante INC/DEC
     pub fn trigger_oam_bug_read_inc_dec(&mut self) {
-        if !self.is_oam_scan_mode() {
-            return;
+        if let Some(row) = self.oam_bug_row(2) {
+            self.apply_read_inc_dec_corruption(row);
         }
-        let row = self.get_current_oam_row();
-        self.apply_read_inc_dec_corruption(row);
     }
 }
