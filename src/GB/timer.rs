@@ -8,20 +8,20 @@ const TAC_TRIGGER_BITS: [u16; 4] = [512, 8, 32, 128]; // bits 9, 3, 5, 7
 /// Eventos gerados pelo timer quando div_counter muda
 #[derive(Default)]
 pub struct TimerEvents {
-    pub apu_div_event: bool,     // Borda de descida no bit 12 (ou 13 em double speed)
+    pub apu_div_event: bool, // Borda de descida no bit 12 (ou 13 em double speed)
     pub apu_div_secondary: bool, // Borda de subida no bit 12
 }
 
 pub struct Timer {
-    div_counter: u16, // Contador interno que incrementa a cada T-cycle
-    last_div_bit: bool,            // Para detectar edges no bit do APU
-    m_cycle_offset: u32,           // Rastreia offset dentro do M-cycle atual (0-3)
-    tima_written_in_delay: bool,   // Flag: TIMA foi escrito durante o período de delay (4 T-cycles)
-    suppress_until: Option<u16>,   // Prazo (valor do div_counter) para suprimir bordas de descida após escrita no TIMA
-    prev_tima_bit: bool,           // Estado anterior do bit selecionado para detectar falling edges
-    reload_pending: Option<u16>,   // Valor de temp_counter em que o reload deve disparar (temp_counter + 4)
-    tima_reloading: bool,          // true durante os 4 T-cycles entre overflow e reload
-    tma_reg: u8,                   // Valor atual de TMA (atualizado quando CPU escreve em TMA)
+    div_counter: u16,            // Contador interno que incrementa a cada T-cycle
+    last_div_bit: bool,          // Para detectar edges no bit do APU
+    m_cycle_offset: u32,         // Rastreia offset dentro do M-cycle atual (0-3)
+    tima_written_in_delay: bool, // Flag: TIMA foi escrito durante o período de delay (4 T-cycles)
+    suppress_until: Option<u16>, // Prazo (valor do div_counter) para suprimir bordas de descida após escrita no TIMA
+    prev_tima_bit: bool,         // Estado anterior do bit selecionado para detectar falling edges
+    reload_pending: Option<u16>, // Valor de temp_counter em que o reload deve disparar (temp_counter + 4)
+    tima_reloading: bool,        // true durante os 4 T-cycles entre overflow e reload
+    tma_reg: u8,                 // Valor atual de TMA (atualizado quando CPU escreve em TMA)
 }
 
 impl Timer {
@@ -217,13 +217,7 @@ impl Timer {
         (tima, if_reg, events)
     }
 
-    pub fn write_tac(
-        &mut self,
-        mut tima: u8,
-        old_tac: u8,
-        new_tac: u8,
-        if_reg: u8,
-    ) -> (u8, u8) {
+    pub fn write_tac(&mut self, mut tima: u8, old_tac: u8, new_tac: u8, if_reg: u8) -> (u8, u8) {
         let old_bit = TAC_TRIGGER_BITS[(old_tac & 0x03) as usize];
         let new_bit = TAC_TRIGGER_BITS[(new_tac & 0x03) as usize];
 

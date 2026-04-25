@@ -363,7 +363,7 @@ pub struct APU {
     ch3_sample_index: u8,        // Índice atual do sample (0-31)
     ch3_wave_accessible: bool,   // true durante o fetch da wave RAM no DMG
     ch3_wave_accessible_idx: usize,
-    ch3_wave_access_window: u8,  // Janela restante de acesso da CPU em T-cycles
+    ch3_wave_access_window: u8, // Janela restante de acesso da CPU em T-cycles
     ch3_trigger_corrupt_window: u8,
     ch3_buffer_byte_idx: usize,
     ch3_last_fetched_idx: usize,
@@ -951,10 +951,22 @@ impl APU {
             }
             // DMG: apenas NR11, NR21, NR31, NR41 permitidos, e somente os bits de length timer
             match address {
-                0xFF11 => { self.ch1_length_timer = value & 0x3F; self.ch1_length.load_length(value & 0x3F); }
-                0xFF16 => { self.ch2_length_timer = value & 0x3F; self.ch2_length.load_length(value & 0x3F); }
-                0xFF1B => { self.ch3_length_timer = value; self.ch3_length.load_length(value); }
-                0xFF20 => { self.ch4_length_timer = value & 0x3F; self.ch4_length.load_length(value & 0x3F); }
+                0xFF11 => {
+                    self.ch1_length_timer = value & 0x3F;
+                    self.ch1_length.load_length(value & 0x3F);
+                }
+                0xFF16 => {
+                    self.ch2_length_timer = value & 0x3F;
+                    self.ch2_length.load_length(value & 0x3F);
+                }
+                0xFF1B => {
+                    self.ch3_length_timer = value;
+                    self.ch3_length.load_length(value);
+                }
+                0xFF20 => {
+                    self.ch4_length_timer = value & 0x3F;
+                    self.ch4_length.load_length(value & 0x3F);
+                }
                 _ => {}
             }
             return;
@@ -979,7 +991,8 @@ impl APU {
                 self.ch1_sweep_shift = new_shift;
 
                 // Atualiza período e shift sem resetar timer/enabled (hardware: só trigger reconfigura)
-                self.ch1_sweep.update_period_shift(self.ch1_sweep_period, self.ch1_sweep_shift);
+                self.ch1_sweep
+                    .update_period_shift(self.ch1_sweep_period, self.ch1_sweep_shift);
             }
             0xFF11 => {
                 // NR11: Wave duty + length timer
@@ -1027,11 +1040,8 @@ impl APU {
                 // Extra length clocking: habilitando length na primeira metade do frame sequencer
                 // Usa o estado ANTIGO do length_enable (antes da atualização)
                 let lcn = self.is_length_clock_next();
-                self.ch1_length.handle_enable_write(
-                    new_length_enable,
-                    lcn,
-                    has_trigger,
-                );
+                self.ch1_length
+                    .handle_enable_write(new_length_enable, lcn, has_trigger);
                 // Extra clock pode zerar o counter: desabilitar canal imediatamente
                 if new_length_enable && self.ch1_length.current_value() == 0 {
                     self.ch1_enabled = false;

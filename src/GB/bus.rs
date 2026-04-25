@@ -29,21 +29,21 @@ pub struct MemoryBus {
     oam_dma_value: u8, // Último valor escrito em FF46
 
     // ===== Serial =====
-    serial_sb: u8,                // FF01 - Serial Transfer Data
-    serial_sc: u8,                // FF02 - Serial Transfer Control
-    serial_transfer_active: bool, // Transferência em andamento
-    serial_transfer_cycles: u32,  // Ciclos acumulados da transferência
-    serial_clock_source: bool,    // true = internal clock (master), false = external clock (slave)
-    serial_last_transmitted: u8,  // Último byte transmitido (para debug/testes)
+    serial_sb: u8,                     // FF01 - Serial Transfer Data
+    serial_sc: u8,                     // FF02 - Serial Transfer Control
+    serial_transfer_active: bool,      // Transferência em andamento
+    serial_transfer_cycles: u32,       // Ciclos acumulados da transferência
+    serial_clock_source: bool, // true = internal clock (master), false = external clock (slave)
+    serial_last_transmitted: u8, // Último byte transmitido (para debug/testes)
     pub serial_output_buffer: Vec<u8>, // Bytes capturados ao completar transferências seriais
 
     // Contagem de ciclos consumidos pela CPU nesta instrução
     cpu_cycle_log: u32,
 
     // ===== CGB =====
-    pub cgb_mode: bool,    // true se ROM é CGB
-    pub cgb_speed: bool,   // false = velocidade normal, true = velocidade dupla
-    pub key1: u8,          // 0xFF4D: bit 0 = solicitação de troca de velocidade
+    pub cgb_mode: bool,  // true se ROM é CGB
+    pub cgb_speed: bool, // false = velocidade normal, true = velocidade dupla
+    pub key1: u8,        // 0xFF4D: bit 0 = solicitação de troca de velocidade
 }
 
 impl MemoryBus {
@@ -214,7 +214,7 @@ impl MemoryBus {
             0xFF05 => self.tima,
             0xFF06 => self.tma,
             0xFF07 => (self.tac & 0x07) | 0xF8, // bits 0-2 são TAC real, bits 3-7 leem como 1
-            0xFF0F => self.if_ | 0xE0, // bits 5-7 sempre leem como 1 no DMG
+            0xFF0F => self.if_ | 0xE0,          // bits 5-7 sempre leem como 1 no DMG
             0xFF10..=0xFF3F => self.apu.read_register(address),
             0xFF40..=0xFF45 => self.ppu.read_register(address),
             0xFF46 => self.oam_dma_value,
@@ -320,9 +320,9 @@ impl MemoryBus {
                 }
             }
             0xFF04 => {
-                let (new_tima, new_if, events) = self
-                    .timer
-                    .reset_div(self.tima, self.tac, self.if_, self.cgb_speed);
+                let (new_tima, new_if, events) =
+                    self.timer
+                        .reset_div(self.tima, self.tac, self.if_, self.cgb_speed);
                 self.tima = new_tima;
                 self.if_ = new_if;
                 // Processa eventos do APU
@@ -355,9 +355,7 @@ impl MemoryBus {
                 }
             }
             0xFF07 => {
-                let (new_tima, new_if) = self
-                    .timer
-                    .write_tac(self.tima, self.tac, value, self.if_);
+                let (new_tima, new_if) = self.timer.write_tac(self.tima, self.tac, value, self.if_);
                 self.tima = new_tima;
                 self.if_ = new_if;
                 self.tac = value;
@@ -434,9 +432,9 @@ impl MemoryBus {
         self.step_serial_transfer(cycles);
 
         // Timer otimizado - processa cycles em bulk
-        let (new_tima, new_if, events) = self
-            .timer
-            .tick(cycles, self.tima, self.tac, self.if_, self.cgb_speed);
+        let (new_tima, new_if, events) =
+            self.timer
+                .tick(cycles, self.tima, self.tac, self.if_, self.cgb_speed);
         self.tima = new_tima;
         self.if_ = new_if;
 

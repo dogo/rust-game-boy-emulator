@@ -1373,7 +1373,8 @@ fn property_apu_power_off_register_clearing() {
 
         // Registradores que retornam 0xFF quando APU desligada
         let registers_0xff = [
-            0xFF13, 0xFF15, 0xFF18, 0xFF1B, 0xFF1D, 0xFF1F, 0xFF20, // Write-only e não existentes
+            0xFF13, 0xFF15, 0xFF18, 0xFF1B, 0xFF1D, 0xFF1F,
+            0xFF20, // Write-only e não existentes
         ];
 
         for &reg_addr in &registers_0xff {
@@ -1386,9 +1387,7 @@ fn property_apu_power_off_register_clearing() {
         }
 
         // Registradores que retornam 0x00 quando APU desligada (envelope e controles)
-        let registers_0x00 = [
-            0xFF12, 0xFF17, 0xFF21, 0xFF22, 0xFF24, 0xFF25,
-        ];
+        let registers_0x00 = [0xFF12, 0xFF17, 0xFF21, 0xFF22, 0xFF24, 0xFF25];
 
         for &reg_addr in &registers_0x00 {
             let reg_value = apu.read_register(reg_addr);

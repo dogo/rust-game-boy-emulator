@@ -29,7 +29,7 @@ impl CPU {
             opcode: 0,
             cycles: 0,
         };
-        
+
         // Configurar modo CGB baseado no tipo de ROM
         cpu.bus.set_cgb_mode(is_cgb);
         cpu

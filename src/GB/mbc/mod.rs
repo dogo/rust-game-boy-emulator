@@ -18,7 +18,23 @@ pub fn create_mbc(rom: Vec<u8>) -> Box<dyn MBC + Send> {
 }
 
 fn cart_type_has_ram(cart_type: u8) -> bool {
-    matches!(cart_type, 0x02 | 0x03 | 0x08 | 0x09 | 0x0C | 0x0D | 0x10 | 0x12 | 0x13 | 0x1A | 0x1B | 0x1D | 0x1E | 0x22 | 0xFF)
+    matches!(
+        cart_type,
+        0x02 | 0x03
+            | 0x08
+            | 0x09
+            | 0x0C
+            | 0x0D
+            | 0x10
+            | 0x12
+            | 0x13
+            | 0x1A
+            | 0x1B
+            | 0x1D
+            | 0x1E
+            | 0x22
+            | 0xFF
+    )
 }
 
 fn get_ram_size_for_type(rom: &[u8], cart_type: u8) -> usize {
