@@ -21,7 +21,7 @@ I'm following the excellent guide at [https://aquova.net/emudev/gb/index.html](h
 | Suite   | Command                    | Total | Passed | Failed | Timeout |
 |---------|----------------------------|-------|--------|--------|---------|
 | Blargg  | `./run_all_tests.sh blargg` | 52    | 52     | 0      | 0       |
-| Mooneye | `./run_all_tests.sh mooneye` | 111   | 43     | 57     | 11      |
+| Mooneye | `./run_all_tests.sh mooneye` | 111   | 54     | 50     | 7       |
 
 ### Blargg Test Status
 
@@ -102,7 +102,7 @@ It intentionally skips `manual-only`, `utils`, and `madness`.
 | acceptance/ppu           | 12    | 0      | 12     | 0       |
 | acceptance/serial        | 1     | 0      | 1      | 0       |
 | acceptance/timer         | 13    | 10     | 3      | 0       |
-| emulator-only/mbc1       | 13    | 2      | 7      | 4       |
+| emulator-only/mbc1       | 13    | 13     | 0      | 0       |
 | emulator-only/mbc2       | 7     | 7      | 0      | 0       |
 | emulator-only/mbc5       | 8     | 8      | 0      | 0       |
 | misc                     | 6     | 0      | 6      | 0       |
@@ -190,18 +190,18 @@ It intentionally skips `manual-only`, `utils`, and `madness`.
 | acceptance/timer/tima_write_reloading | ❌ Failed |
 | acceptance/timer/tma_write_reloading | ❌ Failed |
 | emulator-only/mbc1/bits_bank1 | ✅ Passed |
-| emulator-only/mbc1/bits_bank2 | ⏱️ Timeout |
-| emulator-only/mbc1/bits_mode | ⏱️ Timeout |
+| emulator-only/mbc1/bits_bank2 | ✅ Passed |
+| emulator-only/mbc1/bits_mode | ✅ Passed |
 | emulator-only/mbc1/bits_ramg | ✅ Passed |
-| emulator-only/mbc1/multicart_rom_8Mb | ❌ Failed |
-| emulator-only/mbc1/ram_256kb | ⏱️ Timeout |
-| emulator-only/mbc1/ram_64kb | ⏱️ Timeout |
-| emulator-only/mbc1/rom_16Mb | ❌ Failed |
-| emulator-only/mbc1/rom_1Mb | ❌ Failed |
-| emulator-only/mbc1/rom_2Mb | ❌ Failed |
-| emulator-only/mbc1/rom_4Mb | ❌ Failed |
-| emulator-only/mbc1/rom_512kb | ❌ Failed |
-| emulator-only/mbc1/rom_8Mb | ❌ Failed |
+| emulator-only/mbc1/multicart_rom_8Mb | ✅ Passed |
+| emulator-only/mbc1/ram_256kb | ✅ Passed |
+| emulator-only/mbc1/ram_64kb | ✅ Passed |
+| emulator-only/mbc1/rom_16Mb | ✅ Passed |
+| emulator-only/mbc1/rom_1Mb | ✅ Passed |
+| emulator-only/mbc1/rom_2Mb | ✅ Passed |
+| emulator-only/mbc1/rom_4Mb | ✅ Passed |
+| emulator-only/mbc1/rom_512kb | ✅ Passed |
+| emulator-only/mbc1/rom_8Mb | ✅ Passed |
 | emulator-only/mbc2/bits_ramg | ✅ Passed |
 | emulator-only/mbc2/bits_romb | ✅ Passed |
 | emulator-only/mbc2/bits_unused | ✅ Passed |
