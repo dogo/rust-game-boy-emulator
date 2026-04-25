@@ -21,7 +21,7 @@ I'm following the excellent guide at [https://aquova.net/emudev/gb/index.html](h
 | Suite   | Command                    | Total | Passed | Failed | Timeout |
 |---------|----------------------------|-------|--------|--------|---------|
 | Blargg  | `./run_all_tests.sh blargg` | 52    | 52     | 0      | 0       |
-| Mooneye | `./run_all_tests.sh mooneye` | 111   | 17     | 82     | 12      |
+| Mooneye | `./run_all_tests.sh mooneye` | 111   | 33     | 66     | 12      |
 
 ### Blargg Test Status
 
@@ -94,14 +94,14 @@ It intentionally skips `manual-only`, `utils`, and `madness`.
 
 | Group                    | Total | Passed | Failed | Timeout |
 |--------------------------|-------|--------|--------|---------|
-| acceptance               | 41    | 5      | 29     | 7       |
-| acceptance/bits          | 3     | 2      | 1      | 0       |
+| acceptance               | 41    | 11     | 23     | 7       |
+| acceptance/bits          | 3     | 3      | 0      | 0       |
 | acceptance/instr         | 1     | 1      | 0      | 0       |
 | acceptance/interrupts    | 1     | 0      | 1      | 0       |
 | acceptance/oam_dma       | 3     | 1      | 2      | 0       |
 | acceptance/ppu           | 12    | 0      | 12     | 0       |
 | acceptance/serial        | 1     | 0      | 1      | 0       |
-| acceptance/timer         | 13    | 1      | 12     | 0       |
+| acceptance/timer         | 13    | 10     | 3      | 0       |
 | emulator-only/mbc1       | 13    | 2      | 7      | 4       |
 | emulator-only/mbc2       | 7     | 3      | 3      | 1       |
 | emulator-only/mbc5       | 8     | 2      | 6      | 0       |
@@ -116,10 +116,10 @@ It intentionally skips `manual-only`, `utils`, and `madness`.
 |------|--------|
 | acceptance/add_sp_e_timing | ❌ Failed |
 | acceptance/bits/mem_oam | ✅ Passed |
-| acceptance/bits/reg_f | ❌ Failed |
+| acceptance/bits/reg_f | ✅ Passed |
 | acceptance/bits/unused_hwio-GS | ✅ Passed |
 | acceptance/boot_div-dmg0 | ❌ Failed |
-| acceptance/boot_div-dmgABCmgb | ❌ Failed |
+| acceptance/boot_div-dmgABCmgb | ✅ Passed |
 | acceptance/boot_div-S | ❌ Failed |
 | acceptance/boot_div2-S | ❌ Failed |
 | acceptance/boot_hwio-dmg0 | ❌ Failed |
@@ -139,13 +139,13 @@ It intentionally skips `manual-only`, `utils`, and `madness`.
 | acceptance/ei_sequence | ❌ Failed |
 | acceptance/ei_timing | ❌ Failed |
 | acceptance/halt_ime0_ei | ✅ Passed |
-| acceptance/halt_ime0_nointr_timing | ❌ Failed |
+| acceptance/halt_ime0_nointr_timing | ✅ Passed |
 | acceptance/halt_ime1_timing | ✅ Passed |
-| acceptance/halt_ime1_timing2-GS | ❌ Failed |
-| acceptance/if_ie_registers | ❌ Failed |
+| acceptance/halt_ime1_timing2-GS | ✅ Passed |
+| acceptance/if_ie_registers | ✅ Passed |
 | acceptance/instr/daa | ✅ Passed |
 | acceptance/interrupts/ie_push | ❌ Failed |
-| acceptance/intr_timing | ❌ Failed |
+| acceptance/intr_timing | ✅ Passed |
 | acceptance/jp_cc_timing | ⏱️ Timeout |
 | acceptance/jp_timing | ⏱️ Timeout |
 | acceptance/ld_hl_sp_e_timing | ❌ Failed |
@@ -155,7 +155,7 @@ It intentionally skips `manual-only`, `utils`, and `madness`.
 | acceptance/oam_dma/basic | ✅ Passed |
 | acceptance/oam_dma/reg_read | ❌ Failed |
 | acceptance/oam_dma/sources-GS | ❌ Failed |
-| acceptance/pop_timing | ❌ Failed |
+| acceptance/pop_timing | ✅ Passed |
 | acceptance/ppu/hblank_ly_scx_timing-GS | ❌ Failed |
 | acceptance/ppu/intr_1_2_timing-GS | ❌ Failed |
 | acceptance/ppu/intr_2_0_timing | ❌ Failed |
@@ -178,15 +178,15 @@ It intentionally skips `manual-only`, `utils`, and `madness`.
 | acceptance/serial/boot_sclk_align-dmgABCmgb | ❌ Failed |
 | acceptance/timer/div_write | ✅ Passed |
 | acceptance/timer/rapid_toggle | ❌ Failed |
-| acceptance/timer/tim00_div_trigger | ❌ Failed |
-| acceptance/timer/tim00 | ❌ Failed |
-| acceptance/timer/tim01_div_trigger | ❌ Failed |
-| acceptance/timer/tim01 | ❌ Failed |
-| acceptance/timer/tim10_div_trigger | ❌ Failed |
-| acceptance/timer/tim10 | ❌ Failed |
-| acceptance/timer/tim11_div_trigger | ❌ Failed |
-| acceptance/timer/tim11 | ❌ Failed |
-| acceptance/timer/tima_reload | ❌ Failed |
+| acceptance/timer/tim00_div_trigger | ✅ Passed |
+| acceptance/timer/tim00 | ✅ Passed |
+| acceptance/timer/tim01_div_trigger | ✅ Passed |
+| acceptance/timer/tim01 | ✅ Passed |
+| acceptance/timer/tim10_div_trigger | ✅ Passed |
+| acceptance/timer/tim10 | ✅ Passed |
+| acceptance/timer/tim11_div_trigger | ✅ Passed |
+| acceptance/timer/tim11 | ✅ Passed |
+| acceptance/timer/tima_reload | ✅ Passed |
 | acceptance/timer/tima_write_reloading | ❌ Failed |
 | acceptance/timer/tma_write_reloading | ❌ Failed |
 | emulator-only/mbc1/bits_bank1 | ✅ Passed |

@@ -1528,5 +1528,4 @@ pub fn lookup(opcode: u8) -> Option<&'static MicroProgram> {
         .or_else(|| jump::lookup(opcode))
         .or_else(|| arithmetic::lookup(opcode))
         .or_else(|| stack::lookup(opcode))
-        .or_else(|| cb_prefix::lookup(opcode))
 }
