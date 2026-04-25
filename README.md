@@ -21,7 +21,7 @@ I'm following the excellent guide at [https://aquova.net/emudev/gb/index.html](h
 | Suite   | Command                    | Total | Passed | Failed | Timeout |
 |---------|----------------------------|-------|--------|--------|---------|
 | Blargg  | `./run_all_tests.sh blargg` | 52    | 52     | 0      | 0       |
-| Mooneye | `./run_all_tests.sh mooneye` | 111   | 33     | 66     | 12      |
+| Mooneye | `./run_all_tests.sh mooneye` | 111   | 39     | 60     | 12      |
 
 ### Blargg Test Status
 
@@ -104,7 +104,7 @@ It intentionally skips `manual-only`, `utils`, and `madness`.
 | acceptance/timer         | 13    | 10     | 3      | 0       |
 | emulator-only/mbc1       | 13    | 2      | 7      | 4       |
 | emulator-only/mbc2       | 7     | 3      | 3      | 1       |
-| emulator-only/mbc5       | 8     | 2      | 6      | 0       |
+| emulator-only/mbc5       | 8     | 8      | 0      | 0       |
 | misc                     | 6     | 0      | 6      | 0       |
 | misc/bits                | 1     | 0      | 1      | 0       |
 | misc/ppu                 | 1     | 0      | 1      | 0       |
@@ -209,14 +209,14 @@ It intentionally skips `manual-only`, `utils`, and `madness`.
 | emulator-only/mbc2/rom_1Mb | ❌ Failed |
 | emulator-only/mbc2/rom_2Mb | ✅ Passed |
 | emulator-only/mbc2/rom_512kb | ❌ Failed |
-| emulator-only/mbc5/rom_16Mb | ❌ Failed |
-| emulator-only/mbc5/rom_1Mb | ❌ Failed |
-| emulator-only/mbc5/rom_2Mb | ❌ Failed |
+| emulator-only/mbc5/rom_16Mb | ✅ Passed |
+| emulator-only/mbc5/rom_1Mb | ✅ Passed |
+| emulator-only/mbc5/rom_2Mb | ✅ Passed |
 | emulator-only/mbc5/rom_32Mb | ✅ Passed |
-| emulator-only/mbc5/rom_4Mb | ❌ Failed |
-| emulator-only/mbc5/rom_512kb | ❌ Failed |
+| emulator-only/mbc5/rom_4Mb | ✅ Passed |
+| emulator-only/mbc5/rom_512kb | ✅ Passed |
 | emulator-only/mbc5/rom_64Mb | ✅ Passed |
-| emulator-only/mbc5/rom_8Mb | ❌ Failed |
+| emulator-only/mbc5/rom_8Mb | ✅ Passed |
 | misc/bits/unused_hwio-C | ❌ Failed |
 | misc/boot_div-A | ❌ Failed |
 | misc/boot_div-cgb0 | ❌ Failed |

@@ -4,11 +4,13 @@ use gb_emu::GB::mbc::{MBC, mbc5::MBC5};
 fn test_mbc5_rom_banking() {
     let mut rom = vec![0xFF; 512 * 1024];
     rom[0x0147] = 0x19; // MBC5
-    let mut mbc = MBC5::new(rom.clone(), 64 * 1024);
+    rom[2 * 0x4000] = 0x42;
+
+    let mut mbc = MBC5::new(rom, 64 * 1024);
     mbc.write_register(0x2000, 0x02); // ROM bank low
     mbc.write_register(0x3000, 0x01); // ROM bank high
     let val = mbc.read_rom(0x4000);
-    assert_eq!(val, 0xFF);
+    assert_eq!(val, 0x42);
 }
 
 #[test]

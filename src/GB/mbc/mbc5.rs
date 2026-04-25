@@ -18,6 +18,10 @@ impl MBC5 {
             ram_bank: 0,
         }
     }
+
+    fn rom_bank_count(&self) -> usize {
+        (self.rom.len() / 0x4000).max(1)
+    }
 }
 
 impl MBC for MBC5 {
@@ -26,7 +30,7 @@ impl MBC for MBC5 {
             0x0000..=0x3FFF => self.rom.get(address as usize).copied().unwrap_or(0xFF),
             0x4000..=0x7FFF => {
                 // MBC5 permite banco 0 em 0x4000–0x7FFF (diferente do MBC3)
-                let bank = self.rom_bank as usize;
+                let bank = self.rom_bank as usize % self.rom_bank_count();
                 let idx = bank * 0x4000 + ((address - 0x4000) as usize);
                 self.rom.get(idx).copied().unwrap_or(0xFF)
             }
