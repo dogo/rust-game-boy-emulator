@@ -1,4 +1,6 @@
 /target
+mooneye-roms/
+mooneye-roms.tmp/
 *.gb
 *.gbc
 *.sav

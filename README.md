@@ -16,7 +16,14 @@ I'm following the excellent guide at [https://aquova.net/emudev/gb/index.html](h
 
 🚧 Work in progress
 
-## Blargg Test Status
+## Test Status
+
+| Suite   | Command                    | Total | Passed | Failed | Timeout |
+|---------|----------------------------|-------|--------|--------|---------|
+| Blargg  | `./run_all_tests.sh blargg` | 52    | 52     | 0      | 0       |
+| Mooneye | `./run_all_tests.sh mooneye` | 111   | 17     | 82     | 12      |
+
+### Blargg Test Status
 
 | Test                                     | Status         |
 |------------------------------------------|----------------|
@@ -80,10 +87,172 @@ I'm following the excellent guide at [https://aquova.net/emudev/gb/index.html](h
 | 11-regs after power                      | ✅ Passed      |
 | 12-wave                                  | ✅ Passed      |
 
+### Mooneye Test Status
+
+The automated Mooneye run includes `acceptance`, `emulator-only`, and `misc`.
+It intentionally skips `manual-only`, `utils`, and `madness`.
+
+| Group                    | Total | Passed | Failed | Timeout |
+|--------------------------|-------|--------|--------|---------|
+| acceptance               | 41    | 5      | 29     | 7       |
+| acceptance/bits          | 3     | 2      | 1      | 0       |
+| acceptance/instr         | 1     | 1      | 0      | 0       |
+| acceptance/interrupts    | 1     | 0      | 1      | 0       |
+| acceptance/oam_dma       | 3     | 1      | 2      | 0       |
+| acceptance/ppu           | 12    | 0      | 12     | 0       |
+| acceptance/serial        | 1     | 0      | 1      | 0       |
+| acceptance/timer         | 13    | 1      | 12     | 0       |
+| emulator-only/mbc1       | 13    | 2      | 7      | 4       |
+| emulator-only/mbc2       | 7     | 3      | 3      | 1       |
+| emulator-only/mbc5       | 8     | 2      | 6      | 0       |
+| misc                     | 6     | 0      | 6      | 0       |
+| misc/bits                | 1     | 0      | 1      | 0       |
+| misc/ppu                 | 1     | 0      | 1      | 0       |
+
+<details>
+<summary>Full Mooneye test list</summary>
+
+| Test | Status |
+|------|--------|
+| acceptance/add_sp_e_timing | ❌ Failed |
+| acceptance/bits/mem_oam | ✅ Passed |
+| acceptance/bits/reg_f | ❌ Failed |
+| acceptance/bits/unused_hwio-GS | ✅ Passed |
+| acceptance/boot_div-dmg0 | ❌ Failed |
+| acceptance/boot_div-dmgABCmgb | ❌ Failed |
+| acceptance/boot_div-S | ❌ Failed |
+| acceptance/boot_div2-S | ❌ Failed |
+| acceptance/boot_hwio-dmg0 | ❌ Failed |
+| acceptance/boot_hwio-dmgABCmgb | ❌ Failed |
+| acceptance/boot_hwio-S | ❌ Failed |
+| acceptance/boot_regs-dmg0 | ❌ Failed |
+| acceptance/boot_regs-dmgABC | ✅ Passed |
+| acceptance/boot_regs-mgb | ❌ Failed |
+| acceptance/boot_regs-sgb | ❌ Failed |
+| acceptance/boot_regs-sgb2 | ❌ Failed |
+| acceptance/call_cc_timing | ⏱️ Timeout |
+| acceptance/call_cc_timing2 | ❌ Failed |
+| acceptance/call_timing | ⏱️ Timeout |
+| acceptance/call_timing2 | ❌ Failed |
+| acceptance/di_timing-GS | ✅ Passed |
+| acceptance/div_timing | ✅ Passed |
+| acceptance/ei_sequence | ❌ Failed |
+| acceptance/ei_timing | ❌ Failed |
+| acceptance/halt_ime0_ei | ✅ Passed |
+| acceptance/halt_ime0_nointr_timing | ❌ Failed |
+| acceptance/halt_ime1_timing | ✅ Passed |
+| acceptance/halt_ime1_timing2-GS | ❌ Failed |
+| acceptance/if_ie_registers | ❌ Failed |
+| acceptance/instr/daa | ✅ Passed |
+| acceptance/interrupts/ie_push | ❌ Failed |
+| acceptance/intr_timing | ❌ Failed |
+| acceptance/jp_cc_timing | ⏱️ Timeout |
+| acceptance/jp_timing | ⏱️ Timeout |
+| acceptance/ld_hl_sp_e_timing | ❌ Failed |
+| acceptance/oam_dma_restart | ❌ Failed |
+| acceptance/oam_dma_start | ❌ Failed |
+| acceptance/oam_dma_timing | ❌ Failed |
+| acceptance/oam_dma/basic | ✅ Passed |
+| acceptance/oam_dma/reg_read | ❌ Failed |
+| acceptance/oam_dma/sources-GS | ❌ Failed |
+| acceptance/pop_timing | ❌ Failed |
+| acceptance/ppu/hblank_ly_scx_timing-GS | ❌ Failed |
+| acceptance/ppu/intr_1_2_timing-GS | ❌ Failed |
+| acceptance/ppu/intr_2_0_timing | ❌ Failed |
+| acceptance/ppu/intr_2_mode0_timing_sprites | ❌ Failed |
+| acceptance/ppu/intr_2_mode0_timing | ❌ Failed |
+| acceptance/ppu/intr_2_mode3_timing | ❌ Failed |
+| acceptance/ppu/intr_2_oam_ok_timing | ❌ Failed |
+| acceptance/ppu/lcdon_timing-GS | ❌ Failed |
+| acceptance/ppu/lcdon_write_timing-GS | ❌ Failed |
+| acceptance/ppu/stat_irq_blocking | ❌ Failed |
+| acceptance/ppu/stat_lyc_onoff | ❌ Failed |
+| acceptance/ppu/vblank_stat_intr-GS | ❌ Failed |
+| acceptance/push_timing | ❌ Failed |
+| acceptance/rapid_di_ei | ❌ Failed |
+| acceptance/ret_cc_timing | ⏱️ Timeout |
+| acceptance/ret_timing | ⏱️ Timeout |
+| acceptance/reti_intr_timing | ❌ Failed |
+| acceptance/reti_timing | ⏱️ Timeout |
+| acceptance/rst_timing | ❌ Failed |
+| acceptance/serial/boot_sclk_align-dmgABCmgb | ❌ Failed |
+| acceptance/timer/div_write | ✅ Passed |
+| acceptance/timer/rapid_toggle | ❌ Failed |
+| acceptance/timer/tim00_div_trigger | ❌ Failed |
+| acceptance/timer/tim00 | ❌ Failed |
+| acceptance/timer/tim01_div_trigger | ❌ Failed |
+| acceptance/timer/tim01 | ❌ Failed |
+| acceptance/timer/tim10_div_trigger | ❌ Failed |
+| acceptance/timer/tim10 | ❌ Failed |
+| acceptance/timer/tim11_div_trigger | ❌ Failed |
+| acceptance/timer/tim11 | ❌ Failed |
+| acceptance/timer/tima_reload | ❌ Failed |
+| acceptance/timer/tima_write_reloading | ❌ Failed |
+| acceptance/timer/tma_write_reloading | ❌ Failed |
+| emulator-only/mbc1/bits_bank1 | ✅ Passed |
+| emulator-only/mbc1/bits_bank2 | ⏱️ Timeout |
+| emulator-only/mbc1/bits_mode | ⏱️ Timeout |
+| emulator-only/mbc1/bits_ramg | ✅ Passed |
+| emulator-only/mbc1/multicart_rom_8Mb | ❌ Failed |
+| emulator-only/mbc1/ram_256kb | ⏱️ Timeout |
+| emulator-only/mbc1/ram_64kb | ⏱️ Timeout |
+| emulator-only/mbc1/rom_16Mb | ❌ Failed |
+| emulator-only/mbc1/rom_1Mb | ❌ Failed |
+| emulator-only/mbc1/rom_2Mb | ❌ Failed |
+| emulator-only/mbc1/rom_4Mb | ❌ Failed |
+| emulator-only/mbc1/rom_512kb | ❌ Failed |
+| emulator-only/mbc1/rom_8Mb | ❌ Failed |
+| emulator-only/mbc2/bits_ramg | ✅ Passed |
+| emulator-only/mbc2/bits_romb | ✅ Passed |
+| emulator-only/mbc2/bits_unused | ⏱️ Timeout |
+| emulator-only/mbc2/ram | ❌ Failed |
+| emulator-only/mbc2/rom_1Mb | ❌ Failed |
+| emulator-only/mbc2/rom_2Mb | ✅ Passed |
+| emulator-only/mbc2/rom_512kb | ❌ Failed |
+| emulator-only/mbc5/rom_16Mb | ❌ Failed |
+| emulator-only/mbc5/rom_1Mb | ❌ Failed |
+| emulator-only/mbc5/rom_2Mb | ❌ Failed |
+| emulator-only/mbc5/rom_32Mb | ✅ Passed |
+| emulator-only/mbc5/rom_4Mb | ❌ Failed |
+| emulator-only/mbc5/rom_512kb | ❌ Failed |
+| emulator-only/mbc5/rom_64Mb | ✅ Passed |
+| emulator-only/mbc5/rom_8Mb | ❌ Failed |
+| misc/bits/unused_hwio-C | ❌ Failed |
+| misc/boot_div-A | ❌ Failed |
+| misc/boot_div-cgb0 | ❌ Failed |
+| misc/boot_div-cgbABCDE | ❌ Failed |
+| misc/boot_hwio-C | ❌ Failed |
+| misc/boot_regs-A | ❌ Failed |
+| misc/boot_regs-cgb | ❌ Failed |
+| misc/ppu/vblank_stat_intr-C | ❌ Failed |
+
+</details>
+
 The headless test runner supports Blargg's memory output protocol at `$A000`.
 It streams the text buffer at `$A004` incrementally, which lets verbose ROMs
 such as `oam_bug/rom_singles/7-timing_effect.gb` finish without overflowing the
 cartridge RAM text buffer.
+
+## Mooneye Test ROMs
+
+The `mooneye-test-suite` submodule tracks the official test sources. The upstream
+repository does not commit compiled `.gb` files, so fetch the matching official
+prebuilt package with:
+
+```sh
+./scripts/fetch_mooneye_roms.sh
+```
+
+This extracts the ROMs into `mooneye-roms/`, which is intentionally ignored by
+Git.
+
+Run a specific test suite with:
+
+```sh
+./run_all_tests.sh blargg
+./run_all_tests.sh mooneye
+./run_all_tests.sh all
+```
 
 ## Resources
 

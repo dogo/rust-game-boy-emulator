@@ -128,6 +128,29 @@ fn serial_result(serial_output: &str) -> Option<TestResult> {
     }
 }
 
+fn mooneye_result(cpu: &CPU, opcode: u8) -> Option<TestResult> {
+    if opcode != 0x40 {
+        return None;
+    }
+
+    let regs = [
+        cpu.registers.get_b(),
+        cpu.registers.get_c(),
+        cpu.registers.get_d(),
+        cpu.registers.get_e(),
+        cpu.registers.get_h(),
+        cpu.registers.get_l(),
+    ];
+
+    if regs == [3, 5, 8, 13, 21, 34] {
+        Some(TestResult::Passed)
+    } else if regs == [0x42; 6] {
+        Some(TestResult::Failed(0x42))
+    } else {
+        None
+    }
+}
+
 fn memory_result(
     cpu: &mut CPU,
     memory_output: &mut BlarggMemoryOutput,
@@ -169,6 +192,11 @@ pub fn run(cpu: &mut CPU) -> TestResult {
     const FINAL_CHECK_INTERVAL: u64 = 1_000_000; // Intensifica checks só perto do limite
 
     loop {
+        let opcode = cpu.bus.read(cpu.registers.get_pc());
+        if let Some(result) = mooneye_result(cpu, opcode) {
+            return result;
+        }
+
         // Executa uma instrução
         let (cycles, _) = cpu.execute_next();
         instruction_count += 1;
