@@ -16,7 +16,7 @@ pub struct CPU {
 
 impl CPU {
     pub fn new(rom: Vec<u8>) -> Self {
-        let is_cgb = crate::GB::cartridge::is_cgb_rom(&rom);
+        let is_cgb = crate::GB::cartridge::is_cgb_only_rom(&rom);
         let mbc = crate::GB::mbc::create_mbc(rom);
         let mut cpu = CPU {
             registers: registers::Registers::new(),
@@ -30,7 +30,9 @@ impl CPU {
             cycles: 0,
         };
 
-        // Configurar modo CGB baseado no tipo de ROM
+        // O core gráfico ainda é DMG-only. ROMs CGB-compatible (flag 0x80)
+        // devem iniciar no caminho DMG; caso contrário elas tentam usar VRAM
+        // banks, tile attributes e paletas CGB que ainda não existem aqui.
         cpu.bus.set_cgb_mode(is_cgb);
         cpu
     }

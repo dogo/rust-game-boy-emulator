@@ -47,11 +47,16 @@ pub fn get_title(data: &[u8]) -> String {
     title
 }
 
-/// Detecta se a ROM é Game Boy Color baseada na flag CGB (0x143)
+/// Detecta se a ROM tem suporte a Game Boy Color baseado na flag CGB (0x143)
 pub fn is_cgb_rom(data: &[u8]) -> bool {
     let cgb_flag = data.get(0x143).copied().unwrap_or(0x00);
     // 0x80 = CGB compatible, 0xC0 = CGB only
     (cgb_flag & 0x80) != 0
+}
+
+/// Detecta ROMs que exigem Game Boy Color e não têm modo DMG compatível.
+pub fn is_cgb_only_rom(data: &[u8]) -> bool {
+    data.get(0x143).copied().unwrap_or(0x00) == 0xC0
 }
 
 /// Retorna o nome do tipo de cartucho

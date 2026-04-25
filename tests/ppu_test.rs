@@ -364,6 +364,7 @@ mod ppu_tests {
     fn test_sprite_flip_horizontal() {
         let mut ppu = PPU::new();
         ppu.lcdc = 0x93;
+        ppu.oam = [0; 160];
 
         // Tile assimétrico: 11110000
         ppu.vram[16] = 0xF0;
