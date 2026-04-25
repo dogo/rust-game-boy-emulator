@@ -21,7 +21,7 @@ I'm following the excellent guide at [https://aquova.net/emudev/gb/index.html](h
 | Suite   | Command                    | Total | Passed | Failed | Timeout |
 |---------|----------------------------|-------|--------|--------|---------|
 | Blargg  | `./run_all_tests.sh blargg` | 52    | 52     | 0      | 0       |
-| Mooneye | `./run_all_tests.sh mooneye` | 111   | 39     | 60     | 12      |
+| Mooneye | `./run_all_tests.sh mooneye` | 111   | 43     | 57     | 11      |
 
 ### Blargg Test Status
 
@@ -103,7 +103,7 @@ It intentionally skips `manual-only`, `utils`, and `madness`.
 | acceptance/serial        | 1     | 0      | 1      | 0       |
 | acceptance/timer         | 13    | 10     | 3      | 0       |
 | emulator-only/mbc1       | 13    | 2      | 7      | 4       |
-| emulator-only/mbc2       | 7     | 3      | 3      | 1       |
+| emulator-only/mbc2       | 7     | 7      | 0      | 0       |
 | emulator-only/mbc5       | 8     | 8      | 0      | 0       |
 | misc                     | 6     | 0      | 6      | 0       |
 | misc/bits                | 1     | 0      | 1      | 0       |
@@ -204,11 +204,11 @@ It intentionally skips `manual-only`, `utils`, and `madness`.
 | emulator-only/mbc1/rom_8Mb | ❌ Failed |
 | emulator-only/mbc2/bits_ramg | ✅ Passed |
 | emulator-only/mbc2/bits_romb | ✅ Passed |
-| emulator-only/mbc2/bits_unused | ⏱️ Timeout |
-| emulator-only/mbc2/ram | ❌ Failed |
-| emulator-only/mbc2/rom_1Mb | ❌ Failed |
+| emulator-only/mbc2/bits_unused | ✅ Passed |
+| emulator-only/mbc2/ram | ✅ Passed |
+| emulator-only/mbc2/rom_1Mb | ✅ Passed |
 | emulator-only/mbc2/rom_2Mb | ✅ Passed |
-| emulator-only/mbc2/rom_512kb | ❌ Failed |
+| emulator-only/mbc2/rom_512kb | ✅ Passed |
 | emulator-only/mbc5/rom_16Mb | ✅ Passed |
 | emulator-only/mbc5/rom_1Mb | ✅ Passed |
 | emulator-only/mbc5/rom_2Mb | ✅ Passed |
