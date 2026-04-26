@@ -21,7 +21,7 @@ I'm following the excellent guide at [https://aquova.net/emudev/gb/index.html](h
 | Suite   | Command                    | Total | Passed | Failed | Timeout |
 |---------|----------------------------|-------|--------|--------|---------|
 | Blargg  | `./run_all_tests.sh blargg` | 52    | 52     | 0      | 0       |
-| Mooneye | `./run_all_tests.sh mooneye` | 111   | 60     | 44     | 7       |
+| Mooneye | `./run_all_tests.sh mooneye` | 111   | 62     | 42     | 7       |
 
 ### Blargg Test Status
 
@@ -94,7 +94,7 @@ It intentionally skips `manual-only`, `utils`, and `madness`.
 
 | Group                    | Total | Passed | Failed | Timeout |
 |--------------------------|-------|--------|--------|---------|
-| acceptance               | 41    | 13     | 21     | 7       |
+| acceptance               | 41    | 15     | 19     | 7       |
 | acceptance/bits          | 3     | 3      | 0      | 0       |
 | acceptance/instr         | 1     | 1      | 0      | 0       |
 | acceptance/interrupts    | 1     | 1      | 0      | 0       |
@@ -114,7 +114,7 @@ It intentionally skips `manual-only`, `utils`, and `madness`.
 
 | Test | Status |
 |------|--------|
-| acceptance/add_sp_e_timing | ❌ Failed |
+| acceptance/add_sp_e_timing | ✅ Passed |
 | acceptance/bits/mem_oam | ✅ Passed |
 | acceptance/bits/reg_f | ✅ Passed |
 | acceptance/bits/unused_hwio-GS | ✅ Passed |
@@ -148,7 +148,7 @@ It intentionally skips `manual-only`, `utils`, and `madness`.
 | acceptance/intr_timing | ✅ Passed |
 | acceptance/jp_cc_timing | ⏱️ Timeout |
 | acceptance/jp_timing | ⏱️ Timeout |
-| acceptance/ld_hl_sp_e_timing | ❌ Failed |
+| acceptance/ld_hl_sp_e_timing | ✅ Passed |
 | acceptance/oam_dma_restart | ❌ Failed |
 | acceptance/oam_dma_start | ❌ Failed |
 | acceptance/oam_dma_timing | ❌ Failed |

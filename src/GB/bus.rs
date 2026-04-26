@@ -27,6 +27,7 @@ pub struct MemoryBus {
     oam_dma_index: u8,
     oam_dma_cycles: u32,
     oam_dma_value: u8, // Último valor escrito em FF46
+    oam_dma_finishing: bool,
 
     // ===== Serial =====
     serial_sb: u8,                     // FF01 - Serial Transfer Data
@@ -142,6 +143,7 @@ impl MemoryBus {
             oam_dma_index: 0,
             oam_dma_cycles: 0,
             oam_dma_value: 0xFF,
+            oam_dma_finishing: false,
             serial_sb: 0x00,
             serial_sc: 0x7E, // bits não usados em 1
             serial_transfer_active: false,
@@ -164,6 +166,9 @@ impl MemoryBus {
 
     pub fn read(&self, address: u16) -> u8 {
         // 🔒 Durante DMA de OAM, a CPU só pode acessar HRAM/IE
+        if self.oam_dma_finishing && (0xFE00..=0xFE9F).contains(&address) {
+            return 0xFF;
+        }
         if self.oam_dma_active && !self.dma_cpu_can_access(address) {
             return 0xFF;
         }
@@ -237,6 +242,9 @@ impl MemoryBus {
 
     pub fn write(&mut self, address: u16, value: u8) {
         // 🔒 Durante DMA de OAM, a CPU só pode escrever em HRAM/IE
+        if self.oam_dma_finishing && (0xFE00..=0xFE9F).contains(&address) {
+            return;
+        }
         if self.oam_dma_active && !self.dma_cpu_can_access(address) {
             // Escrita ignorada
             return;
@@ -388,6 +396,7 @@ impl MemoryBus {
         self.oam_dma_index = 0;
         self.oam_dma_cycles = 0;
         self.oam_dma_active = true;
+        self.oam_dma_finishing = false;
     }
 
     /// Lê um byte da fonte do DMA sem causar efeitos colaterais extras.
@@ -411,6 +420,14 @@ impl MemoryBus {
 
     /// Avança OAM DMA consumindo `cycles` da CPU.
     fn step_oam_dma(&mut self, cycles: u32) {
+        if self.oam_dma_finishing {
+            self.oam_dma_cycles = self.oam_dma_cycles.saturating_add(cycles);
+            if self.oam_dma_cycles >= 8 {
+                self.oam_dma_cycles = 0;
+                self.oam_dma_finishing = false;
+            }
+            return;
+        }
         if !self.oam_dma_active {
             return;
         }
@@ -425,6 +442,8 @@ impl MemoryBus {
         }
         if self.oam_dma_index >= 160 {
             self.oam_dma_active = false;
+            self.oam_dma_cycles = 0;
+            self.oam_dma_finishing = true;
         }
     }
 
