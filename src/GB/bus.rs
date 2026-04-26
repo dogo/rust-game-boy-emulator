@@ -28,6 +28,8 @@ pub struct MemoryBus {
     oam_dma_cycles: u32,
     oam_dma_value: u8, // Último valor escrito em FF46
     oam_dma_finishing: bool,
+    oam_dma_block_delay: u32,
+    oam_dma_startup_oam: [u8; 160],
     oam_dma_pending_src: Option<u16>,
     oam_dma_pending_cycles: u32,
 
@@ -146,6 +148,8 @@ impl MemoryBus {
             oam_dma_cycles: 0,
             oam_dma_value: 0xFF,
             oam_dma_finishing: false,
+            oam_dma_block_delay: 0,
+            oam_dma_startup_oam: [0; 160],
             oam_dma_pending_src: None,
             oam_dma_pending_cycles: 0,
             serial_sb: 0x00,
@@ -172,6 +176,12 @@ impl MemoryBus {
         // 🔒 Durante DMA de OAM, a CPU só pode acessar HRAM/IE
         if self.oam_dma_finishing && (0xFE00..=0xFE9F).contains(&address) {
             return 0xFF;
+        }
+        if self.oam_dma_active
+            && self.oam_dma_block_delay > 0
+            && (0xFE00..=0xFE9F).contains(&address)
+        {
+            return self.oam_dma_startup_oam[(address - 0xFE00) as usize];
         }
         if self.oam_dma_active && !self.dma_cpu_can_access(address) {
             return 0xFF;
@@ -396,8 +406,18 @@ impl MemoryBus {
     /// Inicia uma transferência OAM DMA a partir de `value << 8`
     pub fn start_oam_dma(&mut self, value: u8) {
         let src = (value as u16) << 8;
-        self.oam_dma_pending_src = Some(src);
-        self.oam_dma_pending_cycles = 0;
+        if self.oam_dma_active || self.oam_dma_finishing || self.oam_dma_pending_src.is_some() {
+            self.oam_dma_pending_src = Some(src);
+            self.oam_dma_pending_cycles = 0;
+        } else {
+            self.oam_dma_src = src;
+            self.oam_dma_index = 0;
+            self.oam_dma_cycles = 0;
+            self.oam_dma_active = true;
+            self.oam_dma_finishing = false;
+            self.oam_dma_block_delay = 8;
+            self.oam_dma_startup_oam = self.ppu.oam;
+        }
     }
 
     /// Lê um byte da fonte do DMA sem causar efeitos colaterais extras.
@@ -446,6 +466,7 @@ impl MemoryBus {
             }
             return;
         }
+        self.oam_dma_block_delay = self.oam_dma_block_delay.saturating_sub(cycles);
         self.oam_dma_cycles = self.oam_dma_cycles.saturating_add(cycles);
         while self.oam_dma_cycles >= 4 && self.oam_dma_index < 160 {
             self.oam_dma_cycles -= 4;
@@ -459,6 +480,7 @@ impl MemoryBus {
             self.oam_dma_active = false;
             self.oam_dma_cycles = 0;
             self.oam_dma_finishing = true;
+            self.oam_dma_block_delay = 0;
         }
         if pending_ready {
             self.activate_pending_oam_dma();
@@ -472,6 +494,7 @@ impl MemoryBus {
             self.oam_dma_cycles = 0;
             self.oam_dma_active = true;
             self.oam_dma_finishing = false;
+            self.oam_dma_block_delay = 0;
             self.oam_dma_pending_cycles = 0;
         }
     }

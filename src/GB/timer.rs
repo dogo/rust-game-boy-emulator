@@ -13,16 +13,16 @@ pub struct TimerEvents {
 }
 
 pub struct Timer {
-    div_counter: u16,            // Contador interno que incrementa a cada T-cycle
-    last_div_bit: bool,          // Para detectar edges no bit do APU
-    m_cycle_offset: u32,         // Rastreia offset dentro do M-cycle atual (0-3)
+    div_counter: u16,                 // Contador interno que incrementa a cada T-cycle
+    last_div_bit: bool,               // Para detectar edges no bit do APU
+    m_cycle_offset: u32,              // Rastreia offset dentro do M-cycle atual (0-3)
     tima_written_in_delay: bool, // Flag: TIMA foi escrito durante o período de delay (4 T-cycles)
     suppress_until: Option<u16>, // Prazo (valor do div_counter) para suprimir bordas de descida após escrita no TIMA
     prev_tima_bit: bool,         // Estado anterior do bit selecionado para detectar falling edges
     reload_pending: Option<u16>, // Valor de temp_counter em que o reload deve disparar (temp_counter + 4)
     tima_reloading: bool,        // true durante os 4 T-cycles entre overflow e reload
     tima_reloaded_until: Option<u16>, // Ciclo em que TIMA está copiando TMA e escritas em TIMA são ignoradas
-    tma_reg: u8,                 // Valor atual de TMA (atualizado quando CPU escreve em TMA)
+    tma_reg: u8,                      // Valor atual de TMA (atualizado quando CPU escreve em TMA)
 }
 
 impl Timer {

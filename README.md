@@ -21,7 +21,7 @@ I'm following the excellent guide at [https://aquova.net/emudev/gb/index.html](h
 | Suite   | Command                    | Total | Passed | Failed | Timeout |
 |---------|----------------------------|-------|--------|--------|---------|
 | Blargg  | `./run_all_tests.sh blargg` | 52    | 52     | 0      | 0       |
-| Mooneye | `./run_all_tests.sh mooneye` | 111   | 64     | 40     | 7       |
+| Mooneye | `./run_all_tests.sh mooneye` | 111   | 65     | 39     | 7       |
 
 ### Blargg Test Status
 
@@ -94,7 +94,7 @@ It intentionally skips `manual-only`, `utils`, and `madness`.
 
 | Group                    | Total | Passed | Failed | Timeout |
 |--------------------------|-------|--------|--------|---------|
-| acceptance               | 41    | 17     | 17     | 7       |
+| acceptance               | 41    | 18     | 16     | 7       |
 | acceptance/bits          | 3     | 3      | 0      | 0       |
 | acceptance/instr         | 1     | 1      | 0      | 0       |
 | acceptance/interrupts    | 1     | 1      | 0      | 0       |
@@ -151,7 +151,7 @@ It intentionally skips `manual-only`, `utils`, and `madness`.
 | acceptance/ld_hl_sp_e_timing | ✅ Passed |
 | acceptance/oam_dma_restart | ❌ Failed |
 | acceptance/oam_dma_start | ✅ Passed |
-| acceptance/oam_dma_timing | ❌ Failed |
+| acceptance/oam_dma_timing | ✅ Passed |
 | acceptance/oam_dma/basic | ✅ Passed |
 | acceptance/oam_dma/reg_read | ✅ Passed |
 | acceptance/oam_dma/sources-GS | ❌ Failed |
