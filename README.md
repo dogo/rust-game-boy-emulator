@@ -21,7 +21,7 @@ I'm following the excellent guide at [https://aquova.net/emudev/gb/index.html](h
 | Suite   | Command                    | Total | Passed | Failed | Timeout |
 |---------|----------------------------|-------|--------|--------|---------|
 | Blargg  | `./run_all_tests.sh blargg` | 52    | 52     | 0      | 0       |
-| Mooneye | `./run_all_tests.sh mooneye` | 111   | 71     | 33     | 7       |
+| Mooneye | `./run_all_tests.sh mooneye` | 111   | 73     | 31     | 7       |
 
 ### Blargg Test Status
 
@@ -94,7 +94,7 @@ It intentionally skips `manual-only`, `utils`, and `madness`.
 
 | Group                    | Total | Passed | Failed | Timeout |
 |--------------------------|-------|--------|--------|---------|
-| acceptance               | 41    | 24     | 10     | 7       |
+| acceptance               | 41    | 26     | 8      | 7       |
 | acceptance/bits          | 3     | 3      | 0      | 0       |
 | acceptance/instr         | 1     | 1      | 0      | 0       |
 | acceptance/interrupts    | 1     | 1      | 0      | 0       |
@@ -131,9 +131,9 @@ It intentionally skips `manual-only`, `utils`, and `madness`.
 | acceptance/boot_regs-sgb | ❌ Failed |
 | acceptance/boot_regs-sgb2 | ❌ Failed |
 | acceptance/call_cc_timing | ⏱️ Timeout |
-| acceptance/call_cc_timing2 | ❌ Failed |
+| acceptance/call_cc_timing2 | ✅ Passed |
 | acceptance/call_timing | ⏱️ Timeout |
-| acceptance/call_timing2 | ❌ Failed |
+| acceptance/call_timing2 | ✅ Passed |
 | acceptance/di_timing-GS | ✅ Passed |
 | acceptance/div_timing | ✅ Passed |
 | acceptance/ei_sequence | ✅ Passed |

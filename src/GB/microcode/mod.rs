@@ -1033,6 +1033,7 @@ pub fn execute(program: &MicroProgram, regs: &mut Registers, bus: &mut MemoryBus
                 regs.set_pc(regs.get_pc().wrapping_add(1));
                 let addr = (hi << 8) | lo;
                 let pc_to_push = regs.get_pc();
+                bus.cpu_idle(4);
                 // Empilha PC
                 let mut sp = regs.get_sp();
                 sp = sp.wrapping_sub(1);
@@ -1040,7 +1041,6 @@ pub fn execute(program: &MicroProgram, regs: &mut Registers, bus: &mut MemoryBus
                 sp = sp.wrapping_sub(1);
                 bus.cpu_write(sp, (pc_to_push & 0xFF) as u8);
                 regs.set_sp(sp);
-                bus.cpu_idle(4); // 4 ciclos adicionais
                 regs.set_pc(addr);
             }
             MicroAction::CallAbsoluteConditional { cond } => {
@@ -1059,6 +1059,7 @@ pub fn execute(program: &MicroProgram, regs: &mut Registers, bus: &mut MemoryBus
                 };
                 if cond_true {
                     let pc_to_push = regs.get_pc();
+                    bus.cpu_idle(4);
                     // Empilha PC
                     let mut sp = regs.get_sp();
                     sp = sp.wrapping_sub(1);
@@ -1066,7 +1067,6 @@ pub fn execute(program: &MicroProgram, regs: &mut Registers, bus: &mut MemoryBus
                     sp = sp.wrapping_sub(1);
                     bus.cpu_write(sp, (pc_to_push & 0xFF) as u8);
                     regs.set_sp(sp);
-                    bus.cpu_idle(4); // 4 ciclos adicionais
                     regs.set_pc(addr);
                 }
                 // Se condição falsa, 12 ciclos totais (4 fetch + 4 lo + 4 hi)
