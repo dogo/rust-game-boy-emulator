@@ -425,11 +425,17 @@ pub fn run(cpu: &mut CPU) {
     let (resp_tx, resp_rx) = mpsc::channel::<DebugResponse>();
 
     let scale = 3u32;
-    let window = video
+    let mut window = video
         .window("GB Emulator", 160 * scale, 144 * scale)
         .position_centered()
         .build()
         .expect("Falha ao criar janela");
+
+    // Define o ícone da janela
+    if let Ok(icon) = sdl3::surface::Surface::load_bmp("icon.bmp") {
+        window.set_icon(&icon);
+    }
+
     let mut canvas = window.into_canvas();
 
     let texture_creator = canvas.texture_creator();
