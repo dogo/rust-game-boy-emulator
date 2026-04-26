@@ -172,7 +172,7 @@ impl CPU {
             }
         }
 
-        let enable_ime_after_instruction = self.ime_enable_next;
+        let mut enable_ime_after_instruction = self.ime_enable_next;
         self.ime_enable_next = false;
 
         if self.service_interrupts_with_ime(self.ime) {
@@ -227,6 +227,7 @@ impl CPU {
             0xF3 => {
                 self.ime = false;
                 self.ime_enable_next = false;
+                enable_ime_after_instruction = false;
             }
             0xFB => {
                 if !enable_ime_after_instruction {

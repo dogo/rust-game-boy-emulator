@@ -21,7 +21,7 @@ I'm following the excellent guide at [https://aquova.net/emudev/gb/index.html](h
 | Suite   | Command                    | Total | Passed | Failed | Timeout |
 |---------|----------------------------|-------|--------|--------|---------|
 | Blargg  | `./run_all_tests.sh blargg` | 52    | 52     | 0      | 0       |
-| Mooneye | `./run_all_tests.sh mooneye` | 111   | 67     | 37     | 7       |
+| Mooneye | `./run_all_tests.sh mooneye` | 111   | 68     | 36     | 7       |
 
 ### Blargg Test Status
 
@@ -94,7 +94,7 @@ It intentionally skips `manual-only`, `utils`, and `madness`.
 
 | Group                    | Total | Passed | Failed | Timeout |
 |--------------------------|-------|--------|--------|---------|
-| acceptance               | 41    | 20     | 14     | 7       |
+| acceptance               | 41    | 21     | 13     | 7       |
 | acceptance/bits          | 3     | 3      | 0      | 0       |
 | acceptance/instr         | 1     | 1      | 0      | 0       |
 | acceptance/interrupts    | 1     | 1      | 0      | 0       |
@@ -169,7 +169,7 @@ It intentionally skips `manual-only`, `utils`, and `madness`.
 | acceptance/ppu/stat_lyc_onoff | ❌ Failed |
 | acceptance/ppu/vblank_stat_intr-GS | ❌ Failed |
 | acceptance/push_timing | ❌ Failed |
-| acceptance/rapid_di_ei | ❌ Failed |
+| acceptance/rapid_di_ei | ✅ Passed |
 | acceptance/ret_cc_timing | ⏱️ Timeout |
 | acceptance/ret_timing | ⏱️ Timeout |
 | acceptance/reti_intr_timing | ❌ Failed |
