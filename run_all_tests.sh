@@ -111,6 +111,7 @@ run_section_recursive() {
 }
 
 run_blargg() {
+    echo ""
     echo "=========================================="
     echo -e "${BOLD}Testes Blargg — $(date '+%H:%M:%S')${NC}"
     echo "=========================================="
@@ -139,7 +140,7 @@ run_mooneye() {
         echo "Rode: ./scripts/fetch_mooneye_roms.sh" >&2
         exit 2
     fi
-
+    echo ""
     echo "=========================================="
     echo -e "${BOLD}Testes Mooneye — $(date '+%H:%M:%S')${NC}"
     echo "=========================================="
