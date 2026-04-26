@@ -21,7 +21,7 @@ I'm following the excellent guide at [https://aquova.net/emudev/gb/index.html](h
 | Suite   | Command                    | Total | Passed | Failed | Timeout |
 |---------|----------------------------|-------|--------|--------|---------|
 | Blargg  | `./run_all_tests.sh blargg` | 52    | 52     | 0      | 0       |
-| Mooneye | `./run_all_tests.sh mooneye` | 111   | 57     | 47     | 7       |
+| Mooneye | `./run_all_tests.sh mooneye` | 111   | 58     | 46     | 7       |
 
 ### Blargg Test Status
 
@@ -97,7 +97,7 @@ It intentionally skips `manual-only`, `utils`, and `madness`.
 | acceptance               | 41    | 11     | 23     | 7       |
 | acceptance/bits          | 3     | 3      | 0      | 0       |
 | acceptance/instr         | 1     | 1      | 0      | 0       |
-| acceptance/interrupts    | 1     | 0      | 1      | 0       |
+| acceptance/interrupts    | 1     | 1      | 0      | 0       |
 | acceptance/oam_dma       | 3     | 1      | 2      | 0       |
 | acceptance/ppu           | 12    | 0      | 12     | 0       |
 | acceptance/serial        | 1     | 0      | 1      | 0       |
@@ -144,7 +144,7 @@ It intentionally skips `manual-only`, `utils`, and `madness`.
 | acceptance/halt_ime1_timing2-GS | ✅ Passed |
 | acceptance/if_ie_registers | ✅ Passed |
 | acceptance/instr/daa | ✅ Passed |
-| acceptance/interrupts/ie_push | ❌ Failed |
+| acceptance/interrupts/ie_push | ✅ Passed |
 | acceptance/intr_timing | ✅ Passed |
 | acceptance/jp_cc_timing | ⏱️ Timeout |
 | acceptance/jp_timing | ⏱️ Timeout |

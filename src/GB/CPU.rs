@@ -274,18 +274,6 @@ impl CPU {
             return false;
         }
 
-        let (vector, mask) = if (pending & 0x01) != 0 {
-            (0x0040u16, 0x01u8)
-        } else if (pending & 0x02) != 0 {
-            (0x0048u16, 0x02u8)
-        } else if (pending & 0x04) != 0 {
-            (0x0050u16, 0x04u8)
-        } else if (pending & 0x08) != 0 {
-            (0x0058u16, 0x08u8)
-        } else {
-            (0x0060u16, 0x10u8)
-        };
-
         let old_pc = self.registers.get_pc();
 
         // ISR leva exatamente 20 T-cycles (5 M-cycles):
@@ -298,6 +286,15 @@ impl CPU {
         let mut sp = self.registers.get_sp().wrapping_sub(1);
         self.registers.set_sp(sp);
         self.bus.cpu_write(sp, (old_pc >> 8) as u8);
+
+        let pending_after_high_push = self.bus.get_ie() & self.bus.get_if() & 0x1F;
+        let Some((vector, mask)) = Self::select_interrupt(pending_after_high_push) else {
+            self.bus.tick(8);
+            self.registers.set_pc(0x0000);
+            self.ime = false;
+            self.cycles += 20;
+            return true;
+        };
 
         sp = self.registers.get_sp().wrapping_sub(1);
         self.registers.set_sp(sp);
@@ -312,5 +309,21 @@ impl CPU {
         self.cycles += 20;
 
         true
+    }
+
+    fn select_interrupt(pending: u8) -> Option<(u16, u8)> {
+        if (pending & 0x01) != 0 {
+            Some((0x0040, 0x01))
+        } else if (pending & 0x02) != 0 {
+            Some((0x0048, 0x02))
+        } else if (pending & 0x04) != 0 {
+            Some((0x0050, 0x04))
+        } else if (pending & 0x08) != 0 {
+            Some((0x0058, 0x08))
+        } else if (pending & 0x10) != 0 {
+            Some((0x0060, 0x10))
+        } else {
+            None
+        }
     }
 }
