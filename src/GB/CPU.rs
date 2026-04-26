@@ -172,12 +172,8 @@ impl CPU {
             }
         }
 
-        // IME é habilitado ANTES de verificar interrupções
-        // Se ime_enable_next está true, IME será habilitado agora (após a última instrução)
-        if self.ime_enable_next {
-            self.ime = true;
-            self.ime_enable_next = false;
-        }
+        let enable_ime_after_instruction = self.ime_enable_next;
+        self.ime_enable_next = false;
 
         if self.service_interrupts_with_ime(self.ime) {
             return (20, false);
@@ -230,9 +226,12 @@ impl CPU {
         match opcode {
             0xF3 => {
                 self.ime = false;
+                self.ime_enable_next = false;
             }
             0xFB => {
-                self.ime_enable_next = true;
+                if !enable_ime_after_instruction {
+                    self.ime_enable_next = true;
+                }
             }
             0x76 => {
                 let if_reg = self.bus.read(0xFF0F);
@@ -262,6 +261,9 @@ impl CPU {
                 self.ime = true;
             }
             _ => {}
+        }
+        if enable_ime_after_instruction {
+            self.ime = true;
         }
 
         (cycles, unknown)
