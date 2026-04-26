@@ -141,7 +141,7 @@ impl MemoryBus {
             oam_dma_src: 0,
             oam_dma_index: 0,
             oam_dma_cycles: 0,
-            oam_dma_value: 0,
+            oam_dma_value: 0xFF,
             serial_sb: 0x00,
             serial_sc: 0x7E, // bits não usados em 1
             serial_transfer_active: false,

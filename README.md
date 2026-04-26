@@ -21,7 +21,7 @@ I'm following the excellent guide at [https://aquova.net/emudev/gb/index.html](h
 | Suite   | Command                    | Total | Passed | Failed | Timeout |
 |---------|----------------------------|-------|--------|--------|---------|
 | Blargg  | `./run_all_tests.sh blargg` | 52    | 52     | 0      | 0       |
-| Mooneye | `./run_all_tests.sh mooneye` | 111   | 59     | 45     | 7       |
+| Mooneye | `./run_all_tests.sh mooneye` | 111   | 60     | 44     | 7       |
 
 ### Blargg Test Status
 
@@ -94,7 +94,7 @@ It intentionally skips `manual-only`, `utils`, and `madness`.
 
 | Group                    | Total | Passed | Failed | Timeout |
 |--------------------------|-------|--------|--------|---------|
-| acceptance               | 41    | 12     | 22     | 7       |
+| acceptance               | 41    | 13     | 21     | 7       |
 | acceptance/bits          | 3     | 3      | 0      | 0       |
 | acceptance/instr         | 1     | 1      | 0      | 0       |
 | acceptance/interrupts    | 1     | 1      | 0      | 0       |
@@ -123,7 +123,7 @@ It intentionally skips `manual-only`, `utils`, and `madness`.
 | acceptance/boot_div-S | ❌ Failed |
 | acceptance/boot_div2-S | ❌ Failed |
 | acceptance/boot_hwio-dmg0 | ❌ Failed |
-| acceptance/boot_hwio-dmgABCmgb | ❌ Failed |
+| acceptance/boot_hwio-dmgABCmgb | ✅ Passed |
 | acceptance/boot_hwio-S | ❌ Failed |
 | acceptance/boot_regs-dmg0 | ❌ Failed |
 | acceptance/boot_regs-dmgABC | ✅ Passed |

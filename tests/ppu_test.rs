@@ -399,6 +399,7 @@ mod ppu_tests {
     fn test_sprite_priority() {
         let mut ppu = PPU::new();
         ppu.lcdc = 0x93;
+        ppu.oam.fill(0);
 
         // Preencher background com cor 2 e marcar como opaco no bg_priority
         for i in 0..160 {

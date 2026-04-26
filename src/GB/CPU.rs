@@ -73,10 +73,11 @@ impl CPU {
 
         // IO registers pós-boot (valores DMG)
         // DIV deve ser setado POR ÚLTIMO pois writes consomem ciclos
+        self.bus.write(0xFF00, 0x00); // P1
         self.bus.write(0xFF05, 0x00); // TIMA
         self.bus.write(0xFF06, 0x00); // TMA
         self.bus.write(0xFF07, 0xF8); // TAC
-        self.bus.write(0xFF0F, 0x00); // IF - sem interrupções pendentes
+        self.bus.write(0xFF0F, 0x01); // IF - VBlank pendente após boot DMG
         self.bus.write(0xFFFF, 0x00); // IE
         self.bus.write(0xFF10, 0x80); // NR10
         self.bus.write(0xFF11, 0xBF); // NR11
@@ -115,6 +116,12 @@ impl CPU {
         self.bus.write(0xFF49, 0xFF); // OBP1
         self.bus.write(0xFF4A, 0x00); // WY
         self.bus.write(0xFF4B, 0x00); // WX
+
+        // Snapshot observado ao sair da boot ROM DMG/MGB.
+        self.bus.ppu.mode = 0;
+        self.bus.ppu.mode_clock = 0;
+        self.bus.ppu.ly = 0x00;
+        self.bus.ppu.stat = 0x00;
 
         // Boot ROM do DMG termina com div_counter = 0xABCC (valor exato do hardware)
         self.bus.set_div_counter(0xABCC);
