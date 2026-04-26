@@ -590,7 +590,7 @@ impl MemoryBus {
         // Em modo external clock (slave), a transferência é controlada externamente
         if self.serial_clock_source {
             self.serial_transfer_active = true;
-            self.serial_transfer_cycles = 0;
+            self.serial_transfer_cycles = (self.timer.get_div_counter() & 0x01FF) as u32;
             // Guarda o byte que será transmitido
             self.serial_last_transmitted = self.serial_sb;
         }

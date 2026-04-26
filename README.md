@@ -21,7 +21,7 @@ I'm following the excellent guide at [https://aquova.net/emudev/gb/index.html](h
 | Suite   | Command                    | Total | Passed | Failed | Timeout |
 |---------|----------------------------|-------|--------|--------|---------|
 | Blargg  | `./run_all_tests.sh blargg` | 52    | 52     | 0      | 0       |
-| Mooneye | `./run_all_tests.sh mooneye` | 111   | 58     | 46     | 7       |
+| Mooneye | `./run_all_tests.sh mooneye` | 111   | 59     | 45     | 7       |
 
 ### Blargg Test Status
 
@@ -94,13 +94,13 @@ It intentionally skips `manual-only`, `utils`, and `madness`.
 
 | Group                    | Total | Passed | Failed | Timeout |
 |--------------------------|-------|--------|--------|---------|
-| acceptance               | 41    | 11     | 23     | 7       |
+| acceptance               | 41    | 12     | 22     | 7       |
 | acceptance/bits          | 3     | 3      | 0      | 0       |
 | acceptance/instr         | 1     | 1      | 0      | 0       |
 | acceptance/interrupts    | 1     | 1      | 0      | 0       |
 | acceptance/oam_dma       | 3     | 1      | 2      | 0       |
 | acceptance/ppu           | 12    | 0      | 12     | 0       |
-| acceptance/serial        | 1     | 0      | 1      | 0       |
+| acceptance/serial        | 1     | 1      | 0      | 0       |
 | acceptance/timer         | 13    | 13     | 0      | 0       |
 | emulator-only/mbc1       | 13    | 13     | 0      | 0       |
 | emulator-only/mbc2       | 7     | 7      | 0      | 0       |
@@ -175,7 +175,7 @@ It intentionally skips `manual-only`, `utils`, and `madness`.
 | acceptance/reti_intr_timing | ❌ Failed |
 | acceptance/reti_timing | ⏱️ Timeout |
 | acceptance/rst_timing | ❌ Failed |
-| acceptance/serial/boot_sclk_align-dmgABCmgb | ❌ Failed |
+| acceptance/serial/boot_sclk_align-dmgABCmgb | ✅ Passed |
 | acceptance/timer/div_write | ✅ Passed |
 | acceptance/timer/rapid_toggle | ✅ Passed |
 | acceptance/timer/tim00_div_trigger | ✅ Passed |
