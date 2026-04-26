@@ -1108,6 +1108,7 @@ pub fn execute(program: &MicroProgram, regs: &mut Registers, bus: &mut MemoryBus
             MicroAction::Reset { addr } => {
                 // RST addr: Empilha PC e salta para endereço (16 ciclos)
                 let pc = regs.get_pc();
+                bus.cpu_idle(4);
                 // Empilha PC
                 let mut sp = regs.get_sp();
                 sp = sp.wrapping_sub(1);
@@ -1115,7 +1116,6 @@ pub fn execute(program: &MicroProgram, regs: &mut Registers, bus: &mut MemoryBus
                 sp = sp.wrapping_sub(1);
                 bus.cpu_write(sp, (pc & 0xFF) as u8);
                 regs.set_sp(sp);
-                bus.cpu_idle(4); // 4 ciclos adicionais
                 regs.set_pc(addr);
             }
             MicroAction::FetchImm16ToReg16 { idx } => {

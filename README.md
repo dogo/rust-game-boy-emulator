@@ -21,7 +21,7 @@ I'm following the excellent guide at [https://aquova.net/emudev/gb/index.html](h
 | Suite   | Command                    | Total | Passed | Failed | Timeout |
 |---------|----------------------------|-------|--------|--------|---------|
 | Blargg  | `./run_all_tests.sh blargg` | 52    | 52     | 0      | 0       |
-| Mooneye | `./run_all_tests.sh mooneye` | 111   | 68     | 36     | 7       |
+| Mooneye | `./run_all_tests.sh mooneye` | 111   | 70     | 34     | 7       |
 
 ### Blargg Test Status
 
@@ -94,7 +94,7 @@ It intentionally skips `manual-only`, `utils`, and `madness`.
 
 | Group                    | Total | Passed | Failed | Timeout |
 |--------------------------|-------|--------|--------|---------|
-| acceptance               | 41    | 21     | 13     | 7       |
+| acceptance               | 41    | 23     | 11     | 7       |
 | acceptance/bits          | 3     | 3      | 0      | 0       |
 | acceptance/instr         | 1     | 1      | 0      | 0       |
 | acceptance/interrupts    | 1     | 1      | 0      | 0       |
@@ -172,9 +172,9 @@ It intentionally skips `manual-only`, `utils`, and `madness`.
 | acceptance/rapid_di_ei | ✅ Passed |
 | acceptance/ret_cc_timing | ⏱️ Timeout |
 | acceptance/ret_timing | ⏱️ Timeout |
-| acceptance/reti_intr_timing | ❌ Failed |
+| acceptance/reti_intr_timing | ✅ Passed |
 | acceptance/reti_timing | ⏱️ Timeout |
-| acceptance/rst_timing | ❌ Failed |
+| acceptance/rst_timing | ✅ Passed |
 | acceptance/serial/boot_sclk_align-dmgABCmgb | ✅ Passed |
 | acceptance/timer/div_write | ✅ Passed |
 | acceptance/timer/rapid_toggle | ✅ Passed |
