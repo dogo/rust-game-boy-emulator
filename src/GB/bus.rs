@@ -28,6 +28,8 @@ pub struct MemoryBus {
     oam_dma_cycles: u32,
     oam_dma_value: u8, // Último valor escrito em FF46
     oam_dma_finishing: bool,
+    oam_dma_pending_src: Option<u16>,
+    oam_dma_pending_cycles: u32,
 
     // ===== Serial =====
     serial_sb: u8,                     // FF01 - Serial Transfer Data
@@ -55,7 +57,7 @@ impl MemoryBus {
     /// Durante DMA de OAM, a CPU só pode acessar HRAM (FF80–FFFE) e IE (FFFF)
     #[inline]
     fn dma_cpu_can_access(&self, addr: u16) -> bool {
-        (0xFF80..=0xFFFE).contains(&addr) || addr == 0xFFFF
+        (0xFF80..=0xFFFE).contains(&addr) || addr == 0xFF46 || addr == 0xFFFF
     }
     #[inline]
     fn lcd_on(&self) -> bool {
@@ -144,6 +146,8 @@ impl MemoryBus {
             oam_dma_cycles: 0,
             oam_dma_value: 0xFF,
             oam_dma_finishing: false,
+            oam_dma_pending_src: None,
+            oam_dma_pending_cycles: 0,
             serial_sb: 0x00,
             serial_sc: 0x7E, // bits não usados em 1
             serial_transfer_active: false,
@@ -392,11 +396,8 @@ impl MemoryBus {
     /// Inicia uma transferência OAM DMA a partir de `value << 8`
     pub fn start_oam_dma(&mut self, value: u8) {
         let src = (value as u16) << 8;
-        self.oam_dma_src = src;
-        self.oam_dma_index = 0;
-        self.oam_dma_cycles = 0;
-        self.oam_dma_active = true;
-        self.oam_dma_finishing = false;
+        self.oam_dma_pending_src = Some(src);
+        self.oam_dma_pending_cycles = 0;
     }
 
     /// Lê um byte da fonte do DMA sem causar efeitos colaterais extras.
@@ -420,15 +421,29 @@ impl MemoryBus {
 
     /// Avança OAM DMA consumindo `cycles` da CPU.
     fn step_oam_dma(&mut self, cycles: u32) {
+        let mut pending_ready = false;
+        if self.oam_dma_pending_src.is_some() {
+            self.oam_dma_pending_cycles = self.oam_dma_pending_cycles.saturating_add(cycles);
+            if self.oam_dma_pending_cycles >= 8 {
+                pending_ready = true;
+            }
+        }
+
         if self.oam_dma_finishing {
             self.oam_dma_cycles = self.oam_dma_cycles.saturating_add(cycles);
             if self.oam_dma_cycles >= 8 {
                 self.oam_dma_cycles = 0;
                 self.oam_dma_finishing = false;
             }
+            if pending_ready {
+                self.activate_pending_oam_dma();
+            }
             return;
         }
         if !self.oam_dma_active {
+            if pending_ready {
+                self.activate_pending_oam_dma();
+            }
             return;
         }
         self.oam_dma_cycles = self.oam_dma_cycles.saturating_add(cycles);
@@ -444,6 +459,20 @@ impl MemoryBus {
             self.oam_dma_active = false;
             self.oam_dma_cycles = 0;
             self.oam_dma_finishing = true;
+        }
+        if pending_ready {
+            self.activate_pending_oam_dma();
+        }
+    }
+
+    fn activate_pending_oam_dma(&mut self) {
+        if let Some(src) = self.oam_dma_pending_src.take() {
+            self.oam_dma_src = src;
+            self.oam_dma_index = 0;
+            self.oam_dma_cycles = 0;
+            self.oam_dma_active = true;
+            self.oam_dma_finishing = false;
+            self.oam_dma_pending_cycles = 0;
         }
     }
 
