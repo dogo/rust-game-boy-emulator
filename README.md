@@ -21,7 +21,7 @@ I'm following the excellent guide at [https://aquova.net/emudev/gb/index.html](h
 | Suite   | Command                    | Total | Passed | Failed | Timeout |
 |---------|----------------------------|-------|--------|--------|---------|
 | Blargg  | `./run_all_tests.sh blargg` | 52    | 52     | 0      | 0       |
-| Mooneye | `./run_all_tests.sh mooneye` | 111   | 80     | 31     | 0       |
+| Mooneye | `./run_all_tests.sh mooneye` | 111   | 82     | 29     | 0       |
 
 ### Blargg Test Status
 
@@ -94,11 +94,11 @@ It intentionally skips `manual-only`, `utils`, and `madness`.
 
 | Group                    | Total | Passed | Failed | Timeout |
 |--------------------------|-------|--------|--------|---------|
-| acceptance               | 41    | 33     | 8      | 0       |
+| acceptance               | 41    | 35     | 6      | 0       |
 | acceptance/bits          | 3     | 3      | 0      | 0       |
 | acceptance/instr         | 1     | 1      | 0      | 0       |
 | acceptance/interrupts    | 1     | 1      | 0      | 0       |
-| acceptance/oam_dma       | 3     | 2      | 1      | 0       |
+| acceptance/oam_dma       | 3     | 3      | 0      | 0       |
 | acceptance/ppu           | 12    | 0      | 12     | 0       |
 | acceptance/serial        | 1     | 1      | 0      | 0       |
 | acceptance/timer         | 13    | 13     | 0      | 0       |
@@ -149,12 +149,12 @@ It intentionally skips `manual-only`, `utils`, and `madness`.
 | acceptance/jp_cc_timing | ✅ Passed |
 | acceptance/jp_timing | ✅ Passed |
 | acceptance/ld_hl_sp_e_timing | ✅ Passed |
-| acceptance/oam_dma_restart | ❌ Failed |
+| acceptance/oam_dma_restart | ✅ Passed |
 | acceptance/oam_dma_start | ✅ Passed |
 | acceptance/oam_dma_timing | ✅ Passed |
 | acceptance/oam_dma/basic | ✅ Passed |
 | acceptance/oam_dma/reg_read | ✅ Passed |
-| acceptance/oam_dma/sources-GS | ❌ Failed |
+| acceptance/oam_dma/sources-GS | ✅ Passed |
 | acceptance/pop_timing | ✅ Passed |
 | acceptance/ppu/hblank_ly_scx_timing-GS | ❌ Failed |
 | acceptance/ppu/intr_1_2_timing-GS | ❌ Failed |

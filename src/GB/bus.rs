@@ -405,7 +405,7 @@ impl MemoryBus {
         let src = (value as u16) << 8;
         if self.oam_dma_active || self.oam_dma_finishing || self.oam_dma_pending_src.is_some() {
             self.oam_dma_pending_src = Some(src);
-            self.oam_dma_pending_cycles = 0;
+            self.oam_dma_pending_cycles = 4;
         } else {
             self.oam_dma_src = src;
             self.oam_dma_index = 0;
@@ -432,7 +432,10 @@ impl MemoryBus {
                     0xFF
                 }
             }
-            _ => 0xFF,
+            0xFE00..=0xFFFF => {
+                let base = addr - 0x2000;
+                self.wram[(base - 0xC000) as usize]
+            }
         }
     }
 
@@ -463,6 +466,9 @@ impl MemoryBus {
             }
             return;
         }
+        if pending_ready {
+            self.activate_pending_oam_dma();
+        }
         self.oam_dma_block_delay = self.oam_dma_block_delay.saturating_sub(cycles);
         self.oam_dma_cycles = self.oam_dma_cycles.saturating_add(cycles);
         while self.oam_dma_cycles >= 4 && self.oam_dma_index < 160 {
@@ -478,9 +484,6 @@ impl MemoryBus {
             self.oam_dma_cycles = 0;
             self.oam_dma_finishing = true;
             self.oam_dma_block_delay = 0;
-        }
-        if pending_ready {
-            self.activate_pending_oam_dma();
         }
     }
 
