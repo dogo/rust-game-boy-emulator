@@ -4,6 +4,23 @@ use gb_emu::GB;
 use std::env;
 use std::fs;
 
+fn infer_boot_model(rom_path: &str, cpu: &GB::CPU::CPU) -> GB::CPU::BootModel {
+    let lower = rom_path.to_ascii_lowercase();
+    if lower.contains("-dmg0") {
+        GB::CPU::BootModel::Dmg0
+    } else if lower.contains("-mgb") {
+        GB::CPU::BootModel::Mgb
+    } else if lower.contains("-sgb2") || lower.contains("boot_div2-s") {
+        GB::CPU::BootModel::Sgb2
+    } else if lower.contains("-sgb") || lower.ends_with("-s.gb") {
+        GB::CPU::BootModel::Sgb
+    } else if cpu.bus.cgb_mode {
+        GB::CPU::BootModel::Cgb
+    } else {
+        GB::CPU::BootModel::DmgAbc
+    }
+}
+
 fn get_sav_path(rom_path: &str) -> String {
     std::path::Path::new(rom_path)
         .with_extension("sav")
@@ -55,7 +72,8 @@ fn main() {
         cpu.bus.load_boot_rom(boot_rom);
         cpu.registers.set_pc(0x0000);
     } else {
-        cpu.init_post_boot();
+        let boot_model = infer_boot_model(rom_path, &cpu);
+        cpu.init_post_boot_model(boot_model);
     }
 
     // Carrega save

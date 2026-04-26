@@ -14,6 +14,16 @@ pub struct CPU {
     pub cycles: u64, // Contagem total de ciclos
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BootModel {
+    Dmg0,   // Game Boy original (DMG-0)
+    DmgAbc, // Game Boy original (DMG-A/B/C)
+    Mgb,    // Game Boy Pocket (MGB)
+    Sgb,    // Super Game Boy (SGB)
+    Sgb2,   // Super Game Boy 2 (SGB2)
+    Cgb,    // Game Boy Color (CGB)
+}
+
 impl CPU {
     pub fn new(rom: Vec<u8>) -> Self {
         let is_cgb = crate::GB::cartridge::is_cgb_only_rom(&rom);
@@ -60,14 +70,53 @@ impl CPU {
     }
 
     pub fn init_post_boot(&mut self) {
-        // Estados típicos pós BIOS
-        // CGB: A=$11 (identificador CGB usado por ROMs para detectar hardware)
-        // DMG: A=$01
-        let a_value: u16 = if self.bus.cgb_mode { 0x11 } else { 0x01 };
-        self.registers.set_af(a_value << 8 | 0xB0);
-        self.registers.set_bc(0x0013);
-        self.registers.set_de(0x00D8);
-        self.registers.set_hl(0x014D);
+        let model = if self.bus.cgb_mode {
+            BootModel::Cgb
+        } else {
+            BootModel::DmgAbc
+        };
+        self.init_post_boot_model(model);
+    }
+
+    pub fn init_post_boot_model(&mut self, model: BootModel) {
+        match model {
+            BootModel::Dmg0 => {
+                self.registers.set_af(0x0100);
+                self.registers.set_bc(0xFF13);
+                self.registers.set_de(0x00C1);
+                self.registers.set_hl(0x8403);
+            }
+            BootModel::DmgAbc => {
+                self.registers.set_af(0x01B0);
+                self.registers.set_bc(0x0013);
+                self.registers.set_de(0x00D8);
+                self.registers.set_hl(0x014D);
+            }
+            BootModel::Mgb => {
+                self.registers.set_af(0xFFB0);
+                self.registers.set_bc(0x0013);
+                self.registers.set_de(0x00D8);
+                self.registers.set_hl(0x014D);
+            }
+            BootModel::Sgb => {
+                self.registers.set_af(0x0100);
+                self.registers.set_bc(0x0014);
+                self.registers.set_de(0x0000);
+                self.registers.set_hl(0xC060);
+            }
+            BootModel::Sgb2 => {
+                self.registers.set_af(0xFF00);
+                self.registers.set_bc(0x0014);
+                self.registers.set_de(0x0000);
+                self.registers.set_hl(0xC060);
+            }
+            BootModel::Cgb => {
+                self.registers.set_af(0x11B0);
+                self.registers.set_bc(0x0013);
+                self.registers.set_de(0x00D8);
+                self.registers.set_hl(0x014D);
+            }
+        }
         self.registers.set_sp(0xFFFE);
         self.registers.set_pc(0x0100);
 
@@ -123,8 +172,30 @@ impl CPU {
         self.bus.ppu.ly = 0x00;
         self.bus.ppu.stat = 0x00;
 
-        // Boot ROM do DMG termina com div_counter = 0xABCC (valor exato do hardware)
-        self.bus.set_div_counter(0xABCC);
+        match model {
+            BootModel::Dmg0 => {
+                self.bus.write(0xFF00, 0x00);
+                self.bus.ppu.stat = 0x83;
+                self.bus.ppu.ly = 0x01;
+                self.bus.set_div_counter(0x1830);
+            }
+            BootModel::Sgb | BootModel::Sgb2 => {
+                self.bus.write(0xFF00, 0x30);
+                self.bus.write(0xFF26, 0xF0);
+                self.bus.ppu.stat = 0x00;
+                self.bus.ppu.ly = 0x00;
+                let div_counter = if model == BootModel::Sgb2 {
+                    0xD850
+                } else {
+                    0xD860
+                };
+                self.bus.set_div_counter(div_counter);
+            }
+            _ => {
+                // Boot ROM do DMG ABC/MGB termina com div_counter = 0xABCC.
+                self.bus.set_div_counter(0xABCC);
+            }
+        }
     }
 
     pub fn fetch_next(&mut self) -> u8 {

@@ -21,7 +21,7 @@ I'm following the excellent guide at [https://aquova.net/emudev/gb/index.html](h
 | Suite   | Command                    | Total | Passed | Failed | Timeout |
 |---------|----------------------------|-------|--------|--------|---------|
 | Blargg  | `./run_all_tests.sh blargg` | 52    | 52     | 0      | 0       |
-| Mooneye | `./run_all_tests.sh mooneye` | 111   | 82     | 29     | 0       |
+| Mooneye | `./run_all_tests.sh mooneye` | 111   | 89     | 22     | 0       |
 
 ### Blargg Test Status
 
@@ -94,7 +94,7 @@ It intentionally skips `manual-only`, `utils`, and `madness`.
 
 | Group                    | Total | Passed | Failed | Timeout |
 |--------------------------|-------|--------|--------|---------|
-| acceptance               | 41    | 35     | 6      | 0       |
+| acceptance               | 41    | 39     | 2      | 0       |
 | acceptance/bits          | 3     | 3      | 0      | 0       |
 | acceptance/instr         | 1     | 1      | 0      | 0       |
 | acceptance/interrupts    | 1     | 1      | 0      | 0       |
@@ -118,18 +118,18 @@ It intentionally skips `manual-only`, `utils`, and `madness`.
 | acceptance/bits/mem_oam | ✅ Passed |
 | acceptance/bits/reg_f | ✅ Passed |
 | acceptance/bits/unused_hwio-GS | ✅ Passed |
-| acceptance/boot_div-dmg0 | ❌ Failed |
+| acceptance/boot_div-dmg0 | ✅ Passed |
 | acceptance/boot_div-dmgABCmgb | ✅ Passed |
-| acceptance/boot_div-S | ❌ Failed |
-| acceptance/boot_div2-S | ❌ Failed |
+| acceptance/boot_div-S | ✅ Passed |
+| acceptance/boot_div2-S | ✅ Passed |
 | acceptance/boot_hwio-dmg0 | ❌ Failed |
 | acceptance/boot_hwio-dmgABCmgb | ✅ Passed |
 | acceptance/boot_hwio-S | ❌ Failed |
-| acceptance/boot_regs-dmg0 | ❌ Failed |
+| acceptance/boot_regs-dmg0 | ✅ Passed |
 | acceptance/boot_regs-dmgABC | ✅ Passed |
-| acceptance/boot_regs-mgb | ❌ Failed |
-| acceptance/boot_regs-sgb | ❌ Failed |
-| acceptance/boot_regs-sgb2 | ❌ Failed |
+| acceptance/boot_regs-mgb | ✅ Passed |
+| acceptance/boot_regs-sgb | ✅ Passed |
+| acceptance/boot_regs-sgb2 | ✅ Passed |
 | acceptance/call_cc_timing | ✅ Passed |
 | acceptance/call_cc_timing2 | ✅ Passed |
 | acceptance/call_timing | ✅ Passed |
