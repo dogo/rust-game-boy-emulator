@@ -21,6 +21,7 @@ pub struct Timer {
     prev_tima_bit: bool,         // Estado anterior do bit selecionado para detectar falling edges
     reload_pending: Option<u16>, // Valor de temp_counter em que o reload deve disparar (temp_counter + 4)
     tima_reloading: bool,        // true durante os 4 T-cycles entre overflow e reload
+    tima_reloaded_until: Option<u16>, // Ciclo em que TIMA está copiando TMA e escritas em TIMA são ignoradas
     tma_reg: u8,                 // Valor atual de TMA (atualizado quando CPU escreve em TMA)
 }
 
@@ -35,6 +36,7 @@ impl Timer {
             prev_tima_bit: false,
             reload_pending: None,
             tima_reloading: false,
+            tima_reloaded_until: None,
             tma_reg: 0,
         }
     }
@@ -75,14 +77,22 @@ impl Timer {
                     if let Some(reload_at) = self.reload_pending {
                         let dist = temp_counter.wrapping_sub(reload_at);
                         if dist < 0x8000 {
-                            // Dispara reload: TIMA = TMA (a menos que TIMA foi escrito durante delay)
+                            // Dispara reload: TIMA = TMA, exceto se escrita em TIMA cancelou o overflow no ciclo A.
                             self.reload_pending = None;
                             self.tima_reloading = false;
                             if !self.tima_written_in_delay {
                                 tima = self.tma_reg;
+                                if_reg |= 0x04;
+                                self.tima_reloaded_until = Some(temp_counter.wrapping_add(4));
                             }
                             self.tima_written_in_delay = false;
-                            if_reg |= 0x04;
+                        }
+                    }
+
+                    if let Some(deadline) = self.tima_reloaded_until {
+                        let distance = deadline.wrapping_sub(temp_counter);
+                        if distance >= 0x8000 || distance == 0 {
+                            self.tima_reloaded_until = None;
                         }
                     }
 
@@ -183,15 +193,15 @@ impl Timer {
     ) -> (u8, u8, TimerEvents) {
         let mut events = TimerEvents::default();
 
+        let mut div_reset_overflow = false;
+
         if (tac & 0x04) != 0 {
             let trigger_bit = TAC_TRIGGER_BITS[(tac & 0x03) as usize];
             if (self.div_counter & trigger_bit) != 0 {
                 // Borda de descida no bit do timer quando div é resetado
                 if tima == 0xFF {
                     tima = 0x00;
-                    self.reload_pending = Some(self.div_counter.wrapping_add(4));
-                    self.tima_reloading = true;
-                    self.tima_written_in_delay = false;
+                    div_reset_overflow = true;
                 } else {
                     tima = tima.wrapping_add(1);
                 }
@@ -208,17 +218,40 @@ impl Timer {
         self.div_counter = 0;
         self.last_div_bit = false;
         self.m_cycle_offset = 0;
-        self.tima_written_in_delay = false;
         self.suppress_until = None;
         self.prev_tima_bit = false;
-        self.reload_pending = None;
-        self.tima_reloading = false;
+        if div_reset_overflow {
+            self.reload_pending = Some(8);
+            self.tima_reloading = true;
+            self.tima_written_in_delay = false;
+            self.tima_reloaded_until = None;
+        }
 
         (tima, if_reg, events)
     }
 
-    pub fn write_tac(&mut self, mut tima: u8, old_tac: u8, new_tac: u8, if_reg: u8) -> (u8, u8) {
-        let old_bit = TAC_TRIGGER_BITS[(old_tac & 0x03) as usize];
+    pub fn tima_input_high(&self, tac: u8) -> bool {
+        if (tac & 0x04) == 0 {
+            return false;
+        }
+
+        let trigger_bit = TAC_TRIGGER_BITS[(tac & 0x03) as usize];
+        (self.div_counter & trigger_bit) != 0
+    }
+
+    pub fn write_tac(&mut self, tima: u8, old_tac: u8, new_tac: u8, if_reg: u8) -> (u8, u8) {
+        let old_input_high = self.tima_input_high(old_tac);
+        self.write_tac_with_old_input(tima, old_tac, new_tac, if_reg, old_input_high)
+    }
+
+    pub fn write_tac_with_old_input(
+        &mut self,
+        mut tima: u8,
+        old_tac: u8,
+        new_tac: u8,
+        if_reg: u8,
+        old_input_high: bool,
+    ) -> (u8, u8) {
         let new_bit = TAC_TRIGGER_BITS[(new_tac & 0x03) as usize];
 
         if (old_tac & 0x04) == 0 {
@@ -230,16 +263,15 @@ impl Timer {
             return (tima, if_reg);
         }
 
-        if (self.div_counter & old_bit) != 0 {
-            if (new_tac & 0x04) == 0 || (self.div_counter & new_bit) == 0 {
-                if tima == 0xFF {
-                    tima = 0x00;
-                    self.reload_pending = Some(self.div_counter.wrapping_add(4));
-                    self.tima_reloading = true;
-                    self.tima_written_in_delay = false;
-                } else {
-                    tima = tima.wrapping_add(1);
-                }
+        let new_input_high = (new_tac & 0x04) != 0 && (self.div_counter & new_bit) != 0;
+        if old_input_high && !new_input_high {
+            if tima == 0xFF {
+                tima = 0x00;
+                self.reload_pending = Some(self.div_counter.wrapping_add(4));
+                self.tima_reloading = true;
+                self.tima_written_in_delay = false;
+            } else {
+                tima = tima.wrapping_add(1);
             }
         }
 
@@ -253,10 +285,19 @@ impl Timer {
         (tima, if_reg)
     }
 
-    pub fn notify_tima_write(&mut self, tac: u8) {
+    pub fn notify_tima_write(&mut self, tac: u8) -> bool {
+        if let Some(deadline) = self.tima_reloaded_until {
+            let distance = deadline.wrapping_sub(self.div_counter);
+            if distance > 0 && distance < 0x8000 {
+                return false;
+            }
+        }
+
         if self.tima_reloading {
-            // TIMA escrito durante o delay: reload para TMA é cancelado, interrupção ainda dispara
+            // TIMA escrito durante o ciclo A: cancela o reload e o pedido de interrupção.
             self.tima_written_in_delay = true;
+            self.reload_pending = None;
+            self.tima_reloading = false;
         } else {
             // Escrita normal no TIMA: cancela qualquer reload pendente
             self.reload_pending = None;
@@ -271,11 +312,13 @@ impl Timer {
         } else {
             self.suppress_until = None;
         }
+
+        true
     }
 
     /// Retorna true se TIMA está no período de delay (entre overflow e reload)
     pub fn is_reloading_tima(&self) -> bool {
-        self.tima_reloading
+        self.tima_reloading || self.tima_reloaded_until.is_some()
     }
 
     pub fn notify_tma_write(&mut self, new_tma: u8) {

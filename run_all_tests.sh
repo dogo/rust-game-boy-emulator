@@ -69,8 +69,8 @@ run_rom() {
     case $code in
         0)   PASSED=$((PASSED+1)); echo -e "  ${GREEN}✅ $name${NC}" ;;
         1)   FAILED=$((FAILED+1)); echo -e "  ${RED}❌ $name${NC}" ;;
-        2)   TIMEOUT=$((TIMEOUT+1)); echo -e "  ${YELLOW}⏱️  $name${NC}" ;;
-        124) TIMEOUT=$((TIMEOUT+1)); echo -e "  ${YELLOW}⏱️  $name (timeout)${NC}" ;;
+        2)   TIMEOUT=$((TIMEOUT+1)); echo -e "  ${YELLOW}⏱️ $name${NC}" ;;
+        124) TIMEOUT=$((TIMEOUT+1)); echo -e "  ${YELLOW}⏱️ $name (timeout)${NC}" ;;
         *)   FAILED=$((FAILED+1)); echo -e "  ${RED}❌ $name (exit $code)${NC}" ;;
     esac
 }

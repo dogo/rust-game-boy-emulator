@@ -340,8 +340,9 @@ impl MemoryBus {
                 //   so it updates together with TMA". Isso significa que a escrita vai através,
                 //   mas será sobrescrita no final do ciclo se TMA mudar.
                 //   Para o teste funcionar, precisamos atualizar TIMA imediatamente.
-                self.timer.notify_tima_write(self.tac);
-                self.tima = value;
+                if self.timer.notify_tima_write(self.tac) {
+                    self.tima = value;
+                }
             }
             0xFF06 => {
                 // IMPORTANTE: Segundo Pan Docs, escrever em TMA durante o ciclo B
