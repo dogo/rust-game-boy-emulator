@@ -21,7 +21,7 @@ I'm following the excellent guide at [https://aquova.net/emudev/gb/index.html](h
 | Suite   | Command                    | Total | Passed | Failed | Timeout |
 |---------|----------------------------|-------|--------|--------|---------|
 | Blargg  | `./run_all_tests.sh blargg` | 52    | 52     | 0      | 0       |
-| Mooneye | `./run_all_tests.sh mooneye` | 111   | 89     | 22     | 0       |
+| Mooneye | `./run_all_tests.sh mooneye` | 111   | 91     | 20     | 0       |
 
 ### Blargg Test Status
 
@@ -105,7 +105,7 @@ It intentionally skips `manual-only`, `utils`, and `madness`.
 | emulator-only/mbc1       | 13    | 13     | 0      | 0       |
 | emulator-only/mbc2       | 7     | 7      | 0      | 0       |
 | emulator-only/mbc5       | 8     | 8      | 0      | 0       |
-| misc                     | 6     | 0      | 6      | 0       |
+| misc                     | 6     | 2      | 4      | 0       |
 | misc/bits                | 1     | 0      | 1      | 0       |
 | misc/ppu                 | 1     | 0      | 1      | 0       |
 
@@ -222,8 +222,8 @@ It intentionally skips `manual-only`, `utils`, and `madness`.
 | misc/boot_div-cgb0 | ❌ Failed |
 | misc/boot_div-cgbABCDE | ❌ Failed |
 | misc/boot_hwio-C | ❌ Failed |
-| misc/boot_regs-A | ❌ Failed |
-| misc/boot_regs-cgb | ❌ Failed |
+| misc/boot_regs-A | ✅ Passed |
+| misc/boot_regs-cgb | ✅ Passed |
 | misc/ppu/vblank_stat_intr-C | ❌ Failed |
 
 </details>

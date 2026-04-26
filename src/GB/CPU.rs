@@ -22,6 +22,7 @@ pub enum BootModel {
     Sgb,    // Super Game Boy (SGB)
     Sgb2,   // Super Game Boy 2 (SGB2)
     Cgb,    // Game Boy Color (CGB)
+    Agb,    // Game Boy Advance running in Game Boy Color mode (AGB/AGS)
 }
 
 impl CPU {
@@ -111,10 +112,16 @@ impl CPU {
                 self.registers.set_hl(0xC060);
             }
             BootModel::Cgb => {
-                self.registers.set_af(0x11B0);
-                self.registers.set_bc(0x0013);
-                self.registers.set_de(0x00D8);
-                self.registers.set_hl(0x014D);
+                self.registers.set_af(0x1180);
+                self.registers.set_bc(0x0000);
+                self.registers.set_de(0x0008);
+                self.registers.set_hl(0x007C);
+            }
+            BootModel::Agb => {
+                self.registers.set_af(0x1100);
+                self.registers.set_bc(0x0100);
+                self.registers.set_de(0x0008);
+                self.registers.set_hl(0x007C);
             }
         }
         self.registers.set_sp(0xFFFE);
@@ -191,7 +198,7 @@ impl CPU {
                 };
                 self.bus.set_div_counter(div_counter);
             }
-            _ => {
+            BootModel::DmgAbc | BootModel::Mgb | BootModel::Cgb | BootModel::Agb => {
                 // Boot ROM do DMG ABC/MGB termina com div_counter = 0xABCC.
                 self.bus.set_div_counter(0xABCC);
             }
