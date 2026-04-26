@@ -56,11 +56,6 @@ impl MemoryBus {
     pub fn joypad_should_wake_from_stop(&mut self) -> bool {
         self.joypad.has_new_press()
     }
-    /// Durante DMA de OAM, a CPU só pode acessar HRAM (FF80–FFFE) e IE (FFFF)
-    #[inline]
-    fn dma_cpu_can_access(&self, addr: u16) -> bool {
-        (0xFF80..=0xFFFE).contains(&addr) || addr == 0xFF46 || addr == 0xFFFF
-    }
     #[inline]
     fn lcd_on(&self) -> bool {
         (self.ppu.lcdc & 0x80) != 0
@@ -173,7 +168,9 @@ impl MemoryBus {
     }
 
     pub fn read(&self, address: u16) -> u8 {
-        // 🔒 Durante DMA de OAM, a CPU só pode acessar HRAM/IE
+        // Durante OAM DMA, OAM fica bloqueada para a CPU. Endereços
+        // adjacentes como $FDFE/$FDFF continuam visíveis e são usados por
+        // testes de timing que leem o byte alto exatamente em $FE00.
         if self.oam_dma_finishing && (0xFE00..=0xFE9F).contains(&address) {
             return 0xFF;
         }
@@ -183,7 +180,7 @@ impl MemoryBus {
         {
             return self.oam_dma_startup_oam[(address - 0xFE00) as usize];
         }
-        if self.oam_dma_active && !self.dma_cpu_can_access(address) {
+        if self.oam_dma_active && (0xFE00..=0xFE9F).contains(&address) {
             return 0xFF;
         }
         // Boot ROM mapeada em 0x0000–0x00FF enquanto boot_rom_enabled
@@ -255,11 +252,11 @@ impl MemoryBus {
     }
 
     pub fn write(&mut self, address: u16, value: u8) {
-        // 🔒 Durante DMA de OAM, a CPU só pode escrever em HRAM/IE
+        // Durante OAM DMA, escritas em OAM ficam bloqueadas para a CPU.
         if self.oam_dma_finishing && (0xFE00..=0xFE9F).contains(&address) {
             return;
         }
-        if self.oam_dma_active && !self.dma_cpu_can_access(address) {
+        if self.oam_dma_active && (0xFE00..=0xFE9F).contains(&address) {
             // Escrita ignorada
             return;
         }

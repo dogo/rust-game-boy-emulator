@@ -1092,6 +1092,7 @@ pub fn execute(program: &MicroProgram, regs: &mut Registers, bus: &mut MemoryBus
                     JumpCondition::C => regs.get_flag_c(),
                 };
                 if cond_true {
+                    bus.cpu_idle(4);
                     let mut sp = regs.get_sp();
                     let lo = bus.cpu_read(sp) as u16;
                     sp = sp.wrapping_add(1);
@@ -1101,9 +1102,10 @@ pub fn execute(program: &MicroProgram, regs: &mut Registers, bus: &mut MemoryBus
                     let addr = (hi << 8) | lo;
                     bus.cpu_idle(4); // 4 ciclos adicionais
                     regs.set_pc(addr);
+                } else {
+                    bus.cpu_idle(4);
                 }
                 // Se condição falsa, 8 ciclos totais (4 fetch + 4 idle interno)
-                bus.cpu_idle(4);
             }
             MicroAction::Reset { addr } => {
                 // RST addr: Empilha PC e salta para endereço (16 ciclos)

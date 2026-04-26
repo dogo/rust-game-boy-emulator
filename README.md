@@ -21,7 +21,7 @@ I'm following the excellent guide at [https://aquova.net/emudev/gb/index.html](h
 | Suite   | Command                    | Total | Passed | Failed | Timeout |
 |---------|----------------------------|-------|--------|--------|---------|
 | Blargg  | `./run_all_tests.sh blargg` | 52    | 52     | 0      | 0       |
-| Mooneye | `./run_all_tests.sh mooneye` | 111   | 73     | 31     | 7       |
+| Mooneye | `./run_all_tests.sh mooneye` | 111   | 80     | 31     | 0       |
 
 ### Blargg Test Status
 
@@ -94,7 +94,7 @@ It intentionally skips `manual-only`, `utils`, and `madness`.
 
 | Group                    | Total | Passed | Failed | Timeout |
 |--------------------------|-------|--------|--------|---------|
-| acceptance               | 41    | 26     | 8      | 7       |
+| acceptance               | 41    | 33     | 8      | 0       |
 | acceptance/bits          | 3     | 3      | 0      | 0       |
 | acceptance/instr         | 1     | 1      | 0      | 0       |
 | acceptance/interrupts    | 1     | 1      | 0      | 0       |
@@ -130,9 +130,9 @@ It intentionally skips `manual-only`, `utils`, and `madness`.
 | acceptance/boot_regs-mgb | ❌ Failed |
 | acceptance/boot_regs-sgb | ❌ Failed |
 | acceptance/boot_regs-sgb2 | ❌ Failed |
-| acceptance/call_cc_timing | ⏱️ Timeout |
+| acceptance/call_cc_timing | ✅ Passed |
 | acceptance/call_cc_timing2 | ✅ Passed |
-| acceptance/call_timing | ⏱️ Timeout |
+| acceptance/call_timing | ✅ Passed |
 | acceptance/call_timing2 | ✅ Passed |
 | acceptance/di_timing-GS | ✅ Passed |
 | acceptance/div_timing | ✅ Passed |
@@ -146,8 +146,8 @@ It intentionally skips `manual-only`, `utils`, and `madness`.
 | acceptance/instr/daa | ✅ Passed |
 | acceptance/interrupts/ie_push | ✅ Passed |
 | acceptance/intr_timing | ✅ Passed |
-| acceptance/jp_cc_timing | ⏱️ Timeout |
-| acceptance/jp_timing | ⏱️ Timeout |
+| acceptance/jp_cc_timing | ✅ Passed |
+| acceptance/jp_timing | ✅ Passed |
 | acceptance/ld_hl_sp_e_timing | ✅ Passed |
 | acceptance/oam_dma_restart | ❌ Failed |
 | acceptance/oam_dma_start | ✅ Passed |
@@ -170,10 +170,10 @@ It intentionally skips `manual-only`, `utils`, and `madness`.
 | acceptance/ppu/vblank_stat_intr-GS | ❌ Failed |
 | acceptance/push_timing | ✅ Passed |
 | acceptance/rapid_di_ei | ✅ Passed |
-| acceptance/ret_cc_timing | ⏱️ Timeout |
-| acceptance/ret_timing | ⏱️ Timeout |
+| acceptance/ret_cc_timing | ✅ Passed |
+| acceptance/ret_timing | ✅ Passed |
 | acceptance/reti_intr_timing | ✅ Passed |
-| acceptance/reti_timing | ⏱️ Timeout |
+| acceptance/reti_timing | ✅ Passed |
 | acceptance/rst_timing | ✅ Passed |
 | acceptance/serial/boot_sclk_align-dmgABCmgb | ✅ Passed |
 | acceptance/timer/div_write | ✅ Passed |
