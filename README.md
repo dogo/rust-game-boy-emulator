@@ -21,7 +21,7 @@ I'm following the excellent guide at [https://aquova.net/emudev/gb/index.html](h
 | Suite   | Command                    | Total | Passed | Failed | Timeout |
 |---------|----------------------------|-------|--------|--------|---------|
 | Blargg  | `./run_all_tests.sh blargg` | 52    | 52     | 0      | 0       |
-| Mooneye | `./run_all_tests.sh mooneye` | 111   | 56     | 48     | 7       |
+| Mooneye | `./run_all_tests.sh mooneye` | 111   | 57     | 47     | 7       |
 
 ### Blargg Test Status
 
@@ -101,7 +101,7 @@ It intentionally skips `manual-only`, `utils`, and `madness`.
 | acceptance/oam_dma       | 3     | 1      | 2      | 0       |
 | acceptance/ppu           | 12    | 0      | 12     | 0       |
 | acceptance/serial        | 1     | 0      | 1      | 0       |
-| acceptance/timer         | 13    | 12     | 1      | 0       |
+| acceptance/timer         | 13    | 13     | 0      | 0       |
 | emulator-only/mbc1       | 13    | 13     | 0      | 0       |
 | emulator-only/mbc2       | 7     | 7      | 0      | 0       |
 | emulator-only/mbc5       | 8     | 8      | 0      | 0       |
@@ -177,7 +177,7 @@ It intentionally skips `manual-only`, `utils`, and `madness`.
 | acceptance/rst_timing | ❌ Failed |
 | acceptance/serial/boot_sclk_align-dmgABCmgb | ❌ Failed |
 | acceptance/timer/div_write | ✅ Passed |
-| acceptance/timer/rapid_toggle | ❌ Failed |
+| acceptance/timer/rapid_toggle | ✅ Passed |
 | acceptance/timer/tim00_div_trigger | ✅ Passed |
 | acceptance/timer/tim00 | ✅ Passed |
 | acceptance/timer/tim01_div_trigger | ✅ Passed |

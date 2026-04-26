@@ -255,9 +255,20 @@ impl Timer {
         let new_bit = TAC_TRIGGER_BITS[(new_tac & 0x03) as usize];
 
         if (old_tac & 0x04) == 0 {
-            // Timer estava parado; iniciar não dispara um tick
             if (new_tac & 0x04) != 0 {
+                let previous_counter = self.div_counter.wrapping_sub(4);
+                let previous_bit = (previous_counter & new_bit) != 0;
                 let cur_bit = (self.div_counter & new_bit) != 0;
+                if previous_bit && !cur_bit {
+                    if tima == 0xFF {
+                        tima = 0x00;
+                        self.reload_pending = Some(self.div_counter.wrapping_add(4));
+                        self.tima_reloading = true;
+                        self.tima_written_in_delay = false;
+                    } else {
+                        tima = tima.wrapping_add(1);
+                    }
+                }
                 self.prev_tima_bit = cur_bit;
             }
             return (tima, if_reg);

@@ -288,6 +288,7 @@ mod ppu_tests {
     #[test]
     fn test_sprite_basic_rendering() {
         let mut ppu = PPU::new();
+        ppu.oam = [0; 160];
 
         // Habilitar sprites no LCDC (bit 1)
         ppu.lcdc = 0x93; // LCD on, BG on, Sprites on
