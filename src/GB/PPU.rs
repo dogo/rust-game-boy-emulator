@@ -58,6 +58,10 @@ pub struct PPU {
 
     // Estado interno para STAT/LYC
     pub ly_eq_lyc_prev: bool,
+    pub stat_irq_line_prev: bool,
+
+    // Quirk CGB: bit 5 de STAT também gera IRQ no início da linha 144
+    pub cgb_mode2_vblank_stat_quirk: bool,
 }
 
 impl PPU {
@@ -76,15 +80,15 @@ impl PPU {
             self.wy_trigger = false;
             self.wy_pos = -1;
             self.update_stat_mode(0);
-            self.update_lyc_flag();
             self.ly_eq_lyc_prev = self.ly == self.lyc;
+            self.stat_irq_line_prev = self.stat_irq_line_level();
             *iflags &= !0x02; // limpa bit de LCD STAT
         }
 
         // LCD desligado -> ligado
         if !was_on && now_on {
             self.mode = 2;
-            self.mode_clock = 4; // Começa no modo 2 (OAM scan) mas com pequeno offset
+            self.mode_clock = 4; // PPU começa em OAM scan com pequeno offset
             self.ly = 0;
             self.frame_ready = false;
             self.wy_trigger = false;
@@ -92,6 +96,8 @@ impl PPU {
             self.update_stat_mode(2);
             self.update_lyc_flag();
             self.ly_eq_lyc_prev = self.ly == self.lyc;
+            self.stat_irq_line_prev = false;
+            self.update_stat_irq_line(iflags);
         }
     }
     pub fn new() -> Self {
@@ -128,7 +134,25 @@ impl PPU {
             wy_trigger: false,
             wy_pos: -1,
             ly_eq_lyc_prev: false,
+            stat_irq_line_prev: false,
+            cgb_mode2_vblank_stat_quirk: false,
         }
+    }
+
+    fn stat_irq_line_level(&self) -> bool {
+        let mode0 = self.mode == 0 && (self.stat & 0x08) != 0;
+        let mode1 = self.mode == 1 && (self.stat & 0x10) != 0;
+        let mode2 = self.mode == 2 && (self.stat & 0x20) != 0;
+        let lyc = (self.stat & 0x40) != 0 && (self.stat & 0x04) != 0;
+        mode0 || mode1 || mode2 || lyc
+    }
+
+    fn update_stat_irq_line(&mut self, iflags: &mut u8) {
+        let now = self.stat_irq_line_level();
+        if now && !self.stat_irq_line_prev {
+            *iflags |= 0x02;
+        }
+        self.stat_irq_line_prev = now;
     }
 
     // Atualiza flag LYC=LY (bit 2 do STAT)
@@ -377,7 +401,7 @@ impl PPU {
         (if (self.stat & 0x20) != 0 { 0x20 } else { 0 }) | // Mode 2 enable
         (if (self.stat & 0x10) != 0 { 0x10 } else { 0 }) | // Mode 1 enable
         (if (self.stat & 0x08) != 0 { 0x08 } else { 0 }) | // Mode 0 enable
-        (if self.ly == self.lyc { 0x04 } else { 0 }) |     // LYC coincidence
+        (if (self.stat & 0x04) != 0 { 0x04 } else { 0 }) | // LYC coincidence
         (self.mode & 0x03) // bits 0-1: modo atual
     }
 
@@ -557,15 +581,20 @@ impl PPU {
     pub fn write_register(&mut self, addr: u16, val: u8, iflags: &mut u8) {
         match addr {
             0xFF40 => self.set_lcdc(val, iflags),
-            0xFF41 => self.write_stat(val),
+            0xFF41 => {
+                self.write_stat(val);
+                self.update_stat_irq_line(iflags);
+            }
             0xFF42 => self.scy = val,
             0xFF43 => self.scx = val,
             0xFF44 => {} // LY é read-only
             0xFF45 => {
                 self.lyc = val;
-                // Refined: update LYC flag and check STAT IRQ immediately
-                self.update_lyc_flag();
-                self.check_lyc_interrupt(iflags);
+                // Com LCD desligado, a comparação LY=LYC não avança e bit 2 é retido.
+                if (self.lcdc & 0x80) != 0 {
+                    self.update_lyc_flag();
+                }
+                self.update_stat_irq_line(iflags);
             }
             0xFF47 => self.bgp = val,
             0xFF48 => self.obp0 = val,
@@ -588,10 +617,24 @@ impl PPU {
             self.wy_trigger = false;
             self.wy_pos = -1;
             self.ly_eq_lyc_prev = self.ly == self.lyc;
+            self.stat_irq_line_prev = self.stat_irq_line_level();
             return;
         }
 
+        let prev_mode_clock = self.mode_clock;
         self.mode_clock += cycles;
+
+        // CGB quirk: com STAT bit 5 habilitado, uma IRQ STAT extra é
+        // sinalizada no início de VBlank. Modelamos como 1 M-cycle antes da
+        // borda LY=143->144 para bater com os testes de timing do Mooneye.
+        if self.ly == 143
+            && self.cgb_mode2_vblank_stat_quirk
+            && (self.stat & 0x20) != 0
+            && prev_mode_clock < 452
+            && self.mode_clock >= 452
+        {
+            *iflags |= 0x02;
+        }
 
         if self.ly < 144 {
             if self.mode_clock < 80 {
@@ -620,10 +663,16 @@ impl PPU {
         }
 
         if self.mode_clock >= 456 {
+            // DMG/SGB: com STAT bit 5 habilitado, a IRQ STAT de mode 2 também
+            // é sinalizada quando VBlank inicia (LY=144), junto da IRQ de VBlank.
+            if self.ly == 143 && !self.cgb_mode2_vblank_stat_quirk && (self.stat & 0x20) != 0 {
+                *iflags |= 0x02;
+            }
+
             self.mode_clock -= 456;
             self.ly = (self.ly + 1) % 154;
             self.update_lyc_flag();
-            self.check_lyc_interrupt(iflags);
+            self.update_stat_irq_line(iflags);
             if self.ly >= 144 && self.mode != 1 {
                 self.change_mode(1, iflags);
             }
@@ -635,7 +684,7 @@ impl PPU {
         self.mode = new_mode;
         self.update_stat_mode(new_mode);
 
-        let stat_irq = match new_mode {
+        match new_mode {
             0 => {
                 // HBlank: renderiza scanline (apenas em modo não-headless)
                 if !self.headless {
@@ -643,30 +692,25 @@ impl PPU {
                     self.render_window_scanline();
                     self.render_sprites_scanline(self.ly);
                 }
-                (self.stat & 0x08) != 0
             }
             1 => {
                 self.frame_ready = true;
                 *iflags |= 0x01;
                 self.wy_trigger = false;
                 self.wy_pos = -1;
-                (self.stat & 0x10) != 0
             }
-            2 => (self.stat & 0x20) != 0,
+            2 => {}
             3 => {
                 // Window trigger: ativa ao entrar em modo 3 na linha wy
                 if (self.lcdc & 0x20) != 0 && !self.wy_trigger && self.ly == self.wy {
                     self.wy_trigger = true;
                     self.wy_pos = -1;
                 }
-                false
             }
-            _ => false,
-        };
-
-        if stat_irq {
-            *iflags |= 0x02; // LCD STAT
+            _ => {}
         }
+
+        self.update_stat_irq_line(iflags);
     }
 
     /// Dispara STAT IRQ se lyc_inte estiver setado e ly == lyc

@@ -184,6 +184,7 @@ impl MemoryBus {
 
     pub fn set_cgb_compat_hwio(&mut self, enabled: bool) {
         self.cgb_hwio_enabled = enabled;
+        self.ppu.cgb_mode2_vblank_stat_quirk = enabled;
         if enabled {
             self.vbk = 0;
             self.bcps = 0xC8;
