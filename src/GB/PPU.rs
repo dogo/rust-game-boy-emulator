@@ -62,6 +62,11 @@ pub struct PPU {
 
     // Quirk CGB: bit 5 de STAT também gera IRQ no início da linha 144
     pub cgb_mode2_vblank_stat_quirk: bool,
+
+    // Ao ligar o LCD, os bits de modo no STAT ficam em 0 por ~1 M-cycle antes de
+    // refletirem o modo 2 interno. Isso é necessário para que leituras imediatas
+    // do STAT após LCDC=0x80 retornem modo=0 (comportamento do hardware).
+    lcd_on_stat_delay: bool,
 }
 
 impl PPU {
@@ -80,6 +85,7 @@ impl PPU {
             self.wy_trigger = false;
             self.wy_pos = -1;
             self.update_stat_mode(0);
+            self.lcd_on_stat_delay = false; // cancela qualquer delay pendente
             self.ly_eq_lyc_prev = self.ly == self.lyc;
             self.stat_irq_line_prev = self.stat_irq_line_level();
             *iflags &= !0x02; // limpa bit de LCD STAT
@@ -93,11 +99,24 @@ impl PPU {
             self.frame_ready = false;
             self.wy_trigger = false;
             self.wy_pos = -1;
-            self.update_stat_mode(2);
-            self.update_lyc_flag();
+            // Não atualiza os bits de modo no STAT imediatamente: o hardware mantém
+            // modo=0 visível por ~1 M-cycle após ligar o LCD. Os bits de modo serão
+            // atualizados para 2 quando mode_clock >= 20 em PPU::step().
+            self.lcd_on_stat_delay = true;
+            let bit2_before = (self.stat & 0x04) != 0; // bit LYC antes do reset do LY
+            self.update_lyc_flag(); // bit2 atualizado imediatamente (LY=0 vs LYC)
+            let bit2_after = (self.stat & 0x04) != 0;
             self.ly_eq_lyc_prev = self.ly == self.lyc;
-            self.stat_irq_line_prev = false;
-            self.update_stat_irq_line(iflags);
+            // Disparar IRQ somente se bit2 mudou de 0->1 (borda de subida).
+            // Se bit2 era 1 e continua 1 (ex: round2 LYC=0x90→0x00), não dispara.
+            if bit2_after && !bit2_before {
+                // Borda de subida real: prev=false permite que update_stat_irq_line dispare
+                self.stat_irq_line_prev = false;
+                self.update_stat_irq_line(iflags);
+            } else {
+                // Sem borda: inicializa prev com nível atual para não disparar spurious
+                self.stat_irq_line_prev = self.stat_irq_line_level();
+            }
         }
     }
     pub fn new() -> Self {
@@ -136,6 +155,7 @@ impl PPU {
             ly_eq_lyc_prev: false,
             stat_irq_line_prev: false,
             cgb_mode2_vblank_stat_quirk: false,
+            lcd_on_stat_delay: false,
         }
     }
 
@@ -402,7 +422,7 @@ impl PPU {
         (if (self.stat & 0x10) != 0 { 0x10 } else { 0 }) | // Mode 1 enable
         (if (self.stat & 0x08) != 0 { 0x08 } else { 0 }) | // Mode 0 enable
         (if (self.stat & 0x04) != 0 { 0x04 } else { 0 }) | // LYC coincidence
-        (self.mode & 0x03) // bits 0-1: modo atual
+        (self.stat & 0x03) // bits 0-1: modo visível (pode ter delay após LCD on)
     }
 
     // Escrita de STAT (FF41) - só atualiza bits de enable
@@ -670,7 +690,18 @@ impl PPU {
             }
         }
 
+        // Delay de visibilidade dos bits de modo no STAT após ligar o LCD:
+        // o modo 2 interno começa em mode_clock=4, mas só fica visível em STAT
+        // a partir de mode_clock=20 (~1 M-cycle após a leitura imediata do STAT).
+        if self.lcd_on_stat_delay && self.mode_clock >= 20 {
+            self.lcd_on_stat_delay = false;
+            if self.mode == 2 {
+                self.update_stat_mode(2);
+            }
+        }
+
         if self.mode_clock >= 456 {
+            self.lcd_on_stat_delay = false; // garante limpar ao fim da primeira linha
             // DMG/SGB: com STAT bit 5 habilitado, a IRQ STAT de mode 2 também
             // é sinalizada quando VBlank inicia (LY=144), junto da IRQ de VBlank.
             if self.ly == 143 && !self.cgb_mode2_vblank_stat_quirk && (self.stat & 0x20) != 0 {
