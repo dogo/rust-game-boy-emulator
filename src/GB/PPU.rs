@@ -637,15 +637,23 @@ impl PPU {
         }
 
         if self.ly < 144 {
-            if self.mode_clock < 80 {
+            if self.mode_clock < 84 {
+                // Mode 2 (OAM scan): 0–83 T-cycles visível no STAT.
+                // O hardware transiciona internamente em T=80 mas o registrador STAT
+                // só reflete mode 3 a partir do próximo M-cycle (T=84), modelado aqui.
                 if self.mode != 2 {
                     self.change_mode(2, iflags);
                 }
-            } else if self.mode_clock < 252 {
+            } else if self.mode_clock < 256 {
+                // Mode 3 (pixel transfer): visível no STAT a partir de T=84.
+                // Internamente o modo começa em T=80; a visibilidade no STAT
+                // tem um delay de 1 M-cycle (4T).
                 if self.mode != 3 {
                     self.change_mode(3, iflags);
                 }
             } else if self.mode_clock < 456 {
+                // Mode 0 (HBlank): visível no STAT a partir de T=256.
+                // Transição interna em T=252, visibilidade com delay de 1 M-cycle.
                 // Mode 0: HBlank
                 if self.mode != 0 {
                     self.change_mode(0, iflags);
