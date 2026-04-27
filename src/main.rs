@@ -14,10 +14,14 @@ fn infer_boot_model(rom_path: &str, cpu: &GB::CPU::CPU) -> GB::CPU::BootModel {
         GB::CPU::BootModel::Sgb2
     } else if lower.contains("-sgb") || lower.ends_with("-s.gb") {
         GB::CPU::BootModel::Sgb
+    } else if lower.contains("-cgb0") {
+        GB::CPU::BootModel::Cgb0
     } else if lower.contains("-cgb") {
         GB::CPU::BootModel::Cgb
     } else if lower.contains("-a.gb") {
         GB::CPU::BootModel::Agb
+    } else if lower.ends_with("-c.gb") {
+        GB::CPU::BootModel::Cgb
     } else if cpu.bus.cgb_mode {
         GB::CPU::BootModel::Cgb
     } else {

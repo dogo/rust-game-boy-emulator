@@ -21,7 +21,8 @@ pub enum BootModel {
     Mgb,    // Game Boy Pocket (MGB)
     Sgb,    // Super Game Boy (SGB)
     Sgb2,   // Super Game Boy 2 (SGB2)
-    Cgb,    // Game Boy Color (CGB)
+    Cgb,    // Game Boy Color (CGB-A/B/C/D/E)
+    Cgb0,   // Game Boy Color first revision (CGB-0)
     Agb,    // Game Boy Advance running in Game Boy Color mode (AGB/AGS)
 }
 
@@ -111,7 +112,7 @@ impl CPU {
                 self.registers.set_de(0x0000);
                 self.registers.set_hl(0xC060);
             }
-            BootModel::Cgb => {
+            BootModel::Cgb | BootModel::Cgb0 => {
                 self.registers.set_af(0x1180);
                 self.registers.set_bc(0x0000);
                 self.registers.set_de(0x0008);
@@ -129,6 +130,7 @@ impl CPU {
 
         // IO registers pós-boot (valores DMG)
         // DIV deve ser setado POR ÚLTIMO pois writes consomem ciclos
+        self.bus.set_cgb_compat_hwio(false);
         self.bus.write(0xFF00, 0x00); // P1
         self.bus.write(0xFF05, 0x00); // TIMA
         self.bus.write(0xFF06, 0x00); // TMA
@@ -183,12 +185,28 @@ impl CPU {
             BootModel::Dmg0 => {
                 self.bus.write(0xFF00, 0x00);
                 self.bus.ppu.stat = 0x83;
-                self.bus.ppu.ly = 0x01;
+                self.bus.ppu.ly = 0x91;
+                self.bus.ppu.mode = 0x03;
+                self.bus.ppu.mode_clock = 200;
                 self.bus.set_div_counter(0x1830);
             }
             BootModel::Sgb | BootModel::Sgb2 => {
                 self.bus.write(0xFF00, 0x30);
-                self.bus.write(0xFF26, 0xF0);
+                // No SGB, NR52 inicia com master ligado e nenhum canal ativo (0xF0).
+                // Faz um power-cycle do APU e restaura o snapshot esperado de registradores.
+                self.bus.write(0xFF26, 0x00);
+                self.bus.write(0xFF26, 0x80);
+                self.bus.write(0xFF10, 0x80);
+                self.bus.write(0xFF11, 0xBF);
+                self.bus.write(0xFF12, 0xF3);
+                self.bus.write(0xFF16, 0x3F);
+                self.bus.write(0xFF17, 0x00);
+                self.bus.write(0xFF1A, 0x7F);
+                self.bus.write(0xFF1C, 0x9F);
+                self.bus.write(0xFF21, 0x00);
+                self.bus.write(0xFF22, 0x00);
+                self.bus.write(0xFF24, 0x77);
+                self.bus.write(0xFF25, 0xF3);
                 self.bus.ppu.stat = 0x00;
                 self.bus.ppu.ly = 0x00;
                 let div_counter = if model == BootModel::Sgb2 {
@@ -198,9 +216,27 @@ impl CPU {
                 };
                 self.bus.set_div_counter(div_counter);
             }
-            BootModel::DmgAbc | BootModel::Mgb | BootModel::Cgb | BootModel::Agb => {
+            BootModel::DmgAbc | BootModel::Mgb => {
                 // Boot ROM do DMG ABC/MGB termina com div_counter = 0xABCC.
                 self.bus.set_div_counter(0xABCC);
+            }
+            BootModel::Cgb => {
+                self.bus.set_cgb_compat_hwio(true);
+                self.bus.write(0xFF00, 0x30);
+                // CGB-ABCDE: div_counter = 0x2678
+                self.bus.set_div_counter(0x2678);
+            }
+            BootModel::Cgb0 => {
+                self.bus.set_cgb_compat_hwio(true);
+                self.bus.write(0xFF00, 0x30);
+                // CGB-0 (first revision): div_counter = 0x2884
+                self.bus.set_div_counter(0x2884);
+            }
+            BootModel::Agb => {
+                self.bus.set_cgb_compat_hwio(true);
+                self.bus.write(0xFF00, 0x30);
+                // AGB/AGS: div_counter = 0x267C
+                self.bus.set_div_counter(0x267C);
             }
         }
     }

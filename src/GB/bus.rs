@@ -49,6 +49,14 @@ pub struct MemoryBus {
     pub cgb_mode: bool,  // true se ROM é CGB
     pub cgb_speed: bool, // false = velocidade normal, true = velocidade dupla
     pub key1: u8,        // 0xFF4D: bit 0 = solicitação de troca de velocidade
+    // HWIO específicos de CGB em modo de compatibilidade
+    cgb_hwio_enabled: bool,
+    vbk: u8,          // 0xFF4F (bit 0)
+    bcps: u8,         // 0xFF68
+    ocps: u8,         // 0xFF6A
+    ff72: u8,         // 0xFF72
+    ff73: u8,         // 0xFF73
+    ff75: u8,         // 0xFF75
 }
 
 impl MemoryBus {
@@ -158,6 +166,13 @@ impl MemoryBus {
             cgb_mode: false,
             cgb_speed: false,
             key1: 0,
+            cgb_hwio_enabled: false,
+            vbk: 0,
+            bcps: 0,
+            ocps: 0,
+            ff72: 0,
+            ff73: 0,
+            ff75: 0,
         }
     }
 
@@ -165,6 +180,25 @@ impl MemoryBus {
     pub fn set_cgb_mode(&mut self, is_cgb: bool) {
         self.apu.set_cgb_mode(is_cgb);
         self.cgb_mode = is_cgb;
+    }
+
+    pub fn set_cgb_compat_hwio(&mut self, enabled: bool) {
+        self.cgb_hwio_enabled = enabled;
+        if enabled {
+            self.vbk = 0;
+            self.bcps = 0xC8;
+            self.ocps = 0xD0;
+            self.ff72 = 0x00;
+            self.ff73 = 0x00;
+            self.ff75 = 0x8F;
+        } else {
+            self.vbk = 0;
+            self.bcps = 0;
+            self.ocps = 0;
+            self.ff72 = 0;
+            self.ff73 = 0;
+            self.ff75 = 0;
+        }
     }
 
     pub fn read(&self, address: u16) -> u8 {
@@ -241,6 +275,57 @@ impl MemoryBus {
                 // Bits 1-6 sempre leem como 1
                 if self.cgb_mode {
                     (self.cgb_speed as u8) << 7 | 0x7E | (self.key1 & 0x01)
+                } else {
+                    0xFF
+                }
+            }
+            0xFF4F => {
+                if self.cgb_hwio_enabled {
+                    0xFE | (self.vbk & 0x01)
+                } else {
+                    0xFF
+                }
+            }
+            0xFF68 => {
+                if self.cgb_hwio_enabled {
+                    self.bcps
+                } else {
+                    0xFF
+                }
+            }
+            0xFF69 => 0xFF,
+            0xFF6A => {
+                if self.cgb_hwio_enabled {
+                    self.ocps
+                } else {
+                    0xFF
+                }
+            }
+            0xFF6B => 0xFF,
+            0xFF72 => {
+                if self.cgb_hwio_enabled {
+                    self.ff72
+                } else {
+                    0xFF
+                }
+            }
+            0xFF73 => {
+                if self.cgb_hwio_enabled {
+                    self.ff73
+                } else {
+                    0xFF
+                }
+            }
+            0xFF75 => {
+                if self.cgb_hwio_enabled {
+                    self.ff75
+                } else {
+                    0xFF
+                }
+            }
+            0xFF76 | 0xFF77 => {
+                if self.cgb_hwio_enabled {
+                    0x00
                 } else {
                     0xFF
                 }
@@ -392,6 +477,39 @@ impl MemoryBus {
                     self.key1 = value & 0x01;
                 }
             }
+            0xFF4F => {
+                if self.cgb_hwio_enabled {
+                    self.vbk = value & 0x01;
+                }
+            }
+            0xFF68 => {
+                if self.cgb_hwio_enabled {
+                    self.bcps = (value & 0xBF) | 0x40;
+                }
+            }
+            0xFF69 => {}
+            0xFF6A => {
+                if self.cgb_hwio_enabled {
+                    self.ocps = (value & 0xBF) | 0x40;
+                }
+            }
+            0xFF6B => {}
+            0xFF72 => {
+                if self.cgb_hwio_enabled {
+                    self.ff72 = value;
+                }
+            }
+            0xFF73 => {
+                if self.cgb_hwio_enabled {
+                    self.ff73 = value;
+                }
+            }
+            0xFF75 => {
+                if self.cgb_hwio_enabled {
+                    self.ff75 = 0x8F | (value & 0x70);
+                }
+            }
+            0xFF76 | 0xFF77 => {}
             0xFF80..=0xFFFE => self.hram[(address - 0xFF80) as usize] = value,
             0xFFFF => {
                 self.ie = value;

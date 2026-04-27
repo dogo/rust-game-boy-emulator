@@ -21,7 +21,7 @@ I'm following the excellent guide at [https://aquova.net/emudev/gb/index.html](h
 | Suite   | Command                    | Total | Passed | Failed | Timeout |
 |---------|----------------------------|-------|--------|--------|---------|
 | Blargg  | `./run_all_tests.sh blargg` | 52    | 52     | 0      | 0       |
-| Mooneye | `./run_all_tests.sh mooneye` | 111   | 91     | 20     | 0       |
+| Mooneye | `./run_all_tests.sh mooneye` | 111   | 98     | 13     | 0       |
 
 ### Blargg Test Status
 
@@ -94,7 +94,7 @@ It intentionally skips `manual-only`, `utils`, and `madness`.
 
 | Group                    | Total | Passed | Failed | Timeout |
 |--------------------------|-------|--------|--------|---------|
-| acceptance               | 41    | 39     | 2      | 0       |
+| acceptance               | 41    | 29     | 12     | 0       |
 | acceptance/bits          | 3     | 3      | 0      | 0       |
 | acceptance/instr         | 1     | 1      | 0      | 0       |
 | acceptance/interrupts    | 1     | 1      | 0      | 0       |
@@ -105,8 +105,8 @@ It intentionally skips `manual-only`, `utils`, and `madness`.
 | emulator-only/mbc1       | 13    | 13     | 0      | 0       |
 | emulator-only/mbc2       | 7     | 7      | 0      | 0       |
 | emulator-only/mbc5       | 8     | 8      | 0      | 0       |
-| misc                     | 6     | 2      | 4      | 0       |
-| misc/bits                | 1     | 0      | 1      | 0       |
+| misc                     | 8     | 7      | 1      | 0       |
+| misc/bits                | 1     | 1      | 0      | 0       |
 | misc/ppu                 | 1     | 0      | 1      | 0       |
 
 <details>
@@ -122,9 +122,9 @@ It intentionally skips `manual-only`, `utils`, and `madness`.
 | acceptance/boot_div-dmgABCmgb | ✅ Passed |
 | acceptance/boot_div-S | ✅ Passed |
 | acceptance/boot_div2-S | ✅ Passed |
-| acceptance/boot_hwio-dmg0 | ❌ Failed |
+| acceptance/boot_hwio-dmg0 | ✅ Passed |
 | acceptance/boot_hwio-dmgABCmgb | ✅ Passed |
-| acceptance/boot_hwio-S | ❌ Failed |
+| acceptance/boot_hwio-S | ✅ Passed |
 | acceptance/boot_regs-dmg0 | ✅ Passed |
 | acceptance/boot_regs-dmgABC | ✅ Passed |
 | acceptance/boot_regs-mgb | ✅ Passed |
@@ -217,11 +217,11 @@ It intentionally skips `manual-only`, `utils`, and `madness`.
 | emulator-only/mbc5/rom_512kb | ✅ Passed |
 | emulator-only/mbc5/rom_64Mb | ✅ Passed |
 | emulator-only/mbc5/rom_8Mb | ✅ Passed |
-| misc/bits/unused_hwio-C | ❌ Failed |
-| misc/boot_div-A | ❌ Failed |
-| misc/boot_div-cgb0 | ❌ Failed |
-| misc/boot_div-cgbABCDE | ❌ Failed |
-| misc/boot_hwio-C | ❌ Failed |
+| misc/bits/unused_hwio-C | ✅ Passed |
+| misc/boot_div-A | ✅ Passed |
+| misc/boot_div-cgb0 | ✅ Passed |
+| misc/boot_div-cgbABCDE | ✅ Passed |
+| misc/boot_hwio-C | ✅ Passed |
 | misc/boot_regs-A | ✅ Passed |
 | misc/boot_regs-cgb | ✅ Passed |
 | misc/ppu/vblank_stat_intr-C | ❌ Failed |
