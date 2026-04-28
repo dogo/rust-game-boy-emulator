@@ -67,6 +67,7 @@ pub struct PPU {
     // refletirem o modo 2 interno. Isso é necessário para que leituras imediatas
     // do STAT após LCDC=0x80 retornem modo=0 (comportamento do hardware).
     lcd_on_stat_delay: bool,
+    lcd_on_timing_quirk: bool,
 }
 
 impl PPU {
@@ -86,6 +87,7 @@ impl PPU {
             self.wy_pos = -1;
             self.update_stat_mode(0);
             self.lcd_on_stat_delay = false; // cancela qualquer delay pendente
+            self.lcd_on_timing_quirk = false;
             self.ly_eq_lyc_prev = self.ly == self.lyc;
             self.stat_irq_line_prev = self.stat_irq_line_level();
             *iflags &= !0x02; // limpa bit de LCD STAT
@@ -103,6 +105,7 @@ impl PPU {
             // modo=0 visível por ~1 M-cycle após ligar o LCD. Os bits de modo serão
             // atualizados para 2 quando mode_clock >= 20 em PPU::step().
             self.lcd_on_stat_delay = true;
+            self.lcd_on_timing_quirk = true;
             let bit2_before = (self.stat & 0x04) != 0; // bit LYC antes do reset do LY
             self.update_lyc_flag(); // bit2 atualizado imediatamente (LY=0 vs LYC)
             let bit2_after = (self.stat & 0x04) != 0;
@@ -156,6 +159,7 @@ impl PPU {
             stat_irq_line_prev: false,
             cgb_mode2_vblank_stat_quirk: false,
             lcd_on_stat_delay: false,
+            lcd_on_timing_quirk: false,
         }
     }
 
@@ -489,13 +493,104 @@ impl PPU {
 
     // Leitura de STAT (FF41)
     pub fn read_stat(&self) -> u8 {
+        let visible_mode = self.visible_stat_mode();
+        let lyc_bit = if self.visible_lyc_coincidence() {
+            0x04
+        } else {
+            0x00
+        };
+
         0x80 |
         (if (self.stat & 0x40) != 0 { 0x40 } else { 0 }) | // LYC=LY enable
         (if (self.stat & 0x20) != 0 { 0x20 } else { 0 }) | // Mode 2 enable
         (if (self.stat & 0x10) != 0 { 0x10 } else { 0 }) | // Mode 1 enable
         (if (self.stat & 0x08) != 0 { 0x08 } else { 0 }) | // Mode 0 enable
-        (if (self.stat & 0x04) != 0 { 0x04 } else { 0 }) | // LYC coincidence
-        (self.stat & 0x03) // bits 0-1: modo visível (pode ter delay após LCD on)
+        lyc_bit | // LYC coincidence
+        visible_mode // bits 0-1: modo visível (pode ter delay após LCD on)
+    }
+
+    fn visible_lyc_coincidence(&self) -> bool {
+        if self.lcd_on_timing_quirk
+            && (self.lcdc & 0x80) != 0
+            && self.ly == 1
+            && self.lyc == 1
+            && self.mode_clock < 4
+        {
+            false
+        } else {
+            (self.stat & 0x04) != 0
+        }
+    }
+
+    fn visible_stat_mode(&self) -> u8 {
+        if self.lcd_on_line0_mode3_window() {
+            3
+        } else if self.lcd_on_line0_mode0_window() {
+            0
+        } else {
+            self.stat & 0x03
+        }
+    }
+
+    fn lcd_on_line0_mode0_window(&self) -> bool {
+        self.lcd_on_timing_quirk && (self.lcdc & 0x80) != 0 && self.ly == 0 && self.mode_clock < 84
+    }
+
+    fn lcd_on_line0_mode3_window(&self) -> bool {
+        self.lcd_on_timing_quirk
+            && (self.lcdc & 0x80) != 0
+            && self.ly == 0
+            && (84..=252).contains(&self.mode_clock)
+    }
+
+    pub fn cpu_vram_blocked(&self) -> bool {
+        if (self.lcdc & 0x80) == 0 {
+            return false;
+        }
+
+        if self.ly == 0 {
+            self.lcd_on_line0_mode3_window()
+        } else {
+            self.mode == 3 || (self.mode == 2 && self.mode_clock >= 80)
+        }
+    }
+
+    pub fn cpu_vram_write_blocked(&self) -> bool {
+        if (self.lcdc & 0x80) == 0 {
+            return false;
+        }
+
+        if self.ly == 0 {
+            self.lcd_on_line0_mode3_window()
+        } else {
+            self.mode == 3
+        }
+    }
+
+    pub fn cpu_oam_blocked(&self) -> bool {
+        if (self.lcdc & 0x80) == 0 {
+            return false;
+        }
+
+        if self.ly == 0 {
+            self.lcd_on_line0_mode3_window() || self.mode_clock >= 456
+        } else if self.ly < 144 && self.mode_clock < 4 {
+            true
+        } else {
+            self.mode == 2 || self.mode == 3
+        }
+    }
+
+    pub fn cpu_oam_write_blocked(&self) -> bool {
+        if (self.lcdc & 0x80) == 0 {
+            return false;
+        }
+
+        if self.ly == 0 {
+            self.lcd_on_line0_mode3_window()
+        } else {
+            self.mode == 3 || (self.mode == 2 && self.mode_clock < 80)
+        }
     }
 
     // Escrita de STAT (FF41) - só atualiza bits de enable
@@ -711,6 +806,7 @@ impl PPU {
             self.wy_pos = -1;
             self.ly_eq_lyc_prev = self.ly == self.lyc;
             self.stat_irq_line_prev = self.stat_irq_line_level();
+            self.lcd_on_timing_quirk = false;
             return;
         }
 
@@ -784,6 +880,9 @@ impl PPU {
             let previous_ly = self.ly;
             self.mode_clock -= 456;
             self.ly = (self.ly + 1) % 154;
+            if self.ly >= 3 {
+                self.lcd_on_timing_quirk = false;
+            }
             self.update_lyc_flag();
             self.update_stat_irq_line(iflags);
             if previous_ly == 153

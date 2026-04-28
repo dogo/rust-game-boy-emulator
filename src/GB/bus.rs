@@ -51,12 +51,12 @@ pub struct MemoryBus {
     pub key1: u8,        // 0xFF4D: bit 0 = solicitação de troca de velocidade
     // HWIO específicos de CGB em modo de compatibilidade
     cgb_hwio_enabled: bool,
-    vbk: u8,          // 0xFF4F (bit 0)
-    bcps: u8,         // 0xFF68
-    ocps: u8,         // 0xFF6A
-    ff72: u8,         // 0xFF72
-    ff73: u8,         // 0xFF73
-    ff75: u8,         // 0xFF75
+    vbk: u8,  // 0xFF4F (bit 0)
+    bcps: u8, // 0xFF68
+    ocps: u8, // 0xFF6A
+    ff72: u8, // 0xFF72
+    ff73: u8, // 0xFF73
+    ff75: u8, // 0xFF75
 }
 
 impl MemoryBus {
@@ -229,7 +229,7 @@ impl MemoryBus {
             0x0000..=0x7FFF => self.mbc.read_rom(address),
             // VRAM: bloqueada em mode 3 se LCD on
             0x8000..=0x9FFF => {
-                if self.lcd_on() && self.ppu.mode == 3 {
+                if self.ppu.cpu_vram_blocked() {
                     0xFF
                 } else {
                     self.ppu.read_vram(address)
@@ -240,9 +240,7 @@ impl MemoryBus {
             0xE000..=0xFDFF => self.wram[(address - 0xE000) as usize],
             // OAM: bloqueada em mode 2/3 e durante DMA
             0xFE00..=0xFE9F => {
-                if (self.lcd_on() && (self.ppu.mode == 2 || self.ppu.mode == 3))
-                    || self.oam_dma_active
-                {
+                if self.ppu.cpu_oam_blocked() || self.oam_dma_active {
                     0xFF
                 } else {
                     self.ppu.read_oam(address)
@@ -364,7 +362,7 @@ impl MemoryBus {
             0x0000..=0x7FFF => self.mbc.write_register(address, value),
             // VRAM: bloqueada em mode 3 se LCD on
             0x8000..=0x9FFF => {
-                if self.lcd_on() && self.ppu.mode == 3 {
+                if self.ppu.cpu_vram_write_blocked() {
                     // escrita ignorada
                 } else {
                     self.ppu.write_vram(address, value);
@@ -391,9 +389,7 @@ impl MemoryBus {
             }
             // OAM: bloqueada em mode 2/3 e durante DMA
             0xFE00..=0xFE9F => {
-                if (self.lcd_on() && (self.ppu.mode == 2 || self.ppu.mode == 3))
-                    || self.oam_dma_active
-                {
+                if self.ppu.cpu_oam_write_blocked() || self.oam_dma_active {
                     // escrita ignorada
                 } else {
                     self.ppu.write_oam(address, value);

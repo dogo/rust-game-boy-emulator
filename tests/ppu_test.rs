@@ -695,6 +695,7 @@ mod ppu_tests {
         let mut ppu = PPU::new();
         ppu.lcdc = 0x91 | 0x02; // LCD on, BG on, sprites ON
         ppu.ly = 0;
+        ppu.oam.fill(0);
 
         // Preencher a primeira linha do tilemap com tile 1
         for x in 0..32 {
