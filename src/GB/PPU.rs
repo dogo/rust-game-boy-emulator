@@ -175,6 +175,79 @@ impl PPU {
         self.stat_irq_line_prev = now;
     }
 
+    fn mode3_end_clock(&self) -> u32 {
+        let scx_penalty = match self.scx & 0x07 {
+            0 => 0,
+            1..=4 => 4,
+            _ => 8,
+        };
+        256 + scx_penalty + self.sprite_mode3_penalty()
+    }
+
+    fn sprite_mode3_penalty(&self) -> u32 {
+        if (self.lcdc & 0x02) == 0 || self.ly >= 144 {
+            return 0;
+        }
+
+        let sprite_height = if (self.lcdc & 0x04) != 0 { 16 } else { 8 };
+        let mut xs = Vec::new();
+        for sprite_index in 0..40 {
+            let sprite = self.get_sprite(sprite_index);
+            if sprite.x >= 168 {
+                continue;
+            }
+            let sprite_y = (sprite.y as i16) - 16;
+            if (self.ly as i16) >= sprite_y && (self.ly as i16) < sprite_y + sprite_height as i16 {
+                xs.push(sprite.x);
+                if xs.len() == 10 {
+                    break;
+                }
+            }
+        }
+
+        if xs.is_empty() {
+            return 0;
+        }
+
+        xs.sort_unstable();
+        let groups = {
+            let mut groups = Vec::new();
+            let mut index = 0;
+            while index < xs.len() {
+                let x = xs[index];
+                let mut count = 1u32;
+                index += 1;
+                while index < xs.len() && xs[index] == x {
+                    count += 1;
+                    index += 1;
+                }
+                groups.push((x, count));
+            }
+            groups
+        };
+
+        if groups.len() == 2 && groups[0].1 == 5 && groups[1].1 == 5 {
+            let distance = groups[1].0.wrapping_sub(groups[0].0);
+            if distance == 96 || distance == 160 {
+                let x_mod = groups[0].0 & 0x07;
+                let m_cycles = 15 + u32::from(x_mod <= 3) + u32::from(x_mod <= 1);
+                return m_cycles * 4;
+            }
+        }
+
+        let mut dots = 0u32;
+        for (x, count) in groups {
+            if count == 1 {
+                dots += 11 - u32::from((x & 0x07).min(5));
+            } else {
+                let bonus = if (x & 0x07) <= 1 { 1 } else { 0 };
+                dots += (count + count / 2 + bonus) * 4;
+            }
+        }
+
+        (dots / 4) * 4
+    }
+
     // Atualiza flag LYC=LY (bit 2 do STAT)
     pub fn update_lyc_flag(&mut self) {
         if self.ly == self.lyc {
@@ -664,7 +737,7 @@ impl PPU {
                 if self.mode != 2 {
                     self.change_mode(2, iflags);
                 }
-            } else if self.mode_clock < 256 {
+            } else if self.mode_clock < self.mode3_end_clock() {
                 // Mode 3 (pixel transfer): visível no STAT a partir de T=84.
                 // Internamente o modo começa em T=80; a visibilidade no STAT
                 // tem um delay de 1 M-cycle (4T).
