@@ -781,10 +781,19 @@ impl PPU {
                 *iflags |= 0x02;
             }
 
+            let previous_ly = self.ly;
             self.mode_clock -= 456;
             self.ly = (self.ly + 1) % 154;
             self.update_lyc_flag();
             self.update_stat_irq_line(iflags);
+            if previous_ly == 153
+                && self.ly == 0
+                && (self.stat & 0x20) != 0
+                && !self.stat_irq_line_prev
+            {
+                *iflags |= 0x02;
+                self.stat_irq_line_prev = true;
+            }
             if self.ly >= 144 && self.mode != 1 {
                 self.change_mode(1, iflags);
             }
