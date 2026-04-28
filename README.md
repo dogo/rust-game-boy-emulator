@@ -21,7 +21,7 @@ I'm following the excellent guide at [https://aquova.net/emudev/gb/index.html](h
 | Suite   | Command                    | Total | Passed | Failed | Timeout |
 |---------|----------------------------|-------|--------|--------|---------|
 | Blargg  | `./run_all_tests.sh blargg` | 52    | 52     | 0      | 0       |
-| Mooneye | `./run_all_tests.sh mooneye` | 111   | 101    | 10     | 0       |
+| Mooneye | `./run_all_tests.sh mooneye` | 111   | 106    | 5      | 0       |
 
 ### Blargg Test Status
 
@@ -94,18 +94,18 @@ It intentionally skips `manual-only`, `utils`, and `madness`.
 
 | Group                    | Total | Passed | Failed | Timeout |
 |--------------------------|-------|--------|--------|---------|
-| acceptance               | 41    | 31     | 10     | 0       |
+| acceptance               | 41    | 41     | 0      | 0       |
 | acceptance/bits          | 3     | 3      | 0      | 0       |
 | acceptance/instr         | 1     | 1      | 0      | 0       |
 | acceptance/interrupts    | 1     | 1      | 0      | 0       |
 | acceptance/oam_dma       | 3     | 3      | 0      | 0       |
-| acceptance/ppu           | 12    | 0      | 12     | 0       |
+| acceptance/ppu           | 12    | 7      | 5      | 0       |
 | acceptance/serial        | 1     | 1      | 0      | 0       |
 | acceptance/timer         | 13    | 13     | 0      | 0       |
 | emulator-only/mbc1       | 13    | 13     | 0      | 0       |
 | emulator-only/mbc2       | 7     | 7      | 0      | 0       |
 | emulator-only/mbc5       | 8     | 8      | 0      | 0       |
-| misc                     | 8     | 8      | 0      | 0       |
+| misc                     | 6     | 6      | 0      | 0       |
 | misc/bits                | 1     | 1      | 0      | 0       |
 | misc/ppu                 | 1     | 1      | 0      | 0       |
 
@@ -158,15 +158,15 @@ It intentionally skips `manual-only`, `utils`, and `madness`.
 | acceptance/pop_timing | ✅ Passed |
 | acceptance/ppu/hblank_ly_scx_timing-GS | ❌ Failed |
 | acceptance/ppu/intr_1_2_timing-GS | ❌ Failed |
-| acceptance/ppu/intr_2_0_timing | ❌ Failed |
+| acceptance/ppu/intr_2_0_timing | ✅ Passed |
 | acceptance/ppu/intr_2_mode0_timing_sprites | ❌ Failed |
-| acceptance/ppu/intr_2_mode0_timing | ❌ Failed |
-| acceptance/ppu/intr_2_mode3_timing | ❌ Failed |
-| acceptance/ppu/intr_2_oam_ok_timing | ❌ Failed |
+| acceptance/ppu/intr_2_mode0_timing | ✅ Passed |
+| acceptance/ppu/intr_2_mode3_timing | ✅ Passed |
+| acceptance/ppu/intr_2_oam_ok_timing | ✅ Passed |
 | acceptance/ppu/lcdon_timing-GS | ❌ Failed |
 | acceptance/ppu/lcdon_write_timing-GS | ❌ Failed |
 | acceptance/ppu/stat_irq_blocking | ✅ Passed |
-| acceptance/ppu/stat_lyc_onoff | ❌ Failed |
+| acceptance/ppu/stat_lyc_onoff | ✅ Passed |
 | acceptance/ppu/vblank_stat_intr-GS | ✅ Passed |
 | acceptance/push_timing | ✅ Passed |
 | acceptance/rapid_di_ei | ✅ Passed |
