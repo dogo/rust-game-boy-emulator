@@ -3,7 +3,6 @@
 pub mod APU;
 pub mod CPU;
 pub mod PPU;
-pub mod RAM;
 pub mod bus;
 pub mod cartridge;
 pub mod debugger;
