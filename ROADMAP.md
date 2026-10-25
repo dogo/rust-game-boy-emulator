@@ -42,7 +42,7 @@ P0 deve preceder alterações grandes. As tarefas da etapa 2 podem ser feitas po
   Em `src/main.rs`, retornar erro de processo para ROM inválida; no script, recusar suíte sem ROMs e distinguir falha, timeout e erro de execução. Verificar com ROM de header inválido, diretório vazio e uma ROM válida de cada protocolo.
 
 - [x] **V03 — Incorporar as regressões encontradas.**
-  Os 14 cenários de hardware e diagnóstico estão em `tests/known_regressions.rs`; os três de interface estão em `src/GB/sdl_runner.rs`. Foram confirmados falhando quando executados com `--ignored`. Permanecem ignorados na suíte normal até as tarefas indicadas em cada motivo de `#[ignore]`; retirar a marcação ao corrigir cada bug.
+  Os 14 cenários de hardware e diagnóstico estão em `tests/known_regressions.rs`; os três de interface estão em `src/GB/sdl_runner.rs`. Foram confirmados falhando quando executados com `--ignored`. Os cenários ainda não corrigidos permanecem ignorados na suíte normal; retirar a marcação ao corrigir cada bug.
 
 - [x] **V04 — Executar ROMs no CI.**
   Atualizar `.github/workflows/ci.yml` para preparar os submódulos e ROMs necessários, executar testes Rust e as suítes Blargg/Mooneye e preservar os diagnósticos das falhas. Concluído quando regressão de ROM reprova o CI e ausência de fixtures não resulta em sucesso.
@@ -58,8 +58,10 @@ Etapa 0 implementada e validada: 17 regressões conhecidas foram reproduzidas se
 
   Concluído: o temporário é exclusivo, fica no mesmo diretório e é removido se a gravação ou a troca falhar. O save anterior e suas permissões são preservados; links simbólicos existentes continuam apontando para o mesmo destino. Uma falha de save agora encerra o processo com erro. Testes cobrem criação, substituição, recarga e falhas; o formato `.sav` não mudou. A troca não garante durabilidade após queda de energia porque arquivo e diretório não são sincronizados em disco.
 
-- [ ] **S02 — Preservar RTC com HALT e sem RAM.**
+- [x] **S02 — Preservar RTC com HALT e sem RAM.**
   Em `src/GB/mbc/mbc3.rs`, respeitar HALT ao aplicar tempo offline e salvar o relógio mesmo quando a RAM está vazia. Cobrir save parado por 60 segundos, relógio ativo e cartucho com RTC+bateria sem RAM; preservar a leitura dos formatos antigos já suportados.
+
+  Concluído: o tempo offline só avança o RTC ativo; cartuchos MBC3 com RTC e bateria gravam os 5 registradores e o timestamp mesmo sem RAM. As regressões S02 estão ativas. Testes cobrem relógio parado e ativo após 60 segundos, ida e volta sem RAM e leitura do formato antigo sem timestamp. Blargg e Mooneye passaram (163/163). O formato `.sav` existente não mudou; validação de dados inválidos continua em S03.
 
 - [ ] **S03 — Tratar estado RTC inválido.**
   Validar os dados do save antes de aceitá-los e definir o comportamento dos valores fora do intervalo escritos pela ROM. Eliminar underflow em `60 - sec` e testar segundos=60/61, dados truncados e timestamps extremos sem esperas reais. Erro de carga deve ser comunicado e não levar à substituição silenciosa do save original.

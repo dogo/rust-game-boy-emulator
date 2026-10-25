@@ -105,7 +105,6 @@ fn joypad_reads_both_selected_groups() {
 }
 
 #[test]
-#[ignore = "S02: relógio parado não avança enquanto o emulador está fechado"]
 fn rtc_halt_is_preserved_when_loading() {
     let mut m = MBC3::new(vec![0; 32768], 8192);
     let mut save = vec![0; 8192];
@@ -122,7 +121,6 @@ fn rtc_halt_is_preserved_when_loading() {
 }
 
 #[test]
-#[ignore = "S02: cartucho com RTC e sem RAM deve preservar o relógio"]
 fn rtc_only_cart_can_be_saved() {
     let mut rom = vec![0; 32768];
     rom[0x147] = 0x0F;

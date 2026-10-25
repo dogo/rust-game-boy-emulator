@@ -231,7 +231,7 @@ impl MBC for MBC3 {
     }
 
     fn save_ram(&self) -> Option<Vec<u8>> {
-        if self.ram.is_empty() {
+        if self.ram.is_empty() && !matches!(self.rom.get(0x0147).copied(), Some(0x0F | 0x10)) {
             None
         } else {
             // Cria uma cópia mutável para atualizarmos o RTC antes de salvar
@@ -272,9 +272,9 @@ impl MBC for MBC3 {
             let saved_ts = i64::from_le_bytes(ts_bytes);
 
             let now = Self::now_secs();
-            if saved_ts > 0 && now > saved_ts {
+            if saved_ts > 0 && now > saved_ts && (self.rtc[4] & 0x40) == 0 {
                 let delta = (now - saved_ts) as u64;
-                // Avança o RTC como se tivesse passado esse tempo com o cartucho ligado
+                // Avança o RTC somente se não estava parado quando o emulador fechou
                 self.add_rtc_seconds(delta);
             }
             self.rtc_last_update = now;

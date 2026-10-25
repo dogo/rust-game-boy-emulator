@@ -1,4 +1,5 @@
-use gb_emu::GB::mbc::{MBC, mbc3::MBC3};
+use gb_emu::GB::mbc::{MBC, create_mbc, mbc3::MBC3};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 #[test]
 fn test_mbc3_rom_banking_basic() {
@@ -173,4 +174,68 @@ fn test_mbc3_save_and_load_ram_with_rtc() {
     assert_eq!(s, 5, "RTC seconds should be restored from save");
     assert_eq!(m, 10, "RTC minutes should be restored from save");
     assert_eq!(h, 1, "RTC hours should be restored from save");
+}
+
+#[test]
+fn test_mbc3_active_rtc_advances_while_closed() {
+    let mut mbc = MBC3::new(vec![0; 32 * 1024], 8 * 1024);
+    let mut save = vec![0; 8 * 1024];
+    save.extend_from_slice(&[10, 0, 0, 0, 0]);
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64;
+    save.extend_from_slice(&(now - 60).to_le_bytes());
+
+    mbc.load_ram(&save);
+    mbc.write_register(0x0000, 0x0A);
+    mbc.write_register(0x4000, 0x09);
+    assert_eq!(mbc.read_ram(0xA000), 1);
+}
+
+#[test]
+fn test_mbc3_rtc_only_cartridge_round_trips() {
+    let mut rom = vec![0; 32 * 1024];
+    rom[0x0147] = 0x0F;
+    let mut mbc = create_mbc(rom.clone());
+    mbc.write_register(0x0000, 0x0A);
+    mbc.write_register(0x4000, 0x08);
+    mbc.write_ram(0xA000, 21);
+    mbc.write_register(0x4000, 0x0C);
+    mbc.write_ram(0xA000, 0x40);
+    let save = mbc.save_ram().unwrap();
+    assert_eq!(save.len(), 13);
+
+    let mut restored = create_mbc(rom);
+    restored.load_ram(&save);
+    restored.write_register(0x0000, 0x0A);
+    restored.write_register(0x4000, 0x08);
+    assert_eq!(restored.read_ram(0xA000), 21);
+    restored.write_register(0x4000, 0x0C);
+    assert_eq!(restored.read_ram(0xA000) & 0x40, 0x40);
+
+    let mut rom_without_rtc = vec![0; 32 * 1024];
+    rom_without_rtc[0x0147] = 0x11;
+    assert!(create_mbc(rom_without_rtc).save_ram().is_none());
+}
+
+#[test]
+fn test_mbc3_loads_legacy_save_without_timestamp() {
+    let mut mbc = MBC3::new(vec![0; 32 * 1024], 8 * 1024);
+    let mut save = vec![0; 8 * 1024];
+    save.extend_from_slice(&[25, 2, 1, 0, 0]);
+
+    mbc.load_ram(&save);
+    mbc.write_register(0x0000, 0x0A);
+    mbc.write_register(0x4000, 0x08);
+    assert_eq!(mbc.read_ram(0xA000), 25);
+    mbc.write_register(0x4000, 0x09);
+    assert_eq!(mbc.read_ram(0xA000), 2);
+    mbc.write_register(0x4000, 0x0A);
+    assert_eq!(mbc.read_ram(0xA000), 1);
+
+    let mut ram_only = MBC3::new(vec![0; 32 * 1024], 8 * 1024);
+    ram_only.load_ram(&[0x42; 8 * 1024]);
+    ram_only.write_register(0x0000, 0x0A);
+    assert_eq!(ram_only.read_ram(0xA000), 0x42);
 }
