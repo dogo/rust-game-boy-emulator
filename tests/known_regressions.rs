@@ -53,7 +53,6 @@ fn window_wx_6_is_partially_visible() {
 }
 
 #[test]
-#[ignore = "D03: acesso à VRAM na linha zero após o primeiro frame"]
 fn line_zero_blocks_vram_after_first_frame() {
     let mut p = PPU::new();
     p.headless = true;

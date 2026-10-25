@@ -447,6 +447,50 @@ mod ppu_tests {
         assert_eq!(ppu.framebuffer[8], 0);
     }
 
+    fn step_cycles(ppu: &mut PPU, cycles: u32) {
+        let mut flags = 0;
+        for _ in 0..cycles / 4 {
+            ppu.step(4, &mut flags);
+        }
+    }
+
+    /// (VRAM leitura, VRAM escrita, OAM leitura, OAM escrita)
+    fn blocked(ppu: &PPU) -> (bool, bool, bool, bool) {
+        (
+            ppu.cpu_vram_blocked(),
+            ppu.cpu_vram_write_blocked(),
+            ppu.cpu_oam_blocked(),
+            ppu.cpu_oam_write_blocked(),
+        )
+    }
+
+    #[test]
+    fn line_zero_of_later_frames_uses_normal_mode_2_and_3_locks() {
+        let mut ppu = PPU::new();
+        ppu.headless = true;
+        step_cycles(&mut ppu, 70224 + 40);
+        assert_eq!((ppu.ly, ppu.mode), (0, 2));
+        assert_eq!(blocked(&ppu), (false, false, true, true));
+        step_cycles(&mut ppu, 60);
+        assert_eq!((ppu.ly, ppu.mode), (0, 3));
+        assert_eq!(blocked(&ppu), (true, true, true, true));
+    }
+
+    #[test]
+    fn first_line_after_lcd_on_keeps_its_access_windows() {
+        let mut ppu = PPU::new();
+        ppu.headless = true;
+        let mut flags = 0;
+        ppu.write_register(0xFF40, 0x11, &mut flags);
+        assert_eq!(blocked(&ppu), (false, false, false, false));
+        ppu.write_register(0xFF40, 0x91, &mut flags);
+        step_cycles(&mut ppu, 36);
+        assert_eq!(ppu.ly, 0);
+        assert_eq!(blocked(&ppu), (false, false, false, false));
+        step_cycles(&mut ppu, 60);
+        assert_eq!(blocked(&ppu), (true, true, true, true));
+    }
+
     #[test]
     fn test_sprite_priority() {
         let mut ppu = PPU::new();

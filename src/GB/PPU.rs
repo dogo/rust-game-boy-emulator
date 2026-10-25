@@ -549,12 +549,17 @@ impl PPU {
             && (84..=252).contains(&self.mode_clock)
     }
 
+    /// Só a linha 0 logo após ligar o LCD tem as janelas de acesso especiais
+    fn lcd_on_first_line(&self) -> bool {
+        self.lcd_on_timing_quirk && self.ly == 0
+    }
+
     pub fn cpu_vram_blocked(&self) -> bool {
         if (self.lcdc & 0x80) == 0 {
             return false;
         }
 
-        if self.ly == 0 {
+        if self.lcd_on_first_line() {
             self.lcd_on_line0_mode3_window()
         } else {
             self.mode == 3 || (self.mode == 2 && self.mode_clock >= 80)
@@ -566,7 +571,7 @@ impl PPU {
             return false;
         }
 
-        if self.ly == 0 {
+        if self.lcd_on_first_line() {
             self.lcd_on_line0_mode3_window()
         } else {
             self.mode == 3
@@ -578,7 +583,7 @@ impl PPU {
             return false;
         }
 
-        if self.ly == 0 {
+        if self.lcd_on_first_line() {
             self.lcd_on_line0_mode3_window() || self.mode_clock >= 456
         } else if self.ly < 144 && self.mode_clock < 4 {
             true
@@ -592,7 +597,7 @@ impl PPU {
             return false;
         }
 
-        if self.ly == 0 {
+        if self.lcd_on_first_line() {
             self.lcd_on_line0_mode3_window()
         } else {
             self.mode == 3 || (self.mode == 2 && self.mode_clock < 80)

@@ -97,8 +97,10 @@ Critério de saída: os cenários acima têm regressões automatizadas; uma sess
 
   Concluído: com o BG desligado, `render_bg_scanline` limpa `bg_priority` junto com a linha, então nenhum sprite fica escondido pela máscara de um frame anterior. A parte de não deixar os sprites destruírem a informação do fundo já tinha entrado em D01. Testes cobrem um sprite de baixa prioridade com o BG desligado e o mesmo caso com outro sprite sobreposto (o de baixa prioridade vence e aparece); os dois falham no código anterior. A suíte Rust e as 163 ROMs passaram.
 
-- [ ] **D03 — Aplicar bloqueios de VRAM/OAM na linha zero.**
+- [x] **D03 — Aplicar bloqueios de VRAM/OAM na linha zero.**
   Restringir a exceção de ligar o LCD ao período em que ela realmente está ativa. Revisar os quatro caminhos de bloqueio de leitura/escrita. Cobrir a primeira linha após ligar o LCD e a linha zero de frames posteriores, com LCD ligado/desligado e modos 2/3.
+
+  Concluído: os quatro caminhos (`cpu_vram_blocked`, `cpu_vram_write_blocked`, `cpu_oam_blocked`, `cpu_oam_write_blocked`) só usam as janelas especiais da linha 0 enquanto `lcd_on_timing_quirk` está ativo, isto é, na primeira linha após ligar o LCD. Nos frames seguintes, a linha 0 segue as regras normais dos modos 2 e 3. Testes cobrem a linha 0 de um frame posterior nos modos 2 e 3 (falha no código anterior), a primeira linha após ligar o LCD e o LCD desligado (sem bloqueio). A suíte Rust e as 163 ROMs passaram, incluindo os testes Mooneye de `lcdon_timing`.
 
 - [ ] **D04 — Corrigir recorte e contador vertical da window.**
   Aceitar a janela parcialmente visível com `WX < 7` e usar o contador de linhas efetivamente desenhadas, em vez de apenas `LY-WY`. Testar WX=6/7, ocultação e retomada via WX, condições de WY e reset por frame; tratar peculiaridades dos limites conforme evidência de hardware.
