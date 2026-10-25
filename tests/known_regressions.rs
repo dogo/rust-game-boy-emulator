@@ -157,7 +157,6 @@ fn dma_blocks_cpu_writes_to_wram() {
 }
 
 #[test]
-#[ignore = "D08: cartucho 0x09 mantém RAM externa"]
 fn cartridge_type_09_keeps_external_ram() {
     let mut rom = vec![0; 32768];
     rom[0x147] = 9;

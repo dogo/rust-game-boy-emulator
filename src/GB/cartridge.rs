@@ -29,6 +29,14 @@ pub fn validate_header(data: &[u8]) -> Result<(), String> {
         ));
     }
 
+    let cart_type = data[0x0147];
+    if !crate::GB::mbc::is_supported_cart_type(cart_type) {
+        return Err(format!(
+            "❌ Tipo de cartucho não suportado: {:02X}",
+            cart_type
+        ));
+    }
+
     Ok(())
 }
 

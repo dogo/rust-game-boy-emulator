@@ -122,8 +122,10 @@ Critério de saída: os cenários acima têm regressões automatizadas; uma sess
 
   Concluído: `Joypad::read` faz AND das linhas de cada grupo selecionado (ativo em zero); antes, com os dois selecionados, só o D-pad aparecia. Um teste cobre nenhum grupo, D-pad, ação e ambos, com botões de bits iguais e diferentes nos dois grupos; ele e a regressão D07 falham no código anterior. A suíte Rust e as 163 ROMs passaram. A interrupção e a saída de STOP continuam usando o estado dos botões, sem depender da seleção.
 
-- [ ] **D08 — Tratar cartuchos sem controlador com RAM e tipos desconhecidos.**
+- [x] **D08 — Tratar cartuchos sem controlador com RAM e tipos desconhecidos.**
   Em `src/GB/mbc/mod.rs`, `none.rs` e seus consumidores, dar suporte aos tipos 0x08/0x09 ou rejeitá-los explicitamente até a implementação. Recusar controladores desconhecidos em vez de cair silenciosamente em ROM simples. Para declarar suporte, testar leitura/escrita da RAM e persistência do tipo com bateria.
+
+  Concluído: os tipos 0x08 (ROM+RAM) e 0x09 (ROM+RAM+bateria) usam `NoMBC::with_ram`, com até 8 KB em `$A000-$BFFF` e o tamanho do header ($0149); acima do tamanho declarado, leituras retornam 0xFF. Só o 0x09 grava `.sav`. `validate_header` recusa tipos fora de `mbc::is_supported_cart_type` e o processo sai com erro; `create_mbc` ainda cai em ROM simples para ROMs sem header, como as dos testes. Testes cobrem RAM sem bateria (sem save), ida e volta do save com bateria, RAM menor que a janela, a lista de tipos suportados e a recusa pela linha de comando. A suíte Rust e as 163 ROMs passaram; os quatro jogos locais usam tipos suportados. API nova: `mbc::is_supported_cart_type` e `NoMBC::with_ram`; o formato `.sav` dos outros tipos não mudou.
 
 - [ ] **D09 — Separar STOP de HALT.**
   Em `src/GB/CPU.rs`, não avançar o divisor como se a CPU estivesse em HALT. Cobrir divisor parado, entrada/saída de STOP e retomada por joypad; verificar também o consumo do byte de padding da instrução. Manter as regras de troca de velocidade CGB separadas do caminho DMG.

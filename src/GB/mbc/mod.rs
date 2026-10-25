@@ -4,11 +4,22 @@ pub mod mbc3;
 pub mod mbc5;
 pub mod none;
 
+/// Tipos de cartucho (byte $0147) que `create_mbc` emula
+pub fn is_supported_cart_type(cart_type: u8) -> bool {
+    matches!(
+        cart_type,
+        0x00..=0x03 | 0x05 | 0x06 | 0x08 | 0x09 | 0x0F..=0x13 | 0x19..=0x1E
+    )
+}
+
+/// Tipos fora de `is_supported_cart_type` caem em ROM simples; `validate_header`
+/// os recusa antes, e aqui só chegam ROMs sem header, como as dos testes.
 pub fn create_mbc(rom: Vec<u8>) -> Box<dyn MBC + Send> {
     let cart_type = rom.get(0x0147).copied().unwrap_or(0x00);
     let ram_size = get_ram_size_for_type(&rom, cart_type);
     match cart_type {
         0x00 => Box::new(none::NoMBC::new(rom)),
+        0x08 | 0x09 => Box::new(none::NoMBC::with_ram(rom, ram_size, cart_type == 0x09)),
         0x01..=0x03 => Box::new(mbc1::MBC1::new(rom, ram_size)),
         0x05..=0x06 => Box::new(mbc2::MBC2::new(rom)),
         0x0F..=0x13 => Box::new(mbc3::MBC3::new(rom, ram_size)),
