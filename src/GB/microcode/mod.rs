@@ -966,8 +966,8 @@ pub fn execute(program: &MicroProgram, regs: &mut Registers, bus: &mut MemoryBus
                 regs.set_flag_z(false);
                 regs.set_flag_n(false);
                 // Half-carry e carry são calculados nos 4 bits baixos
-                regs.set_flag_h(((sp & 0x0F) as u16 + (offset as u8 & 0x0F) as u16) > 0x0F);
-                regs.set_flag_c(((sp & 0xFF) as u16 + (offset as u8 as u16)) > 0xFF);
+                regs.set_flag_h(((sp & 0x0F) + (offset as u8 & 0x0F) as u16) > 0x0F);
+                regs.set_flag_c(((sp & 0xFF) + (offset as u8 as u16)) > 0xFF);
                 bus.cpu_idle(4); // 4 calcular
                 bus.cpu_idle(4); // 4 idle (total: 16T)
             }

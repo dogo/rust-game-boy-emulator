@@ -18,8 +18,8 @@ pub fn validate_header(data: &[u8]) -> Result<(), String> {
     }
 
     let mut x: u8 = 0;
-    for i in 0x0134..=0x014C {
-        x = x.wrapping_sub(data[i]).wrapping_sub(1);
+    for &byte in &data[0x0134..=0x014C] {
+        x = x.wrapping_sub(byte).wrapping_sub(1);
     }
     let checksum = data[0x014D];
     if x != checksum {

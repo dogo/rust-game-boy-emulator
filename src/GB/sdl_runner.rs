@@ -184,10 +184,8 @@ fn emulation_thread(
             skip_breakpoint = false;
 
             let cycles = cpu.execute_next();
-            let c = cycles as u64;
-
-            frame_cycle_accum += c;
-            apu_cycle_accum += c as f64;
+            frame_cycle_accum += cycles;
+            apu_cycle_accum += cycles as f64;
 
             while apu_cycle_accum >= cycles_per_sample {
                 apu_cycle_accum -= cycles_per_sample;

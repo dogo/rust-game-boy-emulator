@@ -1,6 +1,6 @@
-/// Emula o timer/divisor do Game Boy
-/// Implementação do timer seguindo o comportamento do hardware Game Boy
-/// Ref: https://gbdev.io/pandocs/Timer_Obscure_Behaviour.html
+//! Emula o timer/divisor do Game Boy
+//! Implementação do timer seguindo o comportamento do hardware Game Boy
+//! Ref: https://gbdev.io/pandocs/Timer_Obscure_Behaviour.html
 
 // Bits do div_counter que trigeram TIMA para cada valor de TAC & 0x03
 const TAC_TRIGGER_BITS: [u16; 4] = [512, 8, 32, 128]; // bits 9, 3, 5, 7

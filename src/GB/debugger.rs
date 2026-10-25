@@ -167,13 +167,13 @@ impl Debugger {
     pub fn format_memory(cpu: &CPU, addr: u16, count: usize) -> String {
         let mut result = format!("Memória a partir de 0x{:04X}:\n", addr);
         let mut current = addr;
-        for _ in 0..((count + 15) / 16) {
+        for _ in 0..count.div_ceil(16) {
             result.push_str(&format!("  {:04X}: ", current));
             let mut ascii = String::new();
             for _ in 0..16 {
                 let byte = cpu.bus.read(current);
                 result.push_str(&format!("{:02X} ", byte));
-                ascii.push(if byte >= 0x20 && byte < 0x7F {
+                ascii.push(if (0x20..0x7F).contains(&byte) {
                     byte as char
                 } else {
                     '.'
