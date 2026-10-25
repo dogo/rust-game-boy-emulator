@@ -534,3 +534,61 @@ pub fn run(cpu: &mut CPU) {
         }
     });
 }
+
+#[cfg(test)]
+mod known_regressions {
+    use super::*;
+
+    #[test]
+    #[ignore = "I01: breakpoint automático não deve estourar o contador de ciclos"]
+    fn automatic_breakpoint_does_not_underflow_frame_count() {
+        let mut cpu = CPU::new(vec![0; 32768]);
+        let state = Arc::new(SharedState::new());
+        state.debug_requested.store(true, Ordering::Relaxed);
+        let (tx, rx) = mpsc::channel();
+        let (resp_tx, _resp_rx) = mpsc::channel();
+        tx.send(DebugCommand::AddBreakpoint(0)).unwrap();
+        tx.send(DebugCommand::Continue).unwrap();
+
+        let stop_state = state.clone();
+        let stop = thread::spawn(move || {
+            thread::sleep(Duration::from_millis(100));
+            stop_state.running.store(false, Ordering::Relaxed);
+            let _ = tx.send(DebugCommand::Quit);
+        });
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            emulation_thread(&mut cpu, state, rx, resp_tx);
+        }));
+        stop.join().unwrap();
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    #[ignore = "I02: publicação concorrente não pode reutilizar o buffer em leitura"]
+    fn producer_between_consumer_load_and_store_keeps_distinct_buffers() {
+        let buffers = TripleBuffer::new();
+        buffers.submit_frame(&[1; GB_WIDTH * GB_HEIGHT]);
+        assert!(buffers.new_frame_available.swap(false, Ordering::AcqRel));
+        let ready = buffers.ready_idx.load(Ordering::Acquire);
+        buffers.submit_frame(&[2; GB_WIDTH * GB_HEIGHT]);
+        let old_read = buffers.read_idx.swap(ready, Ordering::AcqRel);
+        buffers.ready_idx.store(old_read, Ordering::Release);
+        assert_ne!(
+            buffers.write_idx.load(Ordering::Acquire),
+            buffers.read_idx.load(Ordering::Acquire)
+        );
+    }
+
+    #[test]
+    #[ignore = "I03: pressionar após soltar no mesmo frame deve manter o botão pressionado"]
+    fn release_then_press_keeps_button_held() {
+        let mut cpu = CPU::new(vec![0; 32768]);
+        let state = Arc::new(SharedState::new());
+        cpu.bus.joypad.press("A");
+        state.joypad_released.fetch_or(0x10, Ordering::Release);
+        state.joypad_pressed.fetch_or(0x10, Ordering::Release);
+        process_joypad_input(&mut cpu, &state);
+        cpu.bus.joypad.write(0x10);
+        assert_eq!(cpu.bus.joypad.read() & 1, 0);
+    }
+}

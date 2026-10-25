@@ -69,7 +69,7 @@ fn main() {
     // Valida header
     if let Err(e) = GB::cartridge::validate_header(&data) {
         eprintln!("{}", e);
-        return;
+        std::process::exit(1);
     }
 
     // Inicializa CPU

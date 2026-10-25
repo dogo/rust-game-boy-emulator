@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # Script para executar ROMs de teste em modo headless.
-# Usa o binário release pré-compilado para máxima velocidade.
+# Recompila incrementalmente o binário release antes de testar.
 
 set -uo pipefail
 
@@ -16,6 +16,9 @@ BINARY="./target/release/gb_emu"
 PASSED=0
 FAILED=0
 TIMEOUT=0
+ERRORS=0
+EXPECTED_BLARGG=52
+EXPECTED_MOONEYE=111
 
 usage() {
     cat <<EOF
@@ -50,11 +53,28 @@ case "$SUITE" in
         ;;
 esac
 
-# Garante que o binário release existe
-if [ ! -f "./target/release/gb_emu" ]; then
-    echo "Compilando binário release..."
-    cargo build --release --quiet
+# O Cargo só recompila o que mudou; falha de build interrompe a suíte.
+if ! cargo build --release --quiet; then
+    echo -e "${RED}❌ Falha ao compilar o emulador${NC}" >&2
+    exit 2
 fi
+
+ROM_OUTPUT="$(mktemp)"
+trap 'rm -f "$ROM_OUTPUT"' EXIT
+
+require_dir() {
+    if [ ! -d "$1" ]; then
+        echo "Diretório de ROMs não encontrado: $1" >&2
+        exit 2
+    fi
+}
+
+require_file() {
+    if [ ! -f "$1" ]; then
+        echo "ROM de teste não encontrada: $1" >&2
+        exit 2
+    fi
+}
 
 # Executa um ROM e retorna símbolo + nome
 run_rom() {
@@ -63,7 +83,7 @@ run_rom() {
     name="${rom#*/}"
     name="${name%.gb}"
 
-    timeout 90 "$BINARY" --headless "$rom" >/dev/null 2>&1
+    timeout 90 "$BINARY" --headless "$rom" >"$ROM_OUTPUT" 2>&1
     local code=$?
 
     case $code in
@@ -71,8 +91,11 @@ run_rom() {
         1)   FAILED=$((FAILED+1)); echo -e "  ${RED}❌ $name${NC}" ;;
         2)   TIMEOUT=$((TIMEOUT+1)); echo -e "  ${YELLOW}⏱️ $name${NC}" ;;
         124) TIMEOUT=$((TIMEOUT+1)); echo -e "  ${YELLOW}⏱️ $name (timeout)${NC}" ;;
-        *)   FAILED=$((FAILED+1)); echo -e "  ${RED}❌ $name (exit $code)${NC}" ;;
+        *)   ERRORS=$((ERRORS+1)); echo -e "  ${RED}⚠️ $name (erro de execução $code)${NC}" ;;
     esac
+    if [ "$code" -ne 0 ]; then
+        tail -n 30 "$ROM_OUTPUT"
+    fi
 }
 
 # Executa todos os ROMs de um diretório com header de seção.
@@ -80,11 +103,14 @@ run_section_flat() {
     local title="$1"
     local dir="$2"
 
-    [ -d "$dir" ] || return
+    require_dir "$dir"
 
     local roms
     roms=$(find "$dir" -maxdepth 1 -name "*.gb" -type f | sort)
-    [ -z "$roms" ] && return
+    if [ -z "$roms" ]; then
+        echo "Nenhuma ROM de teste em: $dir" >&2
+        exit 2
+    fi
 
     echo ""
     echo -e "${BOLD}$title${NC}"
@@ -97,11 +123,14 @@ run_section_recursive() {
     local title="$1"
     local dir="$2"
 
-    [ -d "$dir" ] || return
+    require_dir "$dir"
 
     local roms
     roms=$(find "$dir" -name "*.gb" -type f | sort)
-    [ -z "$roms" ] && return
+    if [ -z "$roms" ]; then
+        echo "Nenhuma ROM de teste em: $dir" >&2
+        exit 2
+    fi
 
     echo ""
     echo -e "${BOLD}$title${NC}"
@@ -124,7 +153,8 @@ run_blargg() {
         "gb-test-roms/halt_bug.gb" \
         "gb-test-roms/instr_timing/instr_timing.gb" \
         "gb-test-roms/interrupt_time/interrupt_time.gb"; do
-        [ -f "$rom" ] && run_rom "$rom"
+        require_file "$rom"
+        run_rom "$rom"
     done
 
     run_section_flat "mem_timing"   "gb-test-roms/mem_timing/individual"
@@ -135,11 +165,7 @@ run_blargg() {
 }
 
 run_mooneye() {
-    if [ ! -d "mooneye-roms" ]; then
-        echo "Diretório mooneye-roms/ não encontrado." >&2
-        echo "Rode: ./scripts/fetch_mooneye_roms.sh" >&2
-        exit 2
-    fi
+    require_dir "mooneye-roms"
     echo ""
     echo "=========================================="
     echo -e "${BOLD}Testes Mooneye — $(date '+%H:%M:%S')${NC}"
@@ -163,7 +189,12 @@ case "$SUITE" in
         ;;
 esac
 
-TOTAL=$((PASSED + FAILED + TIMEOUT))
+TOTAL=$((PASSED + FAILED + TIMEOUT + ERRORS))
+case "$SUITE" in
+    blargg) EXPECTED_TOTAL=$EXPECTED_BLARGG ;;
+    mooneye) EXPECTED_TOTAL=$EXPECTED_MOONEYE ;;
+    all) EXPECTED_TOTAL=$((EXPECTED_BLARGG + EXPECTED_MOONEYE)) ;;
+esac
 echo ""
 echo "=========================================="
 echo -e "${BOLD}Resumo${NC}"
@@ -172,9 +203,19 @@ echo -e "  Total : $TOTAL"
 echo -e "  ${GREEN}✅ Passou : $PASSED${NC}"
 echo -e "  ${RED}❌ Falhou : $FAILED${NC}"
 echo -e "  ${YELLOW}⏱️ Timeout: $TIMEOUT${NC}"
+echo -e "  ${RED}⚠️ Erros  : $ERRORS${NC}"
 echo ""
 
-if [ $FAILED -eq 0 ] && [ $TIMEOUT -eq 0 ]; then
+if [ "$TOTAL" -ne "$EXPECTED_TOTAL" ]; then
+    echo -e "${RED}Esperadas $EXPECTED_TOTAL ROMs, executadas $TOTAL. Verifique as fixtures.${NC}" >&2
+    exit 2
+fi
+
+if [ "$ERRORS" -gt 0 ]; then
+    exit 2
+fi
+
+if [ "$FAILED" -eq 0 ] && [ "$TIMEOUT" -eq 0 ]; then
     echo -e "${GREEN}🎉 Todos os testes passaram!${NC}"
     exit 0
 else
