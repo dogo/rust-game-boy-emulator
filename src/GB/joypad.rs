@@ -42,19 +42,15 @@ impl Joypad {
     }
 
     pub fn read(&self) -> u8 {
-        // bits 6 e 7 sempre 1
-        let mut result = 0xC0 | self.select;
+        // bits 6 e 7 sempre 1; com os dois grupos selecionados as linhas se combinam
+        let mut lines = 0x0F;
         if self.select & 0x10 == 0 {
-            // D-pad selecionado
-            result |= self.dpad & 0x0F;
-        } else if self.select & 0x20 == 0 {
-            // Botões de ação selecionados
-            result |= self.buttons & 0x0F;
-        } else {
-            // Nenhum grupo selecionado
-            result |= 0x0F;
+            lines &= self.dpad;
         }
-        result
+        if self.select & 0x20 == 0 {
+            lines &= self.buttons;
+        }
+        0xC0 | self.select | (lines & 0x0F)
     }
 
     pub fn press(&mut self, button: &str) {

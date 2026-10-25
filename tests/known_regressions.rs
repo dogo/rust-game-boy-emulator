@@ -91,7 +91,6 @@ fn stopped_cpu_freezes_divider() {
 }
 
 #[test]
-#[ignore = "D07: ler direção e ação quando os dois grupos estão selecionados"]
 fn joypad_reads_both_selected_groups() {
     let mut j = Joypad::new();
     j.press("A");

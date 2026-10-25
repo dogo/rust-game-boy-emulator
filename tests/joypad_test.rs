@@ -95,4 +95,27 @@ mod joypad_tests {
 
         println!("✅ Teste de troca de modo passou!");
     }
+
+    #[test]
+    fn selection_combines_groups_active_low() {
+        let mut cpu = CPU::new(Vec::new());
+        cpu.bus.joypad.press("RIGHT");
+        cpu.bus.joypad.press("A");
+        cpu.bus.joypad.press("B");
+        // (seleção escrita em P1, linhas esperadas)
+        for (select, lines) in [(0x30, 0x0F), (0x20, 0x0E), (0x10, 0x0C), (0x00, 0x0C)] {
+            cpu.bus.write(0xFF00, select);
+            assert_eq!(
+                cpu.bus.read(0xFF00),
+                0xC0 | select | lines,
+                "P1={select:02X}"
+            );
+        }
+        cpu.bus.joypad.release("A");
+        cpu.bus.joypad.release("B");
+        cpu.bus.joypad.press("DOWN");
+        cpu.bus.joypad.press("START");
+        cpu.bus.write(0xFF00, 0x00);
+        assert_eq!(cpu.bus.read(0xFF00) & 0x0F, 0x06);
+    }
 }

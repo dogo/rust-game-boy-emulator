@@ -117,8 +117,10 @@ Critério de saída: os cenários acima têm regressões automatizadas; uma sess
 
   Concluído: `cpu_read`/`cpu_write` passam por `oam_dma_conflict`; os acessos internos do DMA e `read`/`write` diretos (inicialização, debugger) não mudaram. No DMG, há conflito quando o DMA já copiou o primeiro byte e a CPU acessa abaixo de `$FE00` o mesmo barramento da origem (principal: ROM, SRAM, WRAM; ou VRAM). A leitura retorna o byte que o DMA acabou de copiar. A escrita com origem em SRAM/WRAM se perde e faz AND no byte recém-copiado da OAM; com origem em ROM/VRAM, vai para o endereço que o DMA leu (em ROM, isso escreve nos registradores do MBC). O [Pan Docs](https://gbdev.io/pandocs/OAM_DMA_Transfer.html) só diz que a CPU acessa apenas a HRAM; os resultados exatos seguem o SameBoy (`is_addr_in_dma_use` em `Core/memory.c`), sem comparação própria com hardware. CGB (`cgb_mode` ou `cgb_hwio_enabled`) fica sem conflitos. Testes em `tests/dma_test.rs` cobrem WRAM, ROM, VRAM, HRAM, escrita perdida com AND na OAM, escrita redirecionada ao MBC, início, término, reinício e modo CGB; seis falham no código anterior. A suíte Rust e as 163 ROMs passaram.
 
-- [ ] **D07 — Ler os dois grupos do joypad corretamente.**
+- [x] **D07 — Ler os dois grupos do joypad corretamente.**
   Em `src/GB/joypad.rs`, combinar as linhas quando os dois grupos estiverem selecionados. Testar nenhum grupo, cada grupo isolado e ambos, com combinações de direção e ação; preservar a leitura ativa em zero.
+
+  Concluído: `Joypad::read` faz AND das linhas de cada grupo selecionado (ativo em zero); antes, com os dois selecionados, só o D-pad aparecia. Um teste cobre nenhum grupo, D-pad, ação e ambos, com botões de bits iguais e diferentes nos dois grupos; ele e a regressão D07 falham no código anterior. A suíte Rust e as 163 ROMs passaram. A interrupção e a saída de STOP continuam usando o estado dos botões, sem depender da seleção.
 
 - [ ] **D08 — Tratar cartuchos sem controlador com RAM e tipos desconhecidos.**
   Em `src/GB/mbc/mod.rs`, `none.rs` e seus consumidores, dar suporte aos tipos 0x08/0x09 ou rejeitá-los explicitamente até a implementação. Recusar controladores desconhecidos em vez de cair silenciosamente em ROM simples. Para declarar suporte, testar leitura/escrita da RAM e persistência do tipo com bateria.
