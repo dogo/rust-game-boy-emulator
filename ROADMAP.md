@@ -175,8 +175,10 @@ Critério de saída: debugger e trace descrevem instruções reais, não existem
 
 ## Etapa 4 — Validar uso real antes de otimizar
 
-- [ ] **Q01 — Registrar uma matriz pequena de jogos e cenários.**
+- [x] **Q01 — Registrar uma matriz pequena de jogos e cenários.**
   Usar ROMs disponíveis legalmente e identificar jogo, versão/hash, controlador e modo. Cobrir boot, menus, sobreposição de sprites, placar/window, controles, save/reabertura e uma sessão prolongada. Registrar defeitos observados sem converter ausência de teste em declaração de compatibilidade.
+
+  Concluído: matriz em [VALIDACAO.md](VALIDACAO.md) com quatro jogos (MBC1, MBC2, MBC3 e MBC5, um deles CGB-compatível no caminho DMG), hash, cartucho e modo. `examples/frame_capture.rs` roda a ROM sem janela com um roteiro de botões e grava screenshots e saves no diretório de saída, sem tocar nos `.sav` originais. Boot, menus, sprites sobrepostos, HUD/window e controles por roteiro funcionaram nos cenários executados; o save do Pokémon foi gravado pelo jogo e reaberto com a nova posição; uma hora emulada de Zelda rodou sem erro. Nenhum defeito observado. Lacunas registradas no próprio documento: células não executadas, save do Kirby não verificado e tudo o que depende da interface SDL e do áudio (Q02).
 
 - [ ] **Q02 — Verificar imagem, áudio e latência na interface.**
   Comparar screenshots com referências confiáveis e ouvir os quatro canais, transições, pausa e retomada. Observar estalos, afinação, falta/excesso de amostras e resposta dos controles. Transformar divergências reproduzíveis em testes pequenos antes de alterar a APU.
