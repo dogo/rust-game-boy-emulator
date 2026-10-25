@@ -38,6 +38,7 @@ jobs:
           cmake .. -DSDL_STATIC=OFF -DSDL_SHARED=ON -DCMAKE_BUILD_TYPE=Release
           make -j$(nproc)
           sudo make install
+          sudo ldconfig
 
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@1.93.0

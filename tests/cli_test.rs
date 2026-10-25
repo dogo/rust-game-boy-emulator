@@ -11,5 +11,6 @@ fn invalid_rom_exits_with_failure() {
         .output()
         .unwrap();
     assert!(!output.status.success());
-    assert!(String::from_utf8_lossy(&output.stderr).contains("ROM muito pequena"));
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("ROM muito pequena"), "stderr: {stderr}");
 }
