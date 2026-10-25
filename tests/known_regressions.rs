@@ -9,7 +9,6 @@ use gb_emu::GB::{
 use std::time::{SystemTime, UNIX_EPOCH};
 
 #[test]
-#[ignore = "D01: prioridade de sprites sobrepostos"]
 fn sprites_keep_lower_oam_priority() {
     let mut p = PPU::new();
     p.vram.fill(0);

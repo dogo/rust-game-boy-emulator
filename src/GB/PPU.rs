@@ -404,15 +404,22 @@ impl PPU {
             let bx = b.0.x;
             if ax != bx { ax.cmp(&bx) } else { a.1.cmp(&b.1) }
         });
-        // Renderiza na ordem
+        // O primeiro sprite opaco em cada pixel vence, mesmo que o fundo o esconda depois
+        let mut claimed = [false; 160];
         for &(sprite, _sprite_index) in visible_sprites.iter() {
-            self.render_single_sprite_with_priority(sprite, line, sprite_height);
+            self.render_single_sprite_with_priority(sprite, line, sprite_height, &mut claimed);
         }
     }
 
     // Renderiza um único sprite na scanline
     // Sprite rendering with BG priority buffer
-    fn render_single_sprite_with_priority(&mut self, sprite: Sprite, line: u8, sprite_height: u8) {
+    fn render_single_sprite_with_priority(
+        &mut self,
+        sprite: Sprite,
+        line: u8,
+        sprite_height: u8,
+        claimed: &mut [bool; 160],
+    ) {
         let sprite_y = sprite.y.wrapping_sub(16);
         let sprite_x = sprite.x.wrapping_sub(8);
 
@@ -463,9 +470,10 @@ impl PPU {
             let color = (bit2 << 1) | bit1;
 
             // Cor 0 é transparente para sprites
-            if color == 0 {
+            if color == 0 || claimed[screen_x as usize] {
                 continue;
             }
+            claimed[screen_x as usize] = true;
 
             // Verificar prioridade (bit 7 do atributo)
             let bg_priority = (sprite.attributes & 0x80) != 0;
@@ -481,8 +489,6 @@ impl PPU {
             let final_color = self.apply_sprite_palette(color, use_obp1);
 
             self.framebuffer[framebuffer_pos] = final_color;
-            // Sprites overwrite BG priority for this pixel
-            self.bg_priority[framebuffer_pos] = false;
         }
     }
 

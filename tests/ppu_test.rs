@@ -396,6 +396,46 @@ mod ppu_tests {
         }
     }
 
+    /// Tile 0 = cor 1, tile 1 = cor 2, tile 2 = transparente à esquerda e cor 3 à direita
+    fn overlapping_sprites_ppu(sprites: &[[u8; 4]]) -> PPU {
+        let mut ppu = PPU::new();
+        ppu.lcdc = 0x93;
+        ppu.obp0 = 0xE4;
+        ppu.vram.fill(0);
+        ppu.oam.fill(0);
+        ppu.vram[0] = 0xFF;
+        ppu.vram[17] = 0xFF;
+        ppu.vram[32] = 0x0F;
+        ppu.vram[33] = 0x0F;
+        for (i, sprite) in sprites.iter().enumerate() {
+            ppu.oam[i * 4..i * 4 + 4].copy_from_slice(sprite);
+        }
+        ppu
+    }
+
+    #[test]
+    fn sprite_with_lower_x_wins_even_later_in_oam() {
+        let mut ppu = overlapping_sprites_ppu(&[[16, 10, 0, 0], [16, 8, 1, 0]]);
+        ppu.render_sprites_scanline(0);
+        assert_eq!(ppu.framebuffer[..10], [2, 2, 2, 2, 2, 2, 2, 2, 1, 1]);
+    }
+
+    #[test]
+    fn transparent_pixel_of_winner_shows_next_sprite() {
+        let mut ppu = overlapping_sprites_ppu(&[[16, 8, 2, 0], [16, 8, 0, 0]]);
+        ppu.render_sprites_scanline(0);
+        assert_eq!(ppu.framebuffer[..8], [1, 1, 1, 1, 3, 3, 3, 3]);
+    }
+
+    #[test]
+    fn priority_sprite_behind_bg_hides_lower_sprites() {
+        let mut ppu = overlapping_sprites_ppu(&[[16, 8, 1, 0x80], [16, 8, 0, 0]]);
+        ppu.framebuffer[..8].fill(3);
+        ppu.bg_priority[..8].fill(true);
+        ppu.render_sprites_scanline(0);
+        assert_eq!(ppu.framebuffer[..8], [3; 8]);
+    }
+
     #[test]
     fn test_sprite_priority() {
         let mut ppu = PPU::new();
