@@ -24,53 +24,34 @@ const CYCLES_PER_FRAME: u64 = (GB_CPU_HZ as f64 / GB_FPS) as u64;
 const SAMPLE_RATE: u32 = 44_100;
 
 // =============================================================================
-// TRIPLE BUFFER
+// FRAME MAIS RECENTE
 // =============================================================================
 
-struct TripleBuffer {
-    buffers: [Mutex<Vec<u8>>; 3],
-    write_idx: AtomicU8,
-    ready_idx: AtomicU8,
-    read_idx: AtomicU8,
-    new_frame_available: AtomicBool,
+/// Último frame publicado pela emulação; a cópia sob o lock impede leitura parcial
+struct LatestFrame {
+    frame: Mutex<(Vec<u8>, bool)>,
 }
 
-impl TripleBuffer {
+impl LatestFrame {
     fn new() -> Self {
         Self {
-            buffers: [
-                Mutex::new(vec![0u8; GB_WIDTH * GB_HEIGHT]),
-                Mutex::new(vec![0u8; GB_WIDTH * GB_HEIGHT]),
-                Mutex::new(vec![0u8; GB_WIDTH * GB_HEIGHT]),
-            ],
-            write_idx: AtomicU8::new(0),
-            ready_idx: AtomicU8::new(1),
-            read_idx: AtomicU8::new(2),
-            new_frame_available: AtomicBool::new(false),
+            frame: Mutex::new((vec![0u8; GB_WIDTH * GB_HEIGHT], false)),
         }
     }
 
     fn submit_frame(&self, framebuffer: &[u8; GB_WIDTH * GB_HEIGHT]) {
-        let write_idx = self.write_idx.load(Ordering::Acquire) as usize;
-        {
-            let mut buf = self.buffers[write_idx].lock().unwrap();
-            buf.copy_from_slice(framebuffer);
-        }
-        let old_ready = self.ready_idx.swap(write_idx as u8, Ordering::AcqRel);
-        self.write_idx.store(old_ready, Ordering::Release);
-        self.new_frame_available.store(true, Ordering::Release);
+        let mut frame = self.frame.lock().unwrap();
+        frame.0.copy_from_slice(framebuffer);
+        frame.1 = true;
     }
 
+    /// Retorna o frame mais recente uma única vez; `None` se nada novo foi publicado
     fn get_frame(&self) -> Option<Vec<u8>> {
-        if !self.new_frame_available.swap(false, Ordering::AcqRel) {
+        let mut frame = self.frame.lock().unwrap();
+        if !std::mem::replace(&mut frame.1, false) {
             return None;
         }
-        let ready_idx = self.ready_idx.load(Ordering::Acquire);
-        let old_read = self.read_idx.swap(ready_idx, Ordering::AcqRel);
-        self.ready_idx.store(old_read, Ordering::Release);
-        let read_idx = self.read_idx.load(Ordering::Acquire) as usize;
-        let buf = self.buffers[read_idx].lock().unwrap();
-        Some(buf.clone())
+        Some(frame.0.clone())
     }
 }
 
@@ -79,7 +60,7 @@ impl TripleBuffer {
 // =============================================================================
 
 struct SharedState {
-    frame_buffer: TripleBuffer,
+    frame_buffer: LatestFrame,
     audio_buffer: Mutex<VecDeque<(f32, f32)>>,
     running: AtomicBool,
     paused: AtomicBool,
@@ -93,7 +74,7 @@ struct SharedState {
 impl SharedState {
     fn new() -> Self {
         Self {
-            frame_buffer: TripleBuffer::new(),
+            frame_buffer: LatestFrame::new(),
             audio_buffer: Mutex::new(VecDeque::with_capacity(SAMPLE_RATE as usize)),
             running: AtomicBool::new(true),
             paused: AtomicBool::new(false),
@@ -671,19 +652,36 @@ mod known_regressions {
     }
 
     #[test]
-    #[ignore = "I02: publicação concorrente não pode reutilizar o buffer em leitura"]
-    fn producer_between_consumer_load_and_store_keeps_distinct_buffers() {
-        let buffers = TripleBuffer::new();
-        buffers.submit_frame(&[1; GB_WIDTH * GB_HEIGHT]);
-        assert!(buffers.new_frame_available.swap(false, Ordering::AcqRel));
-        let ready = buffers.ready_idx.load(Ordering::Acquire);
-        buffers.submit_frame(&[2; GB_WIDTH * GB_HEIGHT]);
-        let old_read = buffers.read_idx.swap(ready, Ordering::AcqRel);
-        buffers.ready_idx.store(old_read, Ordering::Release);
-        assert_ne!(
-            buffers.write_idx.load(Ordering::Acquire),
-            buffers.read_idx.load(Ordering::Acquire)
-        );
+    fn latest_frame_is_delivered_once_and_newest_wins() {
+        let frames = LatestFrame::new();
+        assert!(frames.get_frame().is_none());
+        frames.submit_frame(&[1; GB_WIDTH * GB_HEIGHT]);
+        frames.submit_frame(&[2; GB_WIDTH * GB_HEIGHT]);
+        assert!(frames.get_frame().unwrap().iter().all(|&p| p == 2));
+        assert!(frames.get_frame().is_none());
+    }
+
+    /// I02: com publicação concorrente, nenhum frame lido mistura dois frames.
+    #[test]
+    fn concurrent_publish_never_yields_partial_frame() {
+        const FRAMES: u8 = 200;
+        let frames = LatestFrame::new();
+        thread::scope(|scope| {
+            scope.spawn(|| {
+                for k in 1..=FRAMES {
+                    frames.submit_frame(&[k; GB_WIDTH * GB_HEIGHT]);
+                }
+            });
+            let mut last = 0;
+            while last < FRAMES {
+                if let Some(frame) = frames.get_frame() {
+                    let k = frame[0];
+                    assert!(frame.iter().all(|&p| p == k), "frame parcial");
+                    assert!(k > last, "frame antigo após um mais novo");
+                    last = k;
+                }
+            }
+        });
     }
 
     #[test]
