@@ -79,7 +79,6 @@ fn timer_disable_still_completes_overflow() {
 }
 
 #[test]
-#[ignore = "D09: o divisor deve parar durante STOP"]
 fn stopped_cpu_freezes_divider() {
     let mut cpu = CPU::new(vec![0; 32768]);
     cpu.stopped = true;

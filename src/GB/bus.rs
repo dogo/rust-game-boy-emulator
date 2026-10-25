@@ -92,8 +92,9 @@ pub struct MemoryBus {
 
 impl MemoryBus {
     /// Retorna true se Joypad deve acordar do STOP (detecta novo botão pressionado)
-    pub fn joypad_should_wake_from_stop(&mut self) -> bool {
-        self.joypad.has_new_press()
+    /// Alguma linha P10-P13 em zero: botão pressionado em um grupo selecionado
+    pub fn joypad_line_low(&self) -> bool {
+        self.joypad.read() & 0x0F != 0x0F
     }
     #[inline]
     fn lcd_on(&self) -> bool {

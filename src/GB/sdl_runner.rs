@@ -259,15 +259,14 @@ fn process_joypad_input(cpu: &mut CPU, state: &Arc<SharedState>) {
         state.joypad_held.load(Ordering::Acquire) | state.joypad_pressed.swap(0, Ordering::AcqRel);
     let current = !cpu.bus.joypad.raw_state();
 
-    // Solturas antes: STOP só acorda se a última atualização do Joypad for um pressionamento
     for (i, name) in BUTTONS.iter().enumerate() {
-        if current & !down & (1 << i) != 0 {
-            cpu.bus.joypad.release(name);
-        }
-    }
-    for (i, name) in BUTTONS.iter().enumerate() {
-        if down & !current & (1 << i) != 0 {
-            cpu.bus.joypad.press(name);
+        let bit = 1 << i;
+        if (down ^ current) & bit != 0 {
+            if down & bit != 0 {
+                cpu.bus.joypad.press(name);
+            } else {
+                cpu.bus.joypad.release(name);
+            }
         }
     }
     if cpu.bus.joypad.take_interrupt_request() {
@@ -730,6 +729,7 @@ mod known_regressions {
     #[test]
     fn press_with_simultaneous_release_wakes_from_stop() {
         let (mut cpu, state) = joypad_test_setup();
+        cpu.bus.write(0xFF00, 0x00);
         key_down(&state, RIGHT);
         process_joypad_input(&mut cpu, &state);
         cpu.stopped = true;

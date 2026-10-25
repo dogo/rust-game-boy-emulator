@@ -261,15 +261,12 @@ impl CPU {
     }
 
     pub fn execute_next(&mut self) -> (u64, bool) {
-        // Se CPU está em STOP, só acorda com Joypad
+        // Em STOP o oscilador para: nada avança até uma linha do joypad ir a zero
         if self.stopped {
-            if self.bus.joypad_should_wake_from_stop() {
-                self.stopped = false;
-            } else {
-                // Continua “dormindo”: PPU/timer/APU seguem rodando
-                self.bus.tick(4);
+            if !self.bus.joypad_line_low() {
                 return (4, false);
             }
+            self.stopped = false;
         }
         // Se CPU está em HALT, não executa instruções até uma interrupção acordar
         if self.halted {
@@ -369,7 +366,7 @@ impl CPU {
                     self.bus.cgb_speed = !self.bus.cgb_speed;
                     self.bus.key1 = 0; // limpa solicitação de troca
                 } else {
-                    self.stopped = true;
+                    self.enter_stop();
                 }
             }
             0xD9 => {
@@ -382,6 +379,22 @@ impl CPU {
         }
 
         (cycles, unknown)
+    }
+
+    /// Fluxograma de STOP do Pan Docs (DMG, sem troca de velocidade): com botão
+    /// pressionado vira HALT ou NOP; o byte seguinte só é pulado sem interrupção pendente.
+    fn enter_stop(&mut self) {
+        let interrupt_pending = self.bus.get_ie() & self.bus.get_if() & 0x1F != 0;
+        if !interrupt_pending {
+            self.registers
+                .set_pc(self.registers.get_pc().wrapping_add(1));
+        }
+        if self.bus.joypad_line_low() {
+            self.halted = !interrupt_pending;
+        } else {
+            self.bus.write(0xFF04, 0);
+            self.stopped = true;
+        }
     }
 
     fn service_interrupts_with_ime(&mut self, effective_ime: bool) -> bool {
