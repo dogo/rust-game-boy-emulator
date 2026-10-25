@@ -23,7 +23,6 @@ fn sprites_keep_lower_oam_priority() {
 }
 
 #[test]
-#[ignore = "D02: máscara do fundo após desligá-lo"]
 fn bg_disabled_clears_old_priority() {
     let mut p = PPU::new();
     p.vram.fill(0);

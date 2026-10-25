@@ -644,10 +644,9 @@ impl PPU {
         // LCDC bit 0: BG/Window enable
         if (self.lcdc & 0x01) == 0 {
             // BG desabilitado, preencher com branco (cor 0)
-            let line_start = self.ly as usize * 160;
-            for x in 0..160 {
-                self.framebuffer[line_start + x] = 0;
-            }
+            let line = self.ly as usize * 160..(self.ly as usize + 1) * 160;
+            self.framebuffer[line.clone()].fill(0);
+            self.bg_priority[line].fill(false);
             return;
         }
 

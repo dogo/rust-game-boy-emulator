@@ -92,8 +92,10 @@ Critério de saída: os cenários acima têm regressões automatizadas; uma sess
 
   Concluído: em cada pixel, o primeiro sprite opaco na ordem DMG (menor X, depois menor índice de OAM) fica com o pixel; só então a flag de prioridade do fundo desse sprite é aplicada. Um sprite prioritário escondido pelo fundo continua escondendo os sprites abaixo dele, como descrito no [Pan Docs](https://gbdev.io/pandocs/OAM.html#drawing-priority). Os sprites não alteram mais `bg_priority`, o que também atende à parte de D02 sobre preservar a informação do fundo; a limpeza com BG desligado continua em D02. Testes com uma cor por sprite cobrem menor X, empate por OAM, transparência e sprite oculto pelo fundo; os quatro falham no código anterior. A suíte Rust e as 163 ROMs passaram. A seleção dos 10 sprites por linha continua por ordem de OAM, sem mudança.
 
-- [ ] **D02 — Limpar a máscara quando o background é desabilitado.**
+- [x] **D02 — Limpar a máscara quando o background é desabilitado.**
   Limpar `bg_priority` junto com a linha e impedir que o desenho dos sprites destrua a informação original do fundo. Testar um sprite de baixa prioridade após desligar o BG, inclusive com sobreposição de sprites; coordenar com D01.
+
+  Concluído: com o BG desligado, `render_bg_scanline` limpa `bg_priority` junto com a linha, então nenhum sprite fica escondido pela máscara de um frame anterior. A parte de não deixar os sprites destruírem a informação do fundo já tinha entrado em D01. Testes cobrem um sprite de baixa prioridade com o BG desligado e o mesmo caso com outro sprite sobreposto (o de baixa prioridade vence e aparece); os dois falham no código anterior. A suíte Rust e as 163 ROMs passaram.
 
 - [ ] **D03 — Aplicar bloqueios de VRAM/OAM na linha zero.**
   Restringir a exceção de ligar o LCD ao período em que ela realmente está ativa. Revisar os quatro caminhos de bloqueio de leitura/escrita. Cobrir a primeira linha após ligar o LCD e a linha zero de frames posteriores, com LCD ligado/desligado e modos 2/3.

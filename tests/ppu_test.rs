@@ -437,6 +437,17 @@ mod ppu_tests {
     }
 
     #[test]
+    fn bg_off_shows_low_priority_sprite_over_another() {
+        let mut ppu = overlapping_sprites_ppu(&[[16, 8, 1, 0x80], [16, 8, 0, 0]]);
+        ppu.lcdc = 0x92;
+        ppu.bg_priority.fill(true);
+        ppu.render_bg_scanline();
+        ppu.render_sprites_scanline(0);
+        assert_eq!(ppu.framebuffer[..8], [2; 8]);
+        assert_eq!(ppu.framebuffer[8], 0);
+    }
+
+    #[test]
     fn test_sprite_priority() {
         let mut ppu = PPU::new();
         ppu.lcdc = 0x93;
