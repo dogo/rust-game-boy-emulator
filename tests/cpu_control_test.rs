@@ -110,3 +110,30 @@ fn stop_with_button_held_and_pending_interrupt_is_a_nop() {
     assert_eq!(cpu.registers.get_pc(), 0x0001);
     assert_ne!(cpu.bus.read(0xFF04), 0);
 }
+
+const ILLEGAL_OPCODES: [u8; 11] = [
+    0xD3, 0xDB, 0xDD, 0xE3, 0xE4, 0xEB, 0xEC, 0xED, 0xF4, 0xFC, 0xFD,
+];
+
+#[test]
+fn illegal_opcodes_lock_the_cpu_for_good() {
+    for opcode in ILLEGAL_OPCODES {
+        // INC A logo depois mostra se a CPU continuou executando
+        let mut cpu = cpu_with_rom(&[opcode, 0x3C, 0x3C]);
+        cpu.registers.set_a(0);
+        cpu.ime = true;
+        cpu.bus.write(0xFFFF, 0x1F);
+        cpu.execute_next();
+        assert!(cpu.locked && !cpu.halted && !cpu.stopped, "{opcode:02X}");
+
+        cpu.bus.write(0xFF0F, 0x1F);
+        let div = cpu.bus.read(0xFF04);
+        for _ in 0..1000 {
+            let (_, unknown) = cpu.execute_next();
+            assert!(!unknown, "{opcode:02X}");
+        }
+        assert_eq!(cpu.registers.get_pc(), 0x0001, "{opcode:02X}");
+        assert_eq!(cpu.registers.get_a(), 0, "{opcode:02X}");
+        assert_ne!(cpu.bus.read(0xFF04), div, "timer parou em {opcode:02X}");
+    }
+}

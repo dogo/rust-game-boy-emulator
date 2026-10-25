@@ -25,7 +25,7 @@ pub fn decode(opcode: u8) -> Instruction {
         0x76 => control::halt(opcode),
         0x10 => control::stop(opcode),
 
-        // Opcodes ilegais/não documentados - tratados como NOP
+        // Opcodes ilegais: executam como NOP e o CPU marca `locked` em seguida
         0xD3 | 0xDB | 0xDD | 0xE3 | 0xE4 | 0xEB | 0xEC | 0xED | 0xF4 | 0xFC | 0xFD => {
             Instruction::nop()
         }

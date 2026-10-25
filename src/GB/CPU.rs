@@ -10,6 +10,7 @@ pub struct CPU {
     pub halted: bool, // CPU está em estado HALT
     pub halt_bug: bool, // HALT bug flag: se true, PC não incrementa após fetch
     pub stopped: bool, // STOP: CPU dormindo até Joypad acordar
+    pub locked: bool, // Opcode ilegal: CPU travada até desligar o console
     pub opcode: u8, // Opcode da instrução em execução
     pub cycles: u64, // Contagem total de ciclos
 }
@@ -38,6 +39,7 @@ impl CPU {
             halted: false,
             halt_bug: false,
             stopped: false,
+            locked: false,
             opcode: 0,
             cycles: 0,
         };
@@ -261,6 +263,11 @@ impl CPU {
     }
 
     pub fn execute_next(&mut self) -> (u64, bool) {
+        // Nem interrupções destravam; PPU e timer seguem rodando
+        if self.locked {
+            self.bus.tick(4);
+            return (4, false);
+        }
         // Em STOP o oscilador para: nada avança até uma linha do joypad ir a zero
         if self.stopped {
             if !self.bus.joypad_line_low() {
@@ -371,6 +378,9 @@ impl CPU {
             }
             0xD9 => {
                 self.ime = true;
+            }
+            0xD3 | 0xDB | 0xDD | 0xE3 | 0xE4 | 0xEB | 0xEC | 0xED | 0xF4 | 0xFC | 0xFD => {
+                self.locked = true;
             }
             _ => {}
         }
