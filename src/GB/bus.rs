@@ -578,6 +578,45 @@ impl MemoryBus {
         }
     }
 
+    /// Endereço que o OAM DMA acabou de ler, quando a CPU disputa o barramento dele.
+    /// DMG: barramento principal (ROM, SRAM, WRAM) ou de VRAM; modelo do SameBoy
+    /// (`is_addr_in_dma_use`). O CGB separa os barramentos e não entra aqui.
+    fn oam_dma_conflict(&self, address: u16) -> Option<u16> {
+        if self.cgb_mode
+            || self.cgb_hwio_enabled
+            || !self.oam_dma_active
+            || self.oam_dma_index == 0
+            || address >= 0xFE00
+        {
+            return None;
+        }
+        let next = self.oam_dma_src.wrapping_add(self.oam_dma_index as u16);
+        if address == next || (next >= 0xE000 && next & !0x2000 == address) {
+            return None;
+        }
+        let on_vram_bus = |a: u16| (0x8000..0xA000).contains(&a);
+        (on_vram_bus(address) == on_vram_bus(next)).then(|| next.wrapping_sub(1))
+    }
+
+    fn cpu_bus_read(&self, address: u16) -> u8 {
+        match self.oam_dma_conflict(address) {
+            Some(dma_addr) => self.oam_dma_read_source(dma_addr),
+            None => self.read(address),
+        }
+    }
+
+    fn cpu_bus_write(&mut self, address: u16, value: u8) {
+        match self.oam_dma_conflict(address) {
+            // Origem em SRAM/WRAM: a escrita se perde e corrompe o byte recém-copiado
+            Some(dma_addr) if dma_addr >= 0xA000 => {
+                self.ppu.oam[self.oam_dma_index as usize - 1] &= value;
+            }
+            // Origem em ROM/VRAM: a escrita vai para o endereço que o DMA leu
+            Some(dma_addr) => self.write(dma_addr, value),
+            None => self.write(address, value),
+        }
+    }
+
     /// Lê um byte da fonte do DMA sem causar efeitos colaterais extras.
     fn oam_dma_read_source(&self, addr: u16) -> u8 {
         match addr {
@@ -720,14 +759,14 @@ impl MemoryBus {
             return value;
         }
 
-        let value = self.read(address);
+        let value = self.cpu_bus_read(address);
         self.consume_cpu_cycles(4);
         value
     }
 
     #[inline]
     pub fn cpu_read_no_oam_bug(&mut self, address: u16) -> u8 {
-        let value = self.read(address);
+        let value = self.cpu_bus_read(address);
         self.consume_cpu_cycles(4);
         value
     }
@@ -757,13 +796,13 @@ impl MemoryBus {
             return;
         }
 
-        self.write(address, value);
+        self.cpu_bus_write(address, value);
         self.consume_cpu_cycles(4);
     }
 
     #[inline]
     pub fn cpu_write_no_oam_bug(&mut self, address: u16, value: u8) {
-        self.write(address, value);
+        self.cpu_bus_write(address, value);
         self.consume_cpu_cycles(4);
     }
 

@@ -147,7 +147,6 @@ fn disassembler_identifies_load_instruction() {
 }
 
 #[test]
-#[ignore = "D06: DMA impede escrita normal da CPU fora da HRAM no DMG"]
 fn dma_blocks_cpu_writes_to_wram() {
     let mut cpu = CPU::new(vec![0; 32768]);
     cpu.bus.write(0xC000, 0x42);
