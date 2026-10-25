@@ -85,11 +85,14 @@ fn main() {
     }
 
     // Carrega save
-    if let Err(e) = cpu.bus.load_cart_ram(&sav_path) {
-        if !e.contains("No such file") {
-            eprintln!("⚠️ Erro ao carregar save: {}", e);
-        } else {
+    match cpu.bus.load_cart_ram(&sav_path) {
+        Ok(()) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
             println!("📂 Nenhum save encontrado, começando novo jogo.");
+        }
+        Err(error) => {
+            eprintln!("⚠️ Erro ao carregar save {sav_path}: {error}");
+            std::process::exit(1);
         }
     }
 

@@ -22,5 +22,7 @@ impl MBC for NoMBC {
     fn save_ram(&self) -> Option<Vec<u8>> {
         None
     }
-    fn load_ram(&mut self, _data: &[u8]) {}
+    fn load_ram(&mut self, _data: &[u8]) -> Result<(), String> {
+        Ok(())
+    }
 }

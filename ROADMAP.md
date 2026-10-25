@@ -63,8 +63,10 @@ Etapa 0 implementada e validada: 17 regressões conhecidas foram reproduzidas se
 
   Concluído: o tempo offline só avança o RTC ativo; cartuchos MBC3 com RTC e bateria gravam os 5 registradores e o timestamp mesmo sem RAM. As regressões S02 estão ativas. Testes cobrem relógio parado e ativo após 60 segundos, ida e volta sem RAM e leitura do formato antigo sem timestamp. Blargg e Mooneye passaram (163/163). O formato `.sav` existente não mudou; validação de dados inválidos continua em S03.
 
-- [ ] **S03 — Tratar estado RTC inválido.**
+- [x] **S03 — Tratar estado RTC inválido.**
   Validar os dados do save antes de aceitá-los e definir o comportamento dos valores fora do intervalo escritos pela ROM. Eliminar underflow em `60 - sec` e testar segundos=60/61, dados truncados e timestamps extremos sem esperas reais. Erro de carga deve ser comunicado e não levar à substituição silenciosa do save original.
+
+  Concluído: saves MBC3 aceitam os formatos RAM, RAM+RTC e RAM+RTC+timestamp completos; registradores fora dos [intervalos documentados](https://github.com/gbdev/pandocs/blob/master/src/MBC3.md) e timestamps não positivos são rejeitados antes de alterar o estado. Timestamps futuros são tratados como ajuste do relógio do host, sem avanço offline. Por política do emulador, escritas fora da faixa em segundos, minutos e horas usam módulo 60/60/24; essa escolha ainda não foi comparada com hardware real. O avanço do RTC agora é calculado sem laço por minuto, inclusive para timestamps antigos. Uma carga inválida encerra o processo com erro e preserva o save. `MBC::load_ram` passou a retornar `Result<(), String>` e `MemoryBus::load_cart_ram` passou a retornar `io::Result<()>`; os bytes do formato `.sav` não mudaram. A suíte Rust e as 163 ROMs Blargg/Mooneye passaram.
 
 - [ ] **I01 — Corrigir parada e retomada por breakpoint.**
   Em `src/GB/sdl_runner.rs` e `src/GB/debugger.rs`, preservar os ciclos de frame parcial, comunicar a pausa à interface e entrar no mesmo fluxo de interação usado por F12. Testar breakpoint no primeiro opcode, no meio do frame, step, continue e encerramento durante a pausa em debug e release.

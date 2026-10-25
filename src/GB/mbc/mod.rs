@@ -72,5 +72,5 @@ pub trait MBC: Send {
     fn save_ram(&self) -> Option<Vec<u8>>;
 
     /// Carrega RAM de arquivo
-    fn load_ram(&mut self, data: &[u8]);
+    fn load_ram(&mut self, data: &[u8]) -> Result<(), String>;
 }

@@ -140,10 +140,17 @@ impl MemoryBus {
         self.if_ |= 0x10;
     }
 
-    pub fn load_cart_ram(&mut self, path: &str) -> Result<(), String> {
-        let data = std::fs::read(path).map_err(|e| e.to_string())?;
-        self.mbc.load_ram(&data);
-        Ok(())
+    pub fn load_cart_ram(&mut self, path: &str) -> io::Result<()> {
+        let data = fs::read(path).map_err(|error| {
+            if error.kind() == io::ErrorKind::NotFound && fs::symlink_metadata(path).is_ok() {
+                io::Error::new(io::ErrorKind::InvalidData, "destino do save não encontrado")
+            } else {
+                error
+            }
+        })?;
+        self.mbc
+            .load_ram(&data)
+            .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))
     }
 
     pub fn save_cart_ram(&self, path: &str) -> Result<(), String> {

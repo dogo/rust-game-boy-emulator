@@ -114,7 +114,7 @@ fn rtc_halt_is_preserved_when_loading() {
         .unwrap()
         .as_secs() as i64;
     save.extend_from_slice(&(now - 60).to_le_bytes());
-    m.load_ram(&save);
+    m.load_ram(&save).unwrap();
     m.write_register(0, 0xA);
     m.write_register(0x4000, 9);
     assert_eq!(m.read_ram(0xA000), 0);
@@ -129,7 +129,6 @@ fn rtc_only_cart_can_be_saved() {
 }
 
 #[test]
-#[ignore = "S03: dados inválidos do RTC não devem causar panic"]
 fn malformed_rtc_seconds_does_not_crash() {
     let mut m = MBC3::new(vec![0; 32768], 8192);
     let mut save = vec![0; 8192];
@@ -139,7 +138,7 @@ fn malformed_rtc_seconds_does_not_crash() {
         .unwrap()
         .as_secs() as i64;
     save.extend_from_slice(&(now - 1).to_le_bytes());
-    m.load_ram(&save);
+    assert!(m.load_ram(&save).is_err());
 }
 
 #[test]

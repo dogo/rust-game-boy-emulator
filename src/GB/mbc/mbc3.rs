@@ -68,44 +68,24 @@ impl MBC3 {
         self.rtc_last_update = now;
     }
 
-    /// Soma `seconds` ao RTC, respeitando range de segundos/minutos/horas/dias e carry.
-    fn add_rtc_seconds(&mut self, mut seconds: u64) {
-        while seconds > 0 {
-            // Quanto falta para completar o minuto atual
-            let sec = self.rtc[0] as u64;
-            let step = (60 - sec).min(seconds);
-            self.rtc[0] = (sec + step) as u8;
-            seconds -= step;
-
-            if self.rtc[0] == 60 {
-                self.rtc[0] = 0;
-                // minuto++
-                self.rtc[1] = self.rtc[1].wrapping_add(1);
-                if self.rtc[1] == 60 {
-                    self.rtc[1] = 0;
-                    // hora++
-                    self.rtc[2] = self.rtc[2].wrapping_add(1);
-                    if self.rtc[2] == 24 {
-                        self.rtc[2] = 0;
-                        // dia++
-                        let mut dh = self.rtc[4];
-                        let mut day: u16 = (((dh & 0x01) as u16) << 8) | self.rtc[3] as u16;
-
-                        if day == 511 {
-                            day = 0;
-                            // seta carry (bit7)
-                            dh |= 0x80;
-                        } else {
-                            day += 1;
-                        }
-
-                        // atualiza DL/DH mas preserva HALT e carry (já mexemos no carry acima)
-                        self.rtc[3] = (day & 0xFF) as u8;
-                        dh = (dh & 0xFE) | ((day >> 8) as u8 & 0x01);
-                        self.rtc[4] = dh;
-                    }
-                }
-            }
+    /// Soma segundos ao RTC sem iterar por cada minuto passado.
+    fn add_rtc_seconds(&mut self, seconds: u64) {
+        let day = (((self.rtc[4] & 1) as u128) << 8) | self.rtc[3] as u128;
+        let total = day * 86_400
+            + self.rtc[2] as u128 * 3_600
+            + self.rtc[1] as u128 * 60
+            + self.rtc[0] as u128
+            + seconds as u128;
+        let days = total / 86_400;
+        let remaining = total % 86_400;
+        self.rtc[0] = (remaining % 60) as u8;
+        self.rtc[1] = ((remaining / 60) % 60) as u8;
+        self.rtc[2] = (remaining / 3_600) as u8;
+        let day = days % 512;
+        self.rtc[3] = day as u8;
+        self.rtc[4] = (self.rtc[4] & 0xC0) | ((day >> 8) as u8);
+        if days >= 512 {
+            self.rtc[4] |= 0x80;
         }
     }
 }
@@ -197,10 +177,10 @@ impl MBC for MBC3 {
             0x08..=0x0C => {
                 let reg = (self.ram_bank - 0x08) as usize;
                 match reg {
-                    // seconds, minutes, hours, day low: sobrescreve direto
-                    0..=3 => {
-                        self.rtc[reg] = value;
-                    }
+                    // shortcut: valores inválidos usam módulo 60/24; ajustar se testes em hardware indicarem outra regra.
+                    0 | 1 => self.rtc[reg] = value % 60,
+                    2 => self.rtc[reg] = value % 24,
+                    3 => self.rtc[reg] = value,
                     // day high (bit0=day8, bit6=HALT, bit7=carry)
                     4 => {
                         // Só bits 0,6,7 são usados; preserva o resto como está
@@ -247,44 +227,50 @@ impl MBC for MBC3 {
         }
     }
 
-    fn load_ram(&mut self, data: &[u8]) {
+    fn load_ram(&mut self, data: &[u8]) -> Result<(), String> {
         let ram_len = self.ram.len();
-        let rtc_len = self.rtc.len();
-        let ts_len = std::mem::size_of::<i64>();
-
-        // 1) RAM
-        let len = data.len().min(ram_len);
-        self.ram[..len].copy_from_slice(&data[..len]);
-
-        // 2) RTC básico (compatível com formato antigo RAM+5)
-        if data.len() >= ram_len + rtc_len {
-            let start = ram_len;
-            let end = ram_len + rtc_len;
-            self.rtc.copy_from_slice(&data[start..end]);
+        let has_rtc = data.len() == ram_len + 5;
+        let has_timestamp = data.len() == ram_len + 13;
+        if data.is_empty() || (data.len() != ram_len && !has_rtc && !has_timestamp) {
+            return Err(format!(
+                "tamanho inválido do save MBC3: {} bytes",
+                data.len()
+            ));
         }
 
-        // 3) Timestamp do host (formato novo RAM+5+8)
-        if data.len() >= ram_len + rtc_len + ts_len {
-            let start = ram_len + rtc_len;
-            let end = start + ts_len;
-            let mut ts_bytes = [0u8; 8];
-            ts_bytes.copy_from_slice(&data[start..end]);
-            let saved_ts = i64::from_le_bytes(ts_bytes);
-
-            let now = Self::now_secs();
-            if saved_ts > 0 && now > saved_ts && (self.rtc[4] & 0x40) == 0 {
-                let delta = (now - saved_ts) as u64;
-                // Avança o RTC somente se não estava parado quando o emulador fechou
-                self.add_rtc_seconds(delta);
+        let rtc = if has_rtc || has_timestamp {
+            let rtc: [u8; 5] = data[ram_len..ram_len + 5].try_into().unwrap();
+            if rtc[0] >= 60 || rtc[1] >= 60 || rtc[2] >= 24 || rtc[4] & !0xC1 != 0 {
+                return Err("registradores RTC inválidos no save".to_string());
             }
-            self.rtc_last_update = now;
+            Some(rtc)
         } else {
-            // Sem timestamp, só ancora no tempo atual
-            self.rtc_last_update = Self::now_secs();
-        }
+            None
+        };
 
-        // Atualiza latch para ficar consistente
+        let saved_ts = if has_timestamp {
+            let timestamp = i64::from_le_bytes(data[ram_len + 5..].try_into().unwrap());
+            if timestamp <= 0 {
+                return Err("timestamp RTC inválido no save".to_string());
+            }
+            Some(timestamp)
+        } else {
+            None
+        };
+
+        let now = Self::now_secs();
+        self.ram.copy_from_slice(&data[..ram_len]);
+        if let Some(rtc) = rtc {
+            self.rtc = rtc;
+        }
+        if let Some(timestamp) = saved_ts {
+            if now > timestamp && (self.rtc[4] & 0x40) == 0 {
+                self.add_rtc_seconds((now - timestamp) as u64);
+            }
+        }
+        self.rtc_last_update = now;
         self.rtc_latch.copy_from_slice(&self.rtc);
+        Ok(())
     }
 }
 

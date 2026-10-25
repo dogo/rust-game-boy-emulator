@@ -20,7 +20,7 @@ I'm following the excellent guide at [https://aquova.net/emudev/gb/index.html](h
 
 `./run_all_tests.sh` recompila o binário release antes de cada execução, exige
 as 52 ROMs Blargg ou 111 Mooneye esperadas e mostra a saída de ROMs que falharem.
-O CI executa as duas suítes. Há também 15 testes de regressão marcados como
+O CI executa as duas suítes. Há também 14 testes de regressão marcados como
 `#[ignore]`: eles registram bugs conhecidos do [roadmap](ROADMAP.md) e devem ser
 ativados conforme cada correção for implementada.
 

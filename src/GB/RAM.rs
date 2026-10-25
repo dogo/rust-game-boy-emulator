@@ -128,7 +128,9 @@ impl RAM {
         }
         let save_data = fs::read(sav_path)?;
         if !save_data.is_empty() {
-            self.mbc.load_ram(&save_data);
+            self.mbc
+                .load_ram(&save_data)
+                .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))?;
             println!(
                 "💾 Save carregado: {} ({} bytes)",
                 sav_path,

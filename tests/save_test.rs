@@ -92,3 +92,25 @@ fn save_keeps_existing_symlink() {
     fs::remove_file(target).unwrap();
     fs::remove_dir(dir).unwrap();
 }
+
+#[cfg(unix)]
+#[test]
+fn missing_save_symlink_target_is_an_error() {
+    let dir = test_dir();
+    let link = dir.join("game.sav");
+    symlink(dir.join("missing.sav"), &link).unwrap();
+
+    let error = bus_with_ram()
+        .load_cart_ram(link.to_str().unwrap())
+        .unwrap_err();
+    assert_eq!(error.kind(), std::io::ErrorKind::InvalidData);
+    assert!(
+        fs::symlink_metadata(&link)
+            .unwrap()
+            .file_type()
+            .is_symlink()
+    );
+
+    fs::remove_file(link).unwrap();
+    fs::remove_dir(dir).unwrap();
+}

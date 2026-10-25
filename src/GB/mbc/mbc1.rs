@@ -148,8 +148,9 @@ impl MBC for MBC1 {
         }
     }
 
-    fn load_ram(&mut self, data: &[u8]) {
+    fn load_ram(&mut self, data: &[u8]) -> Result<(), String> {
         let len = data.len().min(self.ram.len());
         self.ram[..len].copy_from_slice(&data[..len]);
+        Ok(())
     }
 }
