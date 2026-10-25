@@ -3,6 +3,7 @@
 
 mod arithmetic;
 pub mod cb_prefix;
+mod control;
 mod jump;
 mod load;
 mod logic;
@@ -51,9 +52,29 @@ impl Reg8 {
     }
 }
 
+/// Efeito de uma instrução sobre o estado da CPU fora de registradores e barramento.
+/// O microprograma o declara; `CPU::execute_next` o aplica.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CpuControl {
+    /// DI
+    DisableInterrupts,
+    /// EI: IME liga depois da instrução seguinte
+    EnableInterrupts,
+    /// RETI: IME liga imediatamente
+    EnableInterruptsNow,
+    /// HALT, incluindo o HALT bug
+    Halt,
+    /// STOP: troca de velocidade CGB ou o fluxograma do DMG
+    Stop,
+    /// Opcodes ilegais: trava a CPU
+    Lock,
+}
+
 /// Micro-operações individuais executadas sequencialmente para modelar uma instrução.
 #[derive(Clone, Copy)]
 pub enum MicroAction {
+    /// Pede à CPU um efeito sobre IME, HALT, STOP ou travamento
+    Control(CpuControl),
     /// Espera pelo número de ciclos de máquina especificado (1 ciclo de máquina = 4 ciclos de CPU)
     Wait(u8),
     /// Lê da memória no endereço contido em HL e armazena no registrador de destino.
@@ -286,9 +307,16 @@ impl MicroProgram {
 }
 
 /// Executa um microprograma, consumindo ciclos da CPU diretamente através do barramento de memória.
-pub fn execute(program: &MicroProgram, regs: &mut Registers, bus: &mut MemoryBus) {
+/// Retorna o efeito de controle que a CPU deve aplicar, se houver.
+pub fn execute(
+    program: &MicroProgram,
+    regs: &mut Registers,
+    bus: &mut MemoryBus,
+) -> Option<CpuControl> {
+    let mut control = None;
     for step in program.steps {
         match *step {
+            MicroAction::Control(effect) => control = Some(effect),
             MicroAction::Wait(m_cycles) => {
                 // Espera o número de ciclos de máquina especificado
                 if m_cycles > 0 {
@@ -1519,6 +1547,7 @@ pub fn execute(program: &MicroProgram, regs: &mut Registers, bus: &mut MemoryBus
             }
         }
     }
+    control
 }
 
 /// Retorna o microprograma associado ao opcode, se existir.
@@ -1530,4 +1559,5 @@ pub fn lookup(opcode: u8) -> Option<&'static MicroProgram> {
         .or_else(|| jump::lookup(opcode))
         .or_else(|| arithmetic::lookup(opcode))
         .or_else(|| stack::lookup(opcode))
+        .or_else(|| control::lookup(opcode))
 }

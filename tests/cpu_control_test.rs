@@ -136,12 +136,13 @@ fn illegal_opcodes_lock_the_cpu_for_good() {
 }
 
 #[test]
-fn every_opcode_is_microcode_or_a_cpu_control_instruction() {
-    use gb_emu::GB::{instructions, microcode};
+fn every_opcode_has_a_microprogram() {
+    use gb_emu::GB::microcode;
     for opcode in 0..=0xFFu8 {
-        let has_microcode = opcode == 0xCB || microcode::lookup(opcode).is_some();
-        let is_control = instructions::control_name(opcode).is_some();
-        assert!(has_microcode != is_control, "{opcode:02X}");
+        assert!(
+            opcode == 0xCB || microcode::lookup(opcode).is_some(),
+            "{opcode:02X}"
+        );
         assert!(
             microcode::cb_prefix::lookup(opcode).is_some(),
             "CB {opcode:02X}"
@@ -155,4 +156,38 @@ fn control_instructions_take_only_the_fetch() {
         let mut cpu = cpu_with_rom(&[opcode, 0x00]);
         assert_eq!(cpu.execute_next(), 4, "{opcode:02X}");
     }
+}
+
+#[test]
+fn ei_enables_ime_only_after_the_next_instruction() {
+    let mut cpu = cpu_with_rom(&[0xFB, 0x00, 0x00]);
+    cpu.execute_next();
+    assert!(!cpu.ime);
+    cpu.execute_next();
+    assert!(cpu.ime);
+}
+
+#[test]
+fn reti_returns_and_enables_ime_at_once() {
+    let mut cpu = cpu_with_rom(&[0xD9]);
+    cpu.registers.set_sp(0xC000);
+    cpu.bus.write(0xC000, 0x34);
+    cpu.bus.write(0xC001, 0x12);
+    cpu.execute_next();
+    assert!(cpu.ime);
+    assert_eq!(cpu.registers.get_pc(), 0x1234);
+}
+
+#[test]
+fn halt_with_ime_off_and_pending_interrupt_runs_next_byte_twice() {
+    // HALT; INC A; INC B: o HALT bug executa INC A duas vezes
+    let mut cpu = cpu_with_rom(&[0x76, 0x3C, 0x04]);
+    cpu.registers.set_a(0);
+    cpu.bus.write(0xFFFF, 0x01);
+    cpu.bus.write(0xFF0F, 0x01);
+    for _ in 0..3 {
+        cpu.execute_next();
+    }
+    assert!(!cpu.halted);
+    assert_eq!(cpu.registers.get_a(), 2);
 }

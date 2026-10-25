@@ -2,7 +2,6 @@
 /// Baseado em: https://aquova.net/emudev/gb/23-debugger.html
 /// Suporta modo single-thread e multi-thread (via channels)
 use crate::GB::CPU::CPU;
-use crate::GB::instructions;
 use crate::GB::microcode;
 use std::io::{self, Write};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -710,17 +709,15 @@ pub fn parse_address(s: &str) -> Option<u16> {
     u16::from_str_radix(s, 16).ok()
 }
 
-/// Nome da instrução em `pc`: tabela CB, microcódigo ou instruções de controle da CPU
+/// Nome da instrução em `pc`, pelo mesmo microprograma que a CPU executa
 pub fn instruction_name(cpu: &CPU, pc: u16) -> &'static str {
     let opcode = cpu.bus.read(pc);
-    if opcode == 0xCB {
-        let cb_opcode = cpu.bus.read(pc.wrapping_add(1));
-        return microcode::cb_prefix::lookup(cb_opcode).map_or("UNKNOWN", |p| p.name);
-    }
-    if let Some(program) = microcode::lookup(opcode) {
-        return program.name;
-    }
-    instructions::control_name(opcode).unwrap_or("UNKNOWN")
+    let program = if opcode == 0xCB {
+        microcode::cb_prefix::lookup(cpu.bus.read(pc.wrapping_add(1)))
+    } else {
+        microcode::lookup(opcode)
+    };
+    program.map_or("UNKNOWN", |p| p.name)
 }
 
 /// Retorna o tamanho da instrução em bytes

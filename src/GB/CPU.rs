@@ -1,5 +1,4 @@
-use crate::GB::instructions;
-use crate::GB::microcode;
+use crate::GB::microcode::{self, CpuControl};
 use crate::GB::registers;
 
 pub struct CPU {
@@ -318,8 +317,8 @@ impl CPU {
         let opcode = self.fetch_next();
         self.opcode = opcode;
 
-        // EXECUTE: DI, EI, HALT, STOP e os ilegais não têm microcódigo; gastam só o
-        // fetch e seus efeitos ficam no match abaixo
+        // EXECUTE: toda instrução tem microprograma; IME, HALT, STOP e travamento
+        // voltam como efeito de controle
         let program = if opcode == 0xCB {
             let cb_opcode = self.bus.cpu_read(self.registers.get_pc());
             self.registers
@@ -327,31 +326,27 @@ impl CPU {
             microcode::cb_prefix::lookup(cb_opcode)
         } else {
             microcode::lookup(opcode)
-        };
-        if let Some(program) = program {
-            microcode::execute(program, &mut self.registers, &mut self.bus);
         }
+        .expect("o microcódigo cobre todos os opcodes");
+        let control = microcode::execute(program, &mut self.registers, &mut self.bus);
         let cycles = self.bus.take_cpu_cycle_log() as u64;
         self.cycles += cycles;
 
-        match opcode {
-            0xF3 => {
+        match control {
+            Some(CpuControl::DisableInterrupts) => {
                 self.ime = false;
                 self.ime_enable_next = false;
                 enable_ime_after_instruction = false;
             }
-            0xFB => {
+            Some(CpuControl::EnableInterrupts) => {
                 if !enable_ime_after_instruction {
                     self.ime_enable_next = true;
                 }
             }
-            0x76 => {
-                let if_reg = self.bus.read(0xFF0F);
-                let ie_reg = self.bus.read(0xFFFF);
-
+            Some(CpuControl::EnableInterruptsNow) => self.ime = true,
+            Some(CpuControl::Halt) => {
                 // Somente bits 0-4 são interrupções reais; bits 5-7 são ignorados
-                let pending = if_reg & ie_reg & 0x1F;
-
+                let pending = self.bus.get_if() & self.bus.get_ie() & 0x1F;
                 if !self.ime && pending != 0 {
                     // HALT bug: PC já foi incrementado pelo fetch, então a próxima
                     // instrução será executada duas vezes (uma com PC não incrementando)
@@ -360,7 +355,7 @@ impl CPU {
                     self.halted = true;
                 }
             }
-            0x10 => {
+            Some(CpuControl::Stop) => {
                 // Em modo CGB com KEY1 bit 0 setado, STOP troca a velocidade da CPU
                 if self.bus.cgb_mode && (self.bus.key1 & 0x01) != 0 {
                     self.bus.cgb_speed = !self.bus.cgb_speed;
@@ -369,13 +364,8 @@ impl CPU {
                     self.enter_stop();
                 }
             }
-            0xD9 => {
-                self.ime = true;
-            }
-            op if instructions::ILLEGAL_OPCODES.contains(&op) => {
-                self.locked = true;
-            }
-            _ => {}
+            Some(CpuControl::Lock) => self.locked = true,
+            None => {}
         }
         if enable_ime_after_instruction {
             self.ime = true;

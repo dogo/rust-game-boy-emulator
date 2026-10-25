@@ -1,6 +1,6 @@
 // Microcódigos para instruções de stack
 
-use super::{JumpCondition, MicroAction, MicroProgram};
+use super::{CpuControl, JumpCondition, MicroAction, MicroProgram};
 
 /// Retorna o microprograma de stack associado ao opcode, se existir.
 pub fn lookup(opcode: u8) -> Option<&'static MicroProgram> {
@@ -35,7 +35,7 @@ pub fn lookup(opcode: u8) -> Option<&'static MicroProgram> {
         0xD0 => Some(&RET_NC_PROGRAM),
         0xD8 => Some(&RET_C_PROGRAM),
 
-        // RETI - será tratado no CPU.rs (habilita IME)
+        // RETI
         0xD9 => Some(&RETI_PROGRAM),
 
         // RST (0xC7, 0xCF, 0xD7, 0xDF, 0xE7, 0xEF, 0xF7, 0xFF)
@@ -144,7 +144,14 @@ const RET_C_PROGRAM: MicroProgram = MicroProgram::new(
     }],
 );
 
-const RETI_PROGRAM: MicroProgram = MicroProgram::new(0xD9, "RETI", &[MicroAction::Return]); // IME será habilitado no CPU.rs
+const RETI_PROGRAM: MicroProgram = MicroProgram::new(
+    0xD9,
+    "RETI",
+    &[
+        MicroAction::Return,
+        MicroAction::Control(CpuControl::EnableInterruptsNow),
+    ],
+);
 
 // === RST ===
 const RST_00_PROGRAM: MicroProgram =
