@@ -123,6 +123,7 @@ fn main() {
     if let Err(e) = cpu.bus.save_cart_ram(&sav_path) {
         if !e.contains("No RAM to save") {
             eprintln!("⚠️ Erro ao salvar: {}", e);
+            std::process::exit(1);
         }
     }
 }

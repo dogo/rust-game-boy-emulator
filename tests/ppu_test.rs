@@ -337,6 +337,7 @@ mod ppu_tests {
     #[test]
     fn test_sprite_palette_obp1() {
         let mut ppu = PPU::new();
+        ppu.oam.fill(0);
 
         // Habilitar sprites
         ppu.lcdc = 0x93;

@@ -49,12 +49,14 @@ P0 deve preceder alterações grandes. As tarefas da etapa 2 podem ser feitas po
 
 Critério de saída: testes Rust e 163 ROMs existentes continuam aprovados, com build atual e contagem explícita. Mudanças justificadas na seleção de ROMs devem atualizar a documentação e a contagem esperada.
 
-Etapa 0 implementada e validada localmente: 73 testes Rust ativos passaram, 17 regressões conhecidas foram reproduzidas separadamente e as 163 ROMs passaram. O script rejeitou build com falha e suíte sem fixtures em verificações isoladas. O workflow foi configurado, mas sua primeira execução hospedada no GitHub ainda precisa confirmar a instalação SDL3 e o download Mooneye naquele ambiente.
+Etapa 0 implementada e validada: 17 regressões conhecidas foram reproduzidas separadamente e as 163 ROMs passaram. O script rejeitou build com falha e suíte sem fixtures em verificações isoladas. O [CI hospedado](https://github.com/dogo/rust-game-boy-emulator/actions/runs/40236503676/attempts/2) confirmou a instalação SDL3, os testes Rust e as suítes Blargg/Mooneye.
 
 ## Etapa 1 — Proteger progresso e estabilizar a interface
 
-- [ ] **S01 — Substituir saves somente após escrita bem-sucedida.**
+- [x] **S01 — Substituir saves somente após escrita bem-sucedida.**
   Em `src/GB/bus.rs` e nos consumidores em `src/main.rs`, gravar em temporário no mesmo diretório e substituir o destino após concluir. Manter o save anterior se a escrita falhar e informar o erro. Testar ida e volta e falha antes da substituição; definir a necessidade de sincronização em disco se houver requisito de resistência a queda de energia.
+
+  Concluído: o temporário é exclusivo, fica no mesmo diretório e é removido se a gravação ou a troca falhar. O save anterior e suas permissões são preservados; links simbólicos existentes continuam apontando para o mesmo destino. Uma falha de save agora encerra o processo com erro. Testes cobrem criação, substituição, recarga e falhas; o formato `.sav` não mudou. A troca não garante durabilidade após queda de energia porque arquivo e diretório não são sincronizados em disco.
 
 - [ ] **S02 — Preservar RTC com HALT e sem RAM.**
   Em `src/GB/mbc/mbc3.rs`, respeitar HALT ao aplicar tempo offline e salvar o relógio mesmo quando a RAM está vazia. Cobrir save parado por 60 segundos, relógio ativo e cartucho com RTC+bateria sem RAM; preservar a leitura dos formatos antigos já suportados.

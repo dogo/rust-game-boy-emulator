@@ -4,6 +4,37 @@ use crate::GB::joypad::Joypad;
 use crate::GB::mbc::MBC;
 use crate::GB::timer::Timer;
 use rand::Rng;
+use std::fs::{self, OpenOptions};
+use std::io::{self, Write};
+use std::path::{Path, PathBuf};
+
+fn write_save_atomically(path: &Path, temp_path: &Path, data: &[u8]) -> io::Result<()> {
+    let permissions = match fs::metadata(path) {
+        Ok(metadata) => {
+            OpenOptions::new().write(true).open(path)?;
+            Some(metadata.permissions())
+        }
+        Err(error) if error.kind() == io::ErrorKind::NotFound => None,
+        Err(error) => return Err(error),
+    };
+    let mut temp_file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(temp_path)?;
+    let result = temp_file.write_all(data).and_then(|_| {
+        if let Some(permissions) = permissions {
+            temp_file.set_permissions(permissions)?;
+        }
+        Ok(())
+    });
+    drop(temp_file);
+    // shortcut: sem fsync contra queda de energia; sincronizar arquivo e diretório se essa garantia for exigida.
+    let result = result.and_then(|_| fs::rename(temp_path, path));
+    if result.is_err() {
+        let _ = fs::remove_file(temp_path);
+    }
+    result
+}
 
 pub struct MemoryBus {
     mbc: Box<dyn MBC + Send>,
@@ -117,7 +148,15 @@ impl MemoryBus {
 
     pub fn save_cart_ram(&self, path: &str) -> Result<(), String> {
         if let Some(data) = self.mbc.save_ram() {
-            std::fs::write(path, &data).map_err(|e| e.to_string())?;
+            let target = match fs::canonicalize(path) {
+                Ok(target) => target,
+                Err(error) if error.kind() == io::ErrorKind::NotFound => PathBuf::from(path),
+                Err(error) => return Err(format!("{path}: {error}")),
+            };
+            let temp_path =
+                target.with_file_name(format!(".gbemu-{:016x}.tmp", rand::random::<u64>()));
+            write_save_atomically(&target, &temp_path, &data)
+                .map_err(|error| format!("{path}: {error}"))?;
             Ok(())
         } else {
             Err("No RAM to save".to_string())
@@ -823,5 +862,116 @@ impl MemoryBus {
 
         // Dispara interrupção serial (bit 3 do IF)
         self.if_ |= 0x08;
+    }
+}
+
+#[cfg(test)]
+mod save_tests {
+    use super::*;
+    use crate::GB::mbc::mbc1::MBC1;
+    #[cfg(unix)]
+    use std::os::unix::fs::PermissionsExt;
+
+    fn test_dir() -> PathBuf {
+        let dir =
+            std::env::temp_dir().join(format!("gb-emu-save-test-{:016x}", rand::random::<u64>()));
+        fs::create_dir(&dir).unwrap();
+        dir
+    }
+
+    fn bus_with_ram() -> MemoryBus {
+        MemoryBus::new(Box::new(MBC1::new(vec![0; 0x8000], 0x2000)))
+    }
+
+    #[test]
+    fn save_creates_replaces_and_loads_ram() {
+        let dir = test_dir();
+        let save = dir.join("game.sav");
+        let mut bus = bus_with_ram();
+        bus.write(0x0000, 0x0A);
+        bus.write(0xA000, 0x42);
+        bus.save_cart_ram(save.to_str().unwrap()).unwrap();
+        assert_eq!(fs::read(&save).unwrap()[0], 0x42);
+
+        #[cfg(unix)]
+        {
+            fs::set_permissions(&save, fs::Permissions::from_mode(0o600)).unwrap();
+        }
+        bus.write(0xA000, 0x99);
+        bus.save_cart_ram(save.to_str().unwrap()).unwrap();
+        #[cfg(unix)]
+        assert_eq!(
+            fs::metadata(&save).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
+        let mut restored = bus_with_ram();
+        restored.load_cart_ram(save.to_str().unwrap()).unwrap();
+        restored.write(0x0000, 0x0A);
+        assert_eq!(restored.read(0xA000), 0x99);
+        assert_eq!(fs::read_dir(&dir).unwrap().count(), 1);
+
+        #[cfg(unix)]
+        {
+            fs::set_permissions(&save, fs::Permissions::from_mode(0o400)).unwrap();
+            bus.write(0xA000, 0x11);
+            assert!(bus.save_cart_ram(save.to_str().unwrap()).is_err());
+            assert_eq!(fs::read(&save).unwrap()[0], 0x99);
+        }
+
+        fs::remove_file(save).unwrap();
+        fs::remove_dir(dir).unwrap();
+    }
+
+    #[test]
+    fn failed_temp_creation_preserves_previous_save() {
+        let dir = test_dir();
+        let save = dir.join("game.sav");
+        let occupied_temp = dir.join("occupied.tmp");
+        fs::write(&save, b"previous save").unwrap();
+        fs::create_dir(&occupied_temp).unwrap();
+
+        assert!(write_save_atomically(&save, &occupied_temp, b"new save").is_err());
+        assert_eq!(fs::read(&save).unwrap(), b"previous save");
+        assert!(occupied_temp.is_dir());
+
+        let directory_target = dir.join("directory.sav");
+        let abandoned_temp = dir.join("abandoned.tmp");
+        fs::create_dir(&directory_target).unwrap();
+        assert!(write_save_atomically(&directory_target, &abandoned_temp, b"new save").is_err());
+        assert!(directory_target.is_dir());
+        assert!(!abandoned_temp.exists());
+
+        fs::remove_dir(directory_target).unwrap();
+        fs::remove_dir(occupied_temp).unwrap();
+        fs::remove_file(save).unwrap();
+        fs::remove_dir(dir).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn save_keeps_existing_symlink() {
+        use std::os::unix::fs::symlink;
+
+        let dir = test_dir();
+        let target = dir.join("target.sav");
+        let link = dir.join("game.sav");
+        fs::write(&target, b"previous save").unwrap();
+        symlink(&target, &link).unwrap();
+
+        let mut bus = bus_with_ram();
+        bus.write(0x0000, 0x0A);
+        bus.write(0xA000, 0x42);
+        bus.save_cart_ram(link.to_str().unwrap()).unwrap();
+        assert!(
+            fs::symlink_metadata(&link)
+                .unwrap()
+                .file_type()
+                .is_symlink()
+        );
+        assert_eq!(fs::read(&target).unwrap()[0], 0x42);
+
+        fs::remove_file(link).unwrap();
+        fs::remove_file(target).unwrap();
+        fs::remove_dir(dir).unwrap();
     }
 }
