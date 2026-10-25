@@ -64,7 +64,6 @@ fn line_zero_blocks_vram_after_first_frame() {
 }
 
 #[test]
-#[ignore = "D05: reload pendente de TIMA após desabilitar o timer"]
 fn timer_disable_still_completes_overflow() {
     let mut cpu = CPU::new(vec![0; 32768]);
     cpu.bus.set_div_counter(4);

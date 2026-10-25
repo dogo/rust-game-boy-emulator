@@ -62,16 +62,17 @@ impl Timer {
             // Processa o batch de uma vez ao invés de T-cycle por T-cycle (div_counter)
             self.div_counter = self.div_counter.wrapping_add(cycles_this_batch as u16);
 
-            // Processa TIMA se timer está habilitado - T-cycle por T-cycle para precisão
-            if (tac & 0x04) != 0 {
+            // Processa TIMA T-cycle por T-cycle; o reload pendente termina mesmo com TAC=0
+            let enabled = (tac & 0x04) != 0;
+            if enabled || self.reload_pending.is_some() || self.tima_reloaded_until.is_some() {
                 let trigger_bit = TAC_TRIGGER_BITS[(tac & 0x03) as usize];
                 let old_counter = self.div_counter.wrapping_sub(cycles_this_batch as u16);
                 let mut temp_counter = old_counter;
-                let mut temp_prev_bit = self.prev_tima_bit;
+                let mut temp_prev_bit = enabled && self.prev_tima_bit;
 
                 for _ in 0..cycles_this_batch {
                     temp_counter = temp_counter.wrapping_add(1);
-                    let cur_bit = (temp_counter & trigger_bit) != 0;
+                    let cur_bit = enabled && (temp_counter & trigger_bit) != 0;
 
                     // Verifica reload pendente (exatamente 4 T-cycles após overflow)
                     if let Some(reload_at) = self.reload_pending {
@@ -133,6 +134,8 @@ impl Timer {
                 self.prev_tima_bit = temp_prev_bit;
             } else {
                 self.prev_tima_bit = false;
+            }
+            if !enabled {
                 self.suppress_until = None;
             }
 
@@ -254,6 +257,8 @@ impl Timer {
     ) -> (u8, u8) {
         let new_bit = TAC_TRIGGER_BITS[(new_tac & 0x03) as usize];
 
+        // Um estouro aqui agenda o reload em +8, como em reset_div: o barramento ainda
+        // avança os 4 T-cycles do M-cycle da escrita antes do atraso de 4 T-cycles
         if (old_tac & 0x04) == 0 {
             if (new_tac & 0x04) != 0 {
                 let previous_counter = self.div_counter.wrapping_sub(4);
@@ -262,7 +267,7 @@ impl Timer {
                 if previous_bit && !cur_bit {
                     if tima == 0xFF {
                         tima = 0x00;
-                        self.reload_pending = Some(self.div_counter.wrapping_add(4));
+                        self.reload_pending = Some(self.div_counter.wrapping_add(8));
                         self.tima_reloading = true;
                         self.tima_written_in_delay = false;
                     } else {
@@ -278,7 +283,7 @@ impl Timer {
         if old_input_high && !new_input_high {
             if tima == 0xFF {
                 tima = 0x00;
-                self.reload_pending = Some(self.div_counter.wrapping_add(4));
+                self.reload_pending = Some(self.div_counter.wrapping_add(8));
                 self.tima_reloading = true;
                 self.tima_written_in_delay = false;
             } else {
