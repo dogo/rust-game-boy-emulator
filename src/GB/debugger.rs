@@ -347,7 +347,7 @@ impl Debugger {
             io::stdout().flush().unwrap();
 
             let mut input = String::new();
-            // EOF ou erro persistente: sem terminal, retoma em vez de repetir o prompt
+            // Sem terminal (EOF), repetir o prompt vira um laço infinito
             if !matches!(io::stdin().read_line(&mut input), Ok(n) if n > 0) {
                 println!("\n⚠️  Terminal indisponível; retomando execução");
                 self.debugging = false;
@@ -502,7 +502,7 @@ impl Debugger {
                         return false; // Continuar execução
                     }
                 }
-                // Interface encerrada (ESC/janela) durante a pausa
+                // A interface pode fechar (ESC) sem mandar Quit
                 Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
                     if !running.load(Ordering::Relaxed) {
                         return true;
@@ -526,7 +526,7 @@ impl Debugger {
             io::stdout().flush().unwrap();
 
             let mut input = String::new();
-            // EOF ou erro persistente: sem terminal, retoma em vez de repetir o prompt
+            // Sem terminal (EOF), repetir o prompt vira um laço infinito
             if !matches!(io::stdin().read_line(&mut input), Ok(n) if n > 0) {
                 println!("\n⚠️  Terminal indisponível; retomando emulação");
                 input = String::from("c");

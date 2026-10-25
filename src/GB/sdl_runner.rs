@@ -27,7 +27,6 @@ const SAMPLE_RATE: u32 = 44_100;
 // FRAME MAIS RECENTE
 // =============================================================================
 
-/// Último frame publicado pela emulação; a cópia sob o lock impede leitura parcial
 struct LatestFrame {
     frame: Mutex<(Vec<u8>, bool)>,
 }
@@ -45,7 +44,6 @@ impl LatestFrame {
         frame.1 = true;
     }
 
-    /// Retorna o frame mais recente uma única vez; `None` se nada novo foi publicado
     fn get_frame(&self) -> Option<Vec<u8>> {
         let mut frame = self.frame.lock().unwrap();
         if !std::mem::replace(&mut frame.1, false) {
@@ -65,8 +63,8 @@ struct SharedState {
     running: AtomicBool,
     paused: AtomicBool,
     debug_requested: AtomicBool,
+    joypad_held: AtomicU8,
     joypad_pressed: AtomicU8,
-    joypad_released: AtomicU8,
     emu_fps: Mutex<f64>,
     audio_buffer_size: Mutex<usize>,
 }
@@ -79,8 +77,8 @@ impl SharedState {
             running: AtomicBool::new(true),
             paused: AtomicBool::new(false),
             debug_requested: AtomicBool::new(false),
+            joypad_held: AtomicU8::new(0),
             joypad_pressed: AtomicU8::new(0),
-            joypad_released: AtomicU8::new(0),
             emu_fps: Mutex::new(0.0),
             audio_buffer_size: Mutex::new(0),
         }
@@ -142,7 +140,6 @@ fn emulation_thread(
 
     // Debugger com breakpoints
     let mut debugger = Debugger::new();
-    // Após retomar, a instrução no PC atual executa mesmo se tiver breakpoint
     let mut skip_breakpoint = false;
 
     prefill_audio(&state);
@@ -162,11 +159,11 @@ fn emulation_thread(
             }
 
             skip_breakpoint = true;
-            // A interface espera paused=false; debug_requested precisa estar limpo antes
+            // Nessa ordem: a interface vê paused=false e não pode mais ver debug_requested
             state.debug_requested.store(false, Ordering::Release);
             state.paused.store(false, Ordering::Release);
 
-            // Mesma folga do início; com menos, o buffer não se recupera e estala
+            // Com menos folga que no início o buffer não se recupera e estala
             prefill_audio(&state);
             continue;
         }
@@ -239,71 +236,42 @@ fn emulation_thread(
     println!("🛑 Emulation thread finalizada após {} frames", frame_count);
 }
 
-/// Reinicia o buffer de áudio com ~80ms de silêncio
 fn prefill_audio(state: &SharedState) {
     let mut buf = state.audio_buffer.lock().unwrap();
     buf.clear();
     buf.resize((SAMPLE_RATE as usize * 80) / 1000, (0.0, 0.0));
 }
 
+/// Mesma ordem de bits de `Joypad::raw_state` (D-pad no nibble baixo)
+const BUTTONS: [&str; 8] = ["RIGHT", "LEFT", "UP", "DOWN", "A", "B", "SELECT", "START"];
+
+fn key_down(state: &SharedState, button: u8) {
+    state.joypad_held.fetch_or(button, Ordering::Release);
+    state.joypad_pressed.fetch_or(button, Ordering::Release);
+}
+
+fn key_up(state: &SharedState, button: u8) {
+    state.joypad_held.fetch_and(!button, Ordering::Release);
+}
+
 fn process_joypad_input(cpu: &mut CPU, state: &Arc<SharedState>) {
-    let pressed = state.joypad_pressed.swap(0, Ordering::AcqRel);
-    if pressed != 0 {
-        if pressed & 0x01 != 0 {
-            cpu.bus.joypad.press("RIGHT");
-        }
-        if pressed & 0x02 != 0 {
-            cpu.bus.joypad.press("LEFT");
-        }
-        if pressed & 0x04 != 0 {
-            cpu.bus.joypad.press("UP");
-        }
-        if pressed & 0x08 != 0 {
-            cpu.bus.joypad.press("DOWN");
-        }
-        if pressed & 0x10 != 0 {
-            cpu.bus.joypad.press("A");
-        }
-        if pressed & 0x20 != 0 {
-            cpu.bus.joypad.press("B");
-        }
-        if pressed & 0x40 != 0 {
-            cpu.bus.joypad.press("SELECT");
-        }
-        if pressed & 0x80 != 0 {
-            cpu.bus.joypad.press("START");
-        }
-        if cpu.bus.joypad.take_interrupt_request() {
-            cpu.bus.request_joypad_interrupt();
+    let down =
+        state.joypad_held.load(Ordering::Acquire) | state.joypad_pressed.swap(0, Ordering::AcqRel);
+    let current = !cpu.bus.joypad.raw_state();
+
+    // Solturas antes: STOP só acorda se a última atualização do Joypad for um pressionamento
+    for (i, name) in BUTTONS.iter().enumerate() {
+        if current & !down & (1 << i) != 0 {
+            cpu.bus.joypad.release(name);
         }
     }
-
-    let released = state.joypad_released.swap(0, Ordering::AcqRel);
-    if released != 0 {
-        if released & 0x01 != 0 {
-            cpu.bus.joypad.release("RIGHT");
+    for (i, name) in BUTTONS.iter().enumerate() {
+        if down & !current & (1 << i) != 0 {
+            cpu.bus.joypad.press(name);
         }
-        if released & 0x02 != 0 {
-            cpu.bus.joypad.release("LEFT");
-        }
-        if released & 0x04 != 0 {
-            cpu.bus.joypad.release("UP");
-        }
-        if released & 0x08 != 0 {
-            cpu.bus.joypad.release("DOWN");
-        }
-        if released & 0x10 != 0 {
-            cpu.bus.joypad.release("A");
-        }
-        if released & 0x20 != 0 {
-            cpu.bus.joypad.release("B");
-        }
-        if released & 0x40 != 0 {
-            cpu.bus.joypad.release("SELECT");
-        }
-        if released & 0x80 != 0 {
-            cpu.bus.joypad.release("START");
-        }
+    }
+    if cpu.bus.joypad.take_interrupt_request() {
+        cpu.bus.request_joypad_interrupt();
     }
 }
 
@@ -375,7 +343,7 @@ fn handle_input(state: &Arc<SharedState>, event: &Event) -> InputResult {
             ..
         } => {
             if let Some(button) = keycode_to_button(*k) {
-                state.joypad_pressed.fetch_or(button, Ordering::Release);
+                key_down(state, button);
             }
             InputResult::Continue
         }
@@ -385,7 +353,7 @@ fn handle_input(state: &Arc<SharedState>, event: &Event) -> InputResult {
             ..
         } => {
             if let Some(button) = keycode_to_button(*k) {
-                state.joypad_released.fetch_or(button, Ordering::Release);
+                key_up(state, button);
             }
             InputResult::Continue
         }
@@ -459,7 +427,6 @@ pub fn run(cpu: &mut CPU) {
                 }
             }
 
-            // F12 ou breakpoint atingido pela thread de emulação
             if state.debug_requested.load(Ordering::Acquire) {
                 // Espera emulação pausar
                 while !state.paused.load(Ordering::Acquire) && state.running.load(Ordering::Relaxed)
@@ -589,7 +556,6 @@ mod known_regressions {
         }
     }
 
-    /// Breakpoint no PC da pausa (primeiro opcode do frame): continue executa a instrução.
     #[test]
     fn breakpoint_on_first_opcode_resumes_past_it() {
         let mut cpu = CPU::new(loop_rom());
@@ -616,7 +582,6 @@ mod known_regressions {
         assert_eq!(cpu.registers.get_pc(), 0x0001);
     }
 
-    /// Breakpoint no meio do frame: step, continue (reatinge no laço) e quit durante a pausa.
     #[test]
     fn mid_frame_breakpoint_step_continue_and_quit() {
         let mut cpu = CPU::new(loop_rom());
@@ -661,7 +626,6 @@ mod known_regressions {
         assert!(frames.get_frame().is_none());
     }
 
-    /// I02: com publicação concorrente, nenhum frame lido mistura dois frames.
     #[test]
     fn concurrent_publish_never_yields_partial_frame() {
         const FRAMES: u8 = 200;
@@ -684,16 +648,95 @@ mod known_regressions {
         });
     }
 
-    #[test]
-    #[ignore = "I03: pressionar após soltar no mesmo frame deve manter o botão pressionado"]
-    fn release_then_press_keeps_button_held() {
-        let mut cpu = CPU::new(vec![0; 32768]);
-        let state = Arc::new(SharedState::new());
-        cpu.bus.joypad.press("A");
-        state.joypad_released.fetch_or(0x10, Ordering::Release);
-        state.joypad_pressed.fetch_or(0x10, Ordering::Release);
-        process_joypad_input(&mut cpu, &state);
+    const A: u8 = 0x10;
+    const RIGHT: u8 = 0x01;
+
+    fn action_lines(cpu: &mut CPU) -> u8 {
         cpu.bus.joypad.write(0x10);
-        assert_eq!(cpu.bus.joypad.read() & 1, 0);
+        cpu.bus.joypad.read() & 0x0F
+    }
+
+    fn dpad_lines(cpu: &mut CPU) -> u8 {
+        cpu.bus.joypad.write(0x20);
+        cpu.bus.joypad.read() & 0x0F
+    }
+
+    fn take_joypad_irq(cpu: &mut CPU) -> bool {
+        let pending = cpu.bus.read(0xFF0F) & 0x10 != 0;
+        cpu.bus.write(0xFF0F, 0);
+        pending
+    }
+
+    fn joypad_test_setup() -> (CPU, Arc<SharedState>) {
+        let mut cpu = CPU::new(vec![0; 32768]);
+        cpu.bus.write(0xFF0F, 0);
+        (cpu, Arc::new(SharedState::new()))
+    }
+
+    #[test]
+    fn release_then_press_keeps_button_held() {
+        let (mut cpu, state) = joypad_test_setup();
+        key_down(&state, A);
+        process_joypad_input(&mut cpu, &state);
+        key_up(&state, A);
+        key_down(&state, A);
+        process_joypad_input(&mut cpu, &state);
+        assert_eq!(action_lines(&mut cpu) & 1, 0);
+    }
+
+    #[test]
+    fn press_then_release_within_frame_is_seen_for_one_frame() {
+        let (mut cpu, state) = joypad_test_setup();
+        key_down(&state, A);
+        key_up(&state, A);
+        process_joypad_input(&mut cpu, &state);
+        assert_eq!(action_lines(&mut cpu) & 1, 0);
+        assert!(take_joypad_irq(&mut cpu));
+        process_joypad_input(&mut cpu, &state);
+        assert_eq!(action_lines(&mut cpu) & 1, 1);
+        assert!(!take_joypad_irq(&mut cpu));
+    }
+
+    #[test]
+    fn held_key_stays_pressed_and_interrupts_once() {
+        let (mut cpu, state) = joypad_test_setup();
+        key_down(&state, A);
+        process_joypad_input(&mut cpu, &state);
+        assert!(take_joypad_irq(&mut cpu));
+        for _ in 0..3 {
+            process_joypad_input(&mut cpu, &state);
+            assert_eq!(action_lines(&mut cpu) & 1, 0);
+            assert!(!take_joypad_irq(&mut cpu));
+        }
+        key_up(&state, A);
+        process_joypad_input(&mut cpu, &state);
+        assert_eq!(action_lines(&mut cpu) & 1, 1);
+    }
+
+    #[test]
+    fn multiple_buttons_are_tracked_independently() {
+        let (mut cpu, state) = joypad_test_setup();
+        key_down(&state, A);
+        key_down(&state, RIGHT);
+        process_joypad_input(&mut cpu, &state);
+        assert_eq!(action_lines(&mut cpu), 0x0E);
+        assert_eq!(dpad_lines(&mut cpu), 0x0E);
+        key_up(&state, RIGHT);
+        process_joypad_input(&mut cpu, &state);
+        assert_eq!(action_lines(&mut cpu), 0x0E);
+        assert_eq!(dpad_lines(&mut cpu), 0x0F);
+    }
+
+    #[test]
+    fn press_with_simultaneous_release_wakes_from_stop() {
+        let (mut cpu, state) = joypad_test_setup();
+        key_down(&state, RIGHT);
+        process_joypad_input(&mut cpu, &state);
+        cpu.stopped = true;
+        key_up(&state, RIGHT);
+        key_down(&state, A);
+        process_joypad_input(&mut cpu, &state);
+        cpu.execute_next();
+        assert!(!cpu.stopped);
     }
 }

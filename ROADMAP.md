@@ -78,8 +78,10 @@ Etapa 0 implementada e validada: 17 regressões conhecidas foram reproduzidas se
 
   Concluído: `TripleBuffer` foi substituído por `LatestFrame`, um único frame protegido por `Mutex` com a marcação de frame novo; a cópia na publicação e na leitura acontece sob o lock, então não há índices para intercalar nem frame parcial. A interface continua recebendo só o frame mais recente, uma vez. O teste antigo dependia dos índices internos e foi trocado por dois testes de comportamento: entrega única com o mais novo prevalecendo e 200 publicações concorrentes sem frame misto ou fora de ordem. Nenhuma dependência nova; a suíte Rust passou em debug e release.
 
-- [ ] **I03 — Preservar a ordem ou o estado final dos botões.**
+- [x] **I03 — Preservar a ordem ou o estado final dos botões.**
   Em `src/GB/sdl_runner.rs`, substituir as máscaras independentes de pressionar/soltar por representação que preserve o resultado dos eventos, mantendo os pedidos de interrupção e a retomada de STOP. Testar pressionar→soltar, soltar→pressionar entre frames, múltiplos botões e tecla mantida.
+
+  Concluído: a interface mantém o estado final dos botões (`joypad_held`) e uma máscara dos pressionados desde o último frame (`joypad_pressed`). A cada frame, a emulação aplica só os botões que mudaram em relação ao `Joypad`, primeiro as solturas e depois os pressionamentos, para que a borda usada pelo STOP seja a última atualização. Um toque mais curto que um frame fica pressionado por um frame e solta no seguinte; soltar→pressionar no mesmo frame mantém o botão pressionado. A interrupção continua sendo pedida só na transição solto→pressionado. Testes cobrem os quatro cenários e a retomada de STOP com soltura simultânea (confirmado falhando com a ordem invertida). A suíte Rust e as 163 ROMs passaram. `Joypad` não mudou; a pendência de `has_new_press` permanecer verdadeira até a próxima mudança de entrada fica para D09.
 
 Critério de saída: os cenários acima têm regressões automatizadas; uma sessão gráfica permite pausar, inspecionar, continuar e sair com save íntegro.
 
