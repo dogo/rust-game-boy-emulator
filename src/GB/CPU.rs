@@ -27,6 +27,25 @@ pub enum BootModel {
     Agb,    // Game Boy Advance running in Game Boy Color mode (AGB/AGS)
 }
 
+impl BootModel {
+    pub const NAMES: &'static str = "dmg0, dmg, mgb, sgb, sgb2, cgb0, cgb, agb";
+
+    /// Nome aceito por `--model`
+    pub fn from_name(name: &str) -> Option<Self> {
+        Some(match name.to_ascii_lowercase().as_str() {
+            "dmg0" => BootModel::Dmg0,
+            "dmg" => BootModel::DmgAbc,
+            "mgb" => BootModel::Mgb,
+            "sgb" => BootModel::Sgb,
+            "sgb2" => BootModel::Sgb2,
+            "cgb0" => BootModel::Cgb0,
+            "cgb" => BootModel::Cgb,
+            "agb" => BootModel::Agb,
+            _ => return None,
+        })
+    }
+}
+
 impl CPU {
     pub fn new(rom: Vec<u8>) -> Self {
         let is_cgb = crate::GB::cartridge::is_cgb_only_rom(&rom);

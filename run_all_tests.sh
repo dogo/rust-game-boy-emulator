@@ -76,6 +76,21 @@ require_file() {
     fi
 }
 
+# Modelo de hardware pelas convenções de nome das ROMs de teste (Mooneye:
+# -dmg0, -mgb, -S, -A...). Só a suíte faz isso; o emulador recebe --model.
+boot_model_for() {
+    case "${1,,}" in
+        *-dmg0*) echo dmg0 ;;
+        *-mgb*) echo mgb ;;
+        *-sgb2* | *boot_div2-s*) echo sgb2 ;;
+        *-sgb* | *-s.gb) echo sgb ;;
+        *-cgb0*) echo cgb0 ;;
+        *-cgb*) echo cgb ;;
+        *-a.gb) echo agb ;;
+        *-c.gb) echo cgb ;;
+    esac
+}
+
 # Executa um ROM e retorna símbolo + nome
 run_rom() {
     local rom="$1"
@@ -83,7 +98,14 @@ run_rom() {
     name="${rom#*/}"
     name="${name%.gb}"
 
-    timeout 90 "$BINARY" --headless "$rom" >"$ROM_OUTPUT" 2>&1
+    local model_args=()
+    local model
+    model="$(boot_model_for "$rom")"
+    if [ -n "$model" ]; then
+        model_args=(--model "$model")
+    fi
+
+    timeout 90 "$BINARY" --headless "${model_args[@]}" "$rom" >"$ROM_OUTPUT" 2>&1
     local code=$?
 
     case $code in

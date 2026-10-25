@@ -37,6 +37,54 @@ fn invalid_rom_exits_with_failure() {
     assert!(stderr.contains("ROM muito pequena"), "stderr: {stderr}");
 }
 
+/// Passa (protocolo Mooneye) se A=$01 no pós-boot, como no DMG; o MGB começa com A=$FF
+fn rom_passing_only_on_dmg() -> Vec<u8> {
+    let mut rom = rom_with_cart_type(0x00);
+    rom.resize(0x8000, 0);
+    rom[0x0100..0x0104].copy_from_slice(&[0x00, 0xC3, 0x50, 0x01]); // jp $0150
+    let fib = [
+        0x06, 3, 0x0E, 5, 0x16, 8, 0x1E, 13, 0x26, 21, 0x2E, 34, 0x40,
+    ];
+    let fail = [
+        0x06, 0x42, 0x0E, 0x42, 0x16, 0x42, 0x1E, 0x42, 0x26, 0x42, 0x2E, 0x42, 0x40,
+    ];
+    let mut code = vec![0xFE, 0x01, 0x20, fib.len() as u8]; // cp $01; jr nz, fail
+    code.extend(fib);
+    code.extend(fail);
+    rom[0x0150..0x0150 + code.len()].copy_from_slice(&code);
+    rom
+}
+
+fn run_headless(dir: &std::path::Path, rom_name: &str, extra: &[&str]) -> std::process::Output {
+    fs::write(dir.join(rom_name), rom_passing_only_on_dmg()).unwrap();
+    Command::new(env!("CARGO_BIN_EXE_gb_emu"))
+        .arg("--headless")
+        .args(extra)
+        .arg(dir.join(rom_name))
+        .current_dir(dir)
+        .output()
+        .unwrap()
+}
+
+#[test]
+fn rom_name_does_not_choose_the_hardware_but_model_flag_does() {
+    let dir: PathBuf =
+        std::env::temp_dir().join(format!("gb-emu-boot-model-{:016x}", rand::random::<u64>()));
+    fs::create_dir(&dir).unwrap();
+
+    assert!(run_headless(&dir, "game-mgb.gb", &[]).status.success());
+    assert!(
+        !run_headless(&dir, "game.gb", &["--model", "mgb"])
+            .status
+            .success()
+    );
+    let invalid = run_headless(&dir, "game.gb", &["--model", "nes"]);
+    assert!(!invalid.status.success());
+    assert!(String::from_utf8_lossy(&invalid.stderr).contains("Modelo inválido"));
+
+    fs::remove_dir_all(dir).unwrap();
+}
+
 #[test]
 fn unknown_cartridge_type_is_rejected() {
     let dir: PathBuf = std::env::temp_dir().join(format!(

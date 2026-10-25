@@ -4,31 +4,6 @@ use gb_emu::GB;
 use std::env;
 use std::fs;
 
-fn infer_boot_model(rom_path: &str, cpu: &GB::CPU::CPU) -> GB::CPU::BootModel {
-    let lower = rom_path.to_ascii_lowercase();
-    if lower.contains("-dmg0") {
-        GB::CPU::BootModel::Dmg0
-    } else if lower.contains("-mgb") {
-        GB::CPU::BootModel::Mgb
-    } else if lower.contains("-sgb2") || lower.contains("boot_div2-s") {
-        GB::CPU::BootModel::Sgb2
-    } else if lower.contains("-sgb") || lower.ends_with("-s.gb") {
-        GB::CPU::BootModel::Sgb
-    } else if lower.contains("-cgb0") {
-        GB::CPU::BootModel::Cgb0
-    } else if lower.contains("-cgb") {
-        GB::CPU::BootModel::Cgb
-    } else if lower.contains("-a.gb") {
-        GB::CPU::BootModel::Agb
-    } else if lower.ends_with("-c.gb") {
-        GB::CPU::BootModel::Cgb
-    } else if cpu.bus.cgb_mode {
-        GB::CPU::BootModel::Cgb
-    } else {
-        GB::CPU::BootModel::DmgAbc
-    }
-}
-
 fn get_sav_path(rom_path: &str) -> String {
     std::path::Path::new(rom_path)
         .with_extension("sav")
@@ -46,18 +21,37 @@ fn main() {
     let args: Vec<String> = env::args().collect();
 
     if args.len() < 2 || args.iter().any(|a| a == "--help" || a == "-h") {
-        eprintln!("Uso: cargo run -- <rom.gb> [--trace] [--headless]");
+        eprintln!("Uso: cargo run -- <rom.gb> [--trace] [--headless] [--model <modelo>]");
         eprintln!("  --trace     : Executa com trace detalhado");
         eprintln!("  --headless  : Executa sem interface gráfica");
+        eprintln!(
+            "  --model     : Hardware emulado ({}); padrão: dmg, ou cgb para ROMs só CGB",
+            GB::CPU::BootModel::NAMES
+        );
         return;
     }
 
-    // Encontra o arquivo ROM (não é um flag)
-    let rom_path = args
-        .iter()
-        .skip(1)
-        .find(|arg| !arg.starts_with("--"))
-        .expect("Nenhum arquivo ROM especificado");
+    // ROM é o primeiro argumento que não é flag nem valor de --model
+    let mut rom_path = None;
+    let mut boot_model = None;
+    let mut rest = args.iter().skip(1);
+    while let Some(arg) = rest.next() {
+        if arg == "--model" {
+            let name = rest.next().map(String::as_str).unwrap_or("");
+            let Some(model) = GB::CPU::BootModel::from_name(name) else {
+                eprintln!(
+                    "❌ Modelo inválido: '{}'. Use: {}",
+                    name,
+                    GB::CPU::BootModel::NAMES
+                );
+                std::process::exit(1);
+            };
+            boot_model = Some(model);
+        } else if !arg.starts_with("--") && rom_path.is_none() {
+            rom_path = Some(arg.as_str());
+        }
+    }
+    let rom_path = rom_path.expect("Nenhum arquivo ROM especificado");
 
     let headless = args.iter().any(|a| a == "--headless");
     let trace = args.iter().any(|a| a == "--trace");
@@ -80,8 +74,12 @@ fn main() {
         cpu.bus.load_boot_rom(boot_rom);
         cpu.registers.set_pc(0x0000);
     } else {
-        let boot_model = infer_boot_model(rom_path, &cpu);
-        cpu.init_post_boot_model(boot_model);
+        let default_model = if cpu.bus.cgb_mode {
+            GB::CPU::BootModel::Cgb
+        } else {
+            GB::CPU::BootModel::DmgAbc
+        };
+        cpu.init_post_boot_model(boot_model.unwrap_or(default_model));
     }
 
     // Carrega save
