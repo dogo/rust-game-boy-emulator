@@ -739,6 +739,66 @@ mod ppu_tests {
         );
     }
 
+    /// Window com tile 0 em todo o mapa; a linha 0 do tile só tem o pixel 7 (cor 1)
+    fn window_ppu(wx: u8, wy: u8) -> PPU {
+        let mut ppu = PPU::new();
+        ppu.vram.fill(0);
+        ppu.lcdc = 0xB1;
+        ppu.bgp = 0xE4;
+        ppu.wx = wx;
+        ppu.wy = wy;
+        ppu.vram[0] = 0x01;
+        ppu
+    }
+
+    #[test]
+    fn window_left_edge_follows_wx_below_7() {
+        for (wx, column) in [(7, 7), (6, 6), (0, 0)] {
+            let mut ppu = window_ppu(wx, 0);
+            ppu.render_window_scanline();
+            let lit: Vec<usize> = (0..16).filter(|&x| ppu.framebuffer[x] == 1).collect();
+            assert_eq!(lit, [column, column + 8], "WX={wx}");
+        }
+    }
+
+    #[test]
+    fn window_counter_pauses_while_disabled() {
+        let mut ppu = window_ppu(7, 0);
+        ppu.vram[2] = 0x01; // linha 1 do tile
+        ppu.render_window_scanline();
+        ppu.lcdc = 0x91;
+        ppu.ly = 1;
+        ppu.render_window_scanline();
+        ppu.lcdc = 0xB1;
+        ppu.ly = 2;
+        ppu.render_window_scanline();
+        assert_eq!(ppu.framebuffer[2 * 160 + 7], 1);
+    }
+
+    #[test]
+    fn window_stays_after_wy_moves_past_ly() {
+        let mut ppu = window_ppu(7, 3);
+        ppu.ly = 2;
+        ppu.render_window_scanline();
+        assert_eq!(ppu.framebuffer[2 * 160 + 7], 0);
+        ppu.ly = 3;
+        ppu.render_window_scanline();
+        assert_eq!(ppu.framebuffer[3 * 160 + 7], 1);
+        ppu.wy = 100;
+        ppu.ly = 4;
+        ppu.vram[2] = 0x01;
+        ppu.render_window_scanline();
+        assert_eq!(ppu.framebuffer[4 * 160 + 7], 1);
+    }
+
+    #[test]
+    fn window_never_triggered_when_wy_is_set_after_ly_passed() {
+        let mut ppu = window_ppu(7, 3);
+        ppu.ly = 5;
+        ppu.render_window_scanline();
+        assert_eq!(ppu.framebuffer[5 * 160 + 7], 0);
+    }
+
     #[test]
     fn test_ppu_window_trigger_and_reset() {
         let mut ppu = PPU::new();

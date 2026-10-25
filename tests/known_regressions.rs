@@ -38,7 +38,6 @@ fn bg_disabled_clears_old_priority() {
 }
 
 #[test]
-#[ignore = "D04: janela parcialmente visível em WX=6"]
 fn window_wx_6_is_partially_visible() {
     let mut p = PPU::new();
     p.vram.fill(0);
@@ -172,7 +171,6 @@ fn cartridge_type_09_keeps_external_ram() {
 }
 
 #[test]
-#[ignore = "D04: janela continua da última linha efetivamente desenhada"]
 fn window_resumes_from_last_rendered_row() {
     let mut p = PPU::new();
     p.vram.fill(0);

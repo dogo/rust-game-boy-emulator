@@ -102,8 +102,10 @@ Critério de saída: os cenários acima têm regressões automatizadas; uma sess
 
   Concluído: os quatro caminhos (`cpu_vram_blocked`, `cpu_vram_write_blocked`, `cpu_oam_blocked`, `cpu_oam_write_blocked`) só usam as janelas especiais da linha 0 enquanto `lcd_on_timing_quirk` está ativo, isto é, na primeira linha após ligar o LCD. Nos frames seguintes, a linha 0 segue as regras normais dos modos 2 e 3. Testes cobrem a linha 0 de um frame posterior nos modos 2 e 3 (falha no código anterior), a primeira linha após ligar o LCD e o LCD desligado (sem bloqueio). A suíte Rust e as 163 ROMs passaram, incluindo os testes Mooneye de `lcdon_timing`.
 
-- [ ] **D04 — Corrigir recorte e contador vertical da window.**
+- [x] **D04 — Corrigir recorte e contador vertical da window.**
   Aceitar a janela parcialmente visível com `WX < 7` e usar o contador de linhas efetivamente desenhadas, em vez de apenas `LY-WY`. Testar WX=6/7, ocultação e retomada via WX, condições de WY e reset por frame; tratar peculiaridades dos limites conforme evidência de hardware.
+
+  Concluído: `wy_pos` passou a ser o contador interno de linhas da window e só avança nas linhas em que ela é desenhada; ocultar via WX > 166 ou desligar o bit 5 de LCDC no meio do frame pausa o contador, e a retomada continua da próxima linha. A condição de WY trava quando `LY == WY` em qualquer momento do frame, mesmo com a window desligada, e só é limpa no VBlank, como descrito no [Pan Docs](https://gbdev.io/pandocs/Scrolling.html#window). Com `WX < 7`, a window começa cortada à esquerda. Os resets ao desligar a window foram removidos. Testes cobrem WX=0/6/7, ocultação e retomada via WX, pausa com a window desligada, WY alterado depois do disparo, WY nunca igualado e o reset no VBlank; os novos falham no código anterior. A suíte Rust e as 163 ROMs passaram. Não modelados, por falta de evidência e do renderizador ser por linha: as peculiaridades de WX=0 com SCX, de WX=166 e mudanças de WX no meio da linha. Ainda não verificado visualmente em jogo.
 
 - [ ] **D05 — Completar reload de TIMA mesmo após desabilitar o timer.**
   Em `src/GB/timer.rs`, processar o reload pendente independentemente de TAC. Cobrir overflow seguido de TAC=0, atraso de quatro T-cycles, interrupção e escritas em TIMA/TMA durante o atraso. Preservar os testes Mooneye já aprovados.

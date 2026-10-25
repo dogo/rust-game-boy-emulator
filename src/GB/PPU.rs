@@ -281,28 +281,13 @@ impl PPU {
 
     // Renderiza window layer para uma scanline específica
     pub fn render_window_scanline(&mut self) {
-        // LCDC bit 5: Window enable
-        if (self.lcdc & 0x20) == 0 {
-            // Window disabled → reset state
-            self.wy_trigger = false;
-            self.wy_pos = -1;
-            return; // Window desabilitada
+        // Mesma checagem de change_mode(3), para que a renderização direta também a veja
+        if self.ly == self.wy {
+            self.wy_trigger = true;
         }
 
-        // LCDC bit 0: BG/Window enable (ambos precisam estar on)
-        if (self.lcdc & 0x01) == 0 {
-            return;
-        }
-
-        // Window só renderiza se LY >= WY (janela começou verticalmente)
-        // IMPORTANTE: Window só renderiza quando LY >= WY, não quando LY > WY
-        if self.ly < self.wy {
-            return;
-        }
-
-        // Window só renderiza se WX <= 166 (window pode aparecer horizontalmente)
-        // Se WX < 7, a window não aparece na tela (está fora da área visível)
-        if self.wx > 166 || self.wx < 7 {
+        // LCDC bit 5 (window) e bit 0 (BG/window) precisam estar ligados
+        if (self.lcdc & 0x21) != 0x21 || !self.wy_trigger || self.wx > 166 {
             return;
         }
 
@@ -317,23 +302,20 @@ impl PPU {
         // LCDC bit 4: BG/Window tile data select (mesmo que BG)
         let tile_data_mode = (self.lcdc & 0x10) != 0;
 
-        // Calcular linha da window (sem scroll)
-        // window_y = linha atual dentro da window (0, 1, 2, ...)
-        // Quando LY == WY, window_y = 0 (primeira linha da window)
-        let window_y = self.ly.wrapping_sub(self.wy);
-        let tile_y = (window_y as usize) / 8;
-        let pixel_y = (window_y as usize) % 8;
+        // O contador só avança nas linhas em que a window é desenhada, não com LY-WY
+        self.wy_pos += 1;
+        let window_y = self.wy_pos as usize;
+        let tile_y = window_y / 8;
+        let pixel_y = window_y % 8;
 
         let line_start = self.ly as usize * 160;
 
-        // WX é offset por 7, então WX=7 significa coluna 0 na tela
-        // WX < 7 significa que a window está fora da área visível (já tratado acima)
-        let window_start_x = self.wx - 7;
+        // WX é offset por 7: WX=7 é a coluna 0, e WX < 7 corta o início da window
+        let window_start_x = self.wx as i16 - 7;
 
-        // Window só renderiza da coluna window_start_x até o final da tela (160)
-        for screen_x in window_start_x..160 {
+        for screen_x in window_start_x.max(0) as u8..160 {
             // Posição dentro da window (sem offset WX)
-            let window_x = screen_x - window_start_x;
+            let window_x = (screen_x as i16 - window_start_x) as u8;
             let tile_x = (window_x / 8) as usize;
             let pixel_x = (window_x % 8) as usize;
 
@@ -857,11 +839,6 @@ impl PPU {
                 if self.mode != 0 {
                     self.change_mode(0, iflags);
                 }
-                // Se window estiver desabilitada, garante reset do estado
-                if (self.lcdc & 0x20) == 0 {
-                    self.wy_trigger = false;
-                    self.wy_pos = -1;
-                }
             }
         } else {
             if self.mode != 1 {
@@ -931,10 +908,9 @@ impl PPU {
             }
             2 => {}
             3 => {
-                // Window trigger: ativa ao entrar em modo 3 na linha wy
-                if (self.lcdc & 0x20) != 0 && !self.wy_trigger && self.ly == self.wy {
+                // A condição de WY vale até o fim do frame, mesmo com a window desligada
+                if self.ly == self.wy {
                     self.wy_trigger = true;
-                    self.wy_pos = -1;
                 }
             }
             _ => {}
