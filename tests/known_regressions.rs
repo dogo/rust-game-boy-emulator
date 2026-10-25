@@ -135,7 +135,6 @@ fn malformed_rtc_seconds_does_not_crash() {
 }
 
 #[test]
-#[ignore = "L01: debugger deve reconhecer instruções executadas pelo microcódigo"]
 fn disassembler_identifies_load_instruction() {
     let mut rom = vec![0; 32768];
     rom[..2].copy_from_slice(&[0x3E, 0x42]);

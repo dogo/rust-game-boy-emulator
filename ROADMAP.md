@@ -141,8 +141,10 @@ Critério de saída: regressões de cada tarefa passam, assim como as suítes ex
 
 ## Etapa 3 — Melhorar diagnóstico e limpar código
 
-- [ ] **L01 — Usar os nomes das instruções executadas no debugger e no trace.**
+- [x] **L01 — Usar os nomes das instruções executadas no debugger e no trace.**
   Revisar `src/GB/debugger.rs`, `trace.rs` e os metadados de microcódigo. Uma instrução implementada como `3E 42` deve aparecer como `LD A,d8`, com seu operando, e prefixos CB precisam do nome correto. Cobrir também tamanhos e avanço do disassembly.
+
+  Concluído: `debugger::instruction_name` usa a mesma prioridade da CPU (tabela CB, microcódigo, decodificação legada) e é usado no disassembly, no estado após `step` e no trace; opcodes ilegais aparecem como `ILLEGAL`. A lista deles virou `instructions::ILLEGAL_OPCODES`, usada também pela CPU. STOP passou a ter 2 bytes no disassembly, e os segundos bytes de CB e STOP não aparecem mais como operando. Testes em `tests/debugger_test.rs` cobrem nome para todos os 256 opcodes e 256 CB, nomes de exemplo e tamanhos/avanço do disassembly; a regressão L01 está ativa. A suíte Rust (agora sem testes ignorados) e as 163 ROMs passaram. Os nomes vêm dos metadados existentes do microcódigo, com placeholders como `d8`/`a16` seguidos do valor.
 
 - [ ] **L02 — Remover o barramento legado sem consumidores internos.**
   Confirmar referências de `src/GB/RAM.rs`, inclusive export em `src/GB.rs`, testes e eventuais consumidores externos. Remover módulo e export se a API não for necessária. A remoção estimada de 148 linhas só vale após essa confirmação; manter `MemoryBus` como implementação efetiva.

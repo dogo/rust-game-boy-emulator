@@ -13,6 +13,11 @@ mod helpers;
 // Re-exporta tipos públicos
 pub use helpers::{FlagBits, Instruction};
 
+/// Opcodes inválidos que travam a CPU (Pan Docs)
+pub const ILLEGAL_OPCODES: [u8; 11] = [
+    0xD3, 0xDB, 0xDD, 0xE3, 0xE4, 0xEB, 0xEC, 0xED, 0xF4, 0xFC, 0xFD,
+];
+
 // Re-exporta função decode
 pub fn decode(opcode: u8) -> Instruction {
     match opcode {
@@ -26,9 +31,7 @@ pub fn decode(opcode: u8) -> Instruction {
         0x10 => control::stop(opcode),
 
         // Opcodes ilegais: executam como NOP e o CPU marca `locked` em seguida
-        0xD3 | 0xDB | 0xDD | 0xE3 | 0xE4 | 0xEB | 0xEC | 0xED | 0xF4 | 0xFC | 0xFD => {
-            Instruction::nop()
-        }
+        op if ILLEGAL_OPCODES.contains(&op) => Instruction::nop(),
 
         // Todas as outras instruções foram migradas para microcode.
         // Este padrão nunca deve ser alcançado porque microcode::lookup() tem prioridade

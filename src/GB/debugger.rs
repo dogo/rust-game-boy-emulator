@@ -3,6 +3,7 @@
 /// Suporta modo single-thread e multi-thread (via channels)
 use crate::GB::CPU::CPU;
 use crate::GB::instructions;
+use crate::GB::microcode;
 use std::io::{self, Write};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{Receiver, Sender};
@@ -237,7 +238,7 @@ impl Debugger {
 
         for _ in 0..count {
             let opcode = cpu.bus.read(pc);
-            let instr = instructions::decode(opcode);
+            let name = instruction_name(cpu, pc);
             let len = get_instruction_length(opcode);
 
             let mut bytes = format!("{:02X}", opcode);
@@ -253,7 +254,7 @@ impl Debugger {
             };
             result.push_str(&format!(
                 "{} {:04X}:  {:<12} {:<8} {}\n",
-                marker, pc, bytes, instr.name, operands
+                marker, pc, bytes, name, operands
             ));
 
             pc = pc.wrapping_add(len as u16);
@@ -264,7 +265,7 @@ impl Debugger {
     pub fn format_current_state(cpu: &CPU, cycles: u64) -> String {
         let pc = cpu.registers.get_pc();
         let opcode = cpu.bus.read(pc);
-        let instr = instructions::decode(opcode);
+        let name = instruction_name(cpu, pc);
         let len = get_instruction_length(opcode);
 
         let mut bytes = format!("{:02X}", opcode);
@@ -276,7 +277,7 @@ impl Debugger {
             "→ {:04X}: {:<12} {:<8} | AF={:04X} BC={:04X} DE={:04X} HL={:04X} ({} cycles)",
             pc,
             bytes,
-            instr.name,
+            name,
             cpu.registers.get_af(),
             cpu.registers.get_bc(),
             cpu.registers.get_de(),
@@ -709,10 +710,23 @@ pub fn parse_address(s: &str) -> Option<u16> {
     u16::from_str_radix(s, 16).ok()
 }
 
+/// Nome da instrução em `pc`, com a mesma prioridade da CPU: CB, microcódigo, legado
+pub fn instruction_name(cpu: &CPU, pc: u16) -> &'static str {
+    let opcode = cpu.bus.read(pc);
+    if opcode == 0xCB {
+        let cb_opcode = cpu.bus.read(pc.wrapping_add(1));
+        return microcode::cb_prefix::lookup(cb_opcode).map_or("UNKNOWN", |p| p.name);
+    }
+    if instructions::ILLEGAL_OPCODES.contains(&opcode) {
+        return "ILLEGAL";
+    }
+    microcode::lookup(opcode).map_or_else(|| instructions::decode(opcode).name, |p| p.name)
+}
+
 /// Retorna o tamanho da instrução em bytes
 pub fn get_instruction_length(opcode: u8) -> u8 {
     match opcode {
-        0xCB => 2,
+        0xCB | 0x10 => 2,
         0x01 | 0x11 | 0x21 | 0x31 | 0x08 | 0xC2 | 0xC3 | 0xCA | 0xD2 | 0xDA | 0xC4 | 0xCC
         | 0xCD | 0xD4 | 0xDC | 0xEA | 0xFA => 3,
         0x06 | 0x0E | 0x16 | 0x1E | 0x26 | 0x2E | 0x36 | 0x3E | 0xC6 | 0xCE | 0xD6 | 0xDE
@@ -724,6 +738,10 @@ pub fn get_instruction_length(opcode: u8) -> u8 {
 
 /// Formata os operandos da instrução para exibição
 pub fn format_operands(cpu: &CPU, pc: u16, opcode: u8, len: u8) -> String {
+    // O segundo byte de CB faz parte do nome; o de STOP é ignorado pela CPU
+    if opcode == 0xCB || opcode == 0x10 {
+        return String::new();
+    }
     match len {
         2 => {
             let byte = cpu.bus.read(pc.wrapping_add(1));

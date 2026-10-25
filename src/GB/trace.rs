@@ -1,5 +1,5 @@
 use crate::GB::CPU::CPU;
-use crate::GB::instructions;
+use crate::GB::debugger::instruction_name;
 
 // === Funções de trace para operações da RAM ===
 
@@ -125,16 +125,16 @@ pub fn run_with_trace(cpu: &mut CPU, max_steps: usize) {
     for step in 0..max_steps {
         let pc = cpu.registers.get_pc();
         let opcode = cpu.bus.read(pc); // peek
-        let instr = instructions::decode(opcode);
+        let name = instruction_name(cpu, pc);
         // Detalhes extras para diagnosticar polling em IO
         let extra = build_trace_extra(cpu, pc, opcode);
 
         if extra.is_empty() {
-            println!("{:05} PC={:04X} OP={:02X} {}", step, pc, opcode, instr.name);
+            println!("{:05} PC={:04X} OP={:02X} {}", step, pc, opcode, name);
         } else {
             println!(
                 "{:05} PC={:04X} OP={:02X} {}{}",
-                step, pc, opcode, instr.name, extra
+                step, pc, opcode, name, extra
             );
         }
 
