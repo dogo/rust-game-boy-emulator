@@ -292,7 +292,7 @@ impl Debugger {
 
     /// Executa uma instrução e retorna o estado
     pub fn step(cpu: &mut CPU) -> String {
-        let (cycles, _) = cpu.execute_next();
+        let cycles = cpu.execute_next();
         Self::format_current_state(cpu, cycles)
     }
 
@@ -309,11 +309,11 @@ impl Debugger {
                 break;
             }
 
-            let (cycles, unknown) = cpu.execute_next();
-            if unknown {
+            let cycles = cpu.execute_next();
+            if cpu.locked {
                 output.push_str(&format!(
-                    "⚠️  Opcode desconhecido em 0x{:04X}\n",
-                    cpu.registers.get_pc()
+                    "⚠️  CPU travada por opcode ilegal em 0x{:04X}\n",
+                    cpu.registers.get_pc().wrapping_sub(1)
                 ));
                 break;
             }
@@ -710,17 +710,17 @@ pub fn parse_address(s: &str) -> Option<u16> {
     u16::from_str_radix(s, 16).ok()
 }
 
-/// Nome da instrução em `pc`, com a mesma prioridade da CPU: CB, microcódigo, legado
+/// Nome da instrução em `pc`: tabela CB, microcódigo ou instruções de controle da CPU
 pub fn instruction_name(cpu: &CPU, pc: u16) -> &'static str {
     let opcode = cpu.bus.read(pc);
     if opcode == 0xCB {
         let cb_opcode = cpu.bus.read(pc.wrapping_add(1));
         return microcode::cb_prefix::lookup(cb_opcode).map_or("UNKNOWN", |p| p.name);
     }
-    if instructions::ILLEGAL_OPCODES.contains(&opcode) {
-        return "ILLEGAL";
+    if let Some(program) = microcode::lookup(opcode) {
+        return program.name;
     }
-    microcode::lookup(opcode).map_or_else(|| instructions::decode(opcode).name, |p| p.name)
+    instructions::control_name(opcode).unwrap_or("UNKNOWN")
 }
 
 /// Retorna o tamanho da instrução em bytes

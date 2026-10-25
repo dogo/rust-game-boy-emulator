@@ -1,41 +1,20 @@
-// Módulo de instruções - organizadas por categoria
-//
-// NOTA: A maioria das instruções foi migrada para o sistema de microcode.
-// Todas as instruções principais (LD, Arithmetic, Logic, Jump, Stack, CB-prefix)
-// estão agora em src/GB/microcode/.
-// Apenas as instruções de controle (DI, EI, HALT, STOP) ainda estão aqui
-// porque têm efeitos especiais no CPU que são tratados externamente.
-
-// Submódulos
-mod control;
-mod helpers;
-
-// Re-exporta tipos públicos
-pub use helpers::{FlagBits, Instruction};
+//! Instruções que a CPU trata fora do microcódigo (`src/GB/microcode/`):
+//! DI, EI, HALT, STOP e os opcodes ilegais. Elas gastam só o fetch e seus
+//! efeitos ficam em `CPU::execute_next`.
 
 /// Opcodes inválidos que travam a CPU (Pan Docs)
 pub const ILLEGAL_OPCODES: [u8; 11] = [
     0xD3, 0xDB, 0xDD, 0xE3, 0xE4, 0xEB, 0xEC, 0xED, 0xF4, 0xFC, 0xFD,
 ];
 
-// Re-exporta função decode
-pub fn decode(opcode: u8) -> Instruction {
+/// Nome das instruções sem microcódigo; `None` para os demais opcodes
+pub fn control_name(opcode: u8) -> Option<&'static str> {
     match opcode {
-        // NOP
-        0x00 => Instruction::nop(),
-
-        // Control - não migrado (instruções simples com efeitos especiais no CPU)
-        0xF3 => control::di(opcode),
-        0xFB => control::ei(opcode),
-        0x76 => control::halt(opcode),
-        0x10 => control::stop(opcode),
-
-        // Opcodes ilegais: executam como NOP e o CPU marca `locked` em seguida
-        op if ILLEGAL_OPCODES.contains(&op) => Instruction::nop(),
-
-        // Todas as outras instruções foram migradas para microcode.
-        // Este padrão nunca deve ser alcançado porque microcode::lookup() tem prioridade
-        // no CPU.rs. Mantido apenas para satisfazer o match exaustivo do Rust.
-        _ => Instruction::unknown(opcode),
+        0xF3 => Some("DI"),
+        0xFB => Some("EI"),
+        0x76 => Some("HALT"),
+        0x10 => Some("STOP"),
+        op if ILLEGAL_OPCODES.contains(&op) => Some("ILLEGAL"),
+        _ => None,
     }
 }

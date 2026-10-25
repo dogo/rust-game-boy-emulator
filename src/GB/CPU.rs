@@ -258,20 +258,17 @@ impl CPU {
         byte
     }
 
-    pub fn decode(opcode: u8, _cb_opcode: bool) -> instructions::Instruction {
-        instructions::decode(opcode)
-    }
-
-    pub fn execute_next(&mut self) -> (u64, bool) {
+    /// Executa uma instrução (ou um passo de espera) e retorna os T-cycles consumidos
+    pub fn execute_next(&mut self) -> u64 {
         // Nem interrupções destravam; PPU e timer seguem rodando
         if self.locked {
             self.bus.tick(4);
-            return (4, false);
+            return 4;
         }
         // Em STOP o oscilador para: nada avança até uma linha do joypad ir a zero
         if self.stopped {
             if !self.bus.joypad_line_low() {
-                return (4, false);
+                return 4;
             }
             self.stopped = false;
         }
@@ -286,7 +283,7 @@ impl CPU {
             } else {
                 // CPU ainda halted, simula 4 ciclos de espera
                 self.bus.tick(4);
-                return (4, false);
+                return 4;
             }
         }
 
@@ -294,7 +291,7 @@ impl CPU {
         self.ime_enable_next = false;
 
         if self.service_interrupts_with_ime(self.ime) {
-            return (20, false);
+            return 20;
         }
 
         // FETCH
@@ -302,43 +299,20 @@ impl CPU {
         let opcode = self.fetch_next();
         self.opcode = opcode;
 
-        // DECODE
-        let instr = CPU::decode(opcode, false);
-        let mut unknown = instr.name == "UNKNOWN";
-        let cycles: u64;
-
-        // Trata CB-prefix de forma especial
-        if opcode == 0xCB {
-            // Busca o segundo byte (opcode CB real)
+        // EXECUTE: DI, EI, HALT, STOP e os ilegais não têm microcódigo; gastam só o
+        // fetch e seus efeitos ficam no match abaixo
+        let program = if opcode == 0xCB {
             let cb_opcode = self.bus.cpu_read(self.registers.get_pc());
             self.registers
                 .set_pc(self.registers.get_pc().wrapping_add(1));
-
-            if let Some(program) = microcode::cb_prefix::lookup(cb_opcode) {
-                microcode::execute(program, &mut self.registers, &mut self.bus);
-                cycles = self.bus.take_cpu_cycle_log() as u64;
-                unknown = false;
-            } else {
-                // Fallback para implementação antiga
-                let exec_cycles = (instr.execute)(&instr, &mut self.registers, &mut self.bus);
-                let consumed = self.bus.take_cpu_cycle_log();
-                if exec_cycles as u32 > consumed {
-                    self.bus.tick(exec_cycles as u32 - consumed);
-                }
-                cycles = exec_cycles;
-            }
-        } else if let Some(program) = microcode::lookup(opcode) {
-            microcode::execute(program, &mut self.registers, &mut self.bus);
-            cycles = self.bus.take_cpu_cycle_log() as u64;
-            unknown = false;
+            microcode::cb_prefix::lookup(cb_opcode)
         } else {
-            let exec_cycles = (instr.execute)(&instr, &mut self.registers, &mut self.bus);
-            let consumed = self.bus.take_cpu_cycle_log();
-            if exec_cycles as u32 > consumed {
-                self.bus.tick(exec_cycles as u32 - consumed);
-            }
-            cycles = exec_cycles;
+            microcode::lookup(opcode)
+        };
+        if let Some(program) = program {
+            microcode::execute(program, &mut self.registers, &mut self.bus);
         }
+        let cycles = self.bus.take_cpu_cycle_log() as u64;
         self.cycles += cycles;
 
         match opcode {
@@ -388,7 +362,7 @@ impl CPU {
             self.ime = true;
         }
 
-        (cycles, unknown)
+        cycles
     }
 
     /// Fluxograma de STOP do Pan Docs (DMG, sem troca de velocidade): com botão

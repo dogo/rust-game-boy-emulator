@@ -151,8 +151,10 @@ Critério de saída: regressões de cada tarefa passam, assim como as suítes ex
 
   Concluído: a única referência era o export `pub mod RAM` em `src/GB.rs`; nada em `src`, testes, scripts, CI ou documentação usava o tipo, e o crate não é publicado nem tem dependentes. Módulo (149 linhas, incluindo um `save_cart_ram` sem a escrita segura de S01) e export removidos; `MemoryBus` segue como barramento. A API pública perde `GB::RAM`. A suíte Rust e as 163 ROMs passaram.
 
-- [ ] **L03 — Reduzir o caminho legado de instruções.**
+- [x] **L03 — Reduzir o caminho legado de instruções.**
   Depois de L01, revisar a necessidade de `instructions::decode()` em toda instrução e do fallback CB. Remover caminhos comprovadamente inalcançáveis. Migrar DI/EI/HALT/STOP somente se isso simplificar o conjunto, preservando seus efeitos e temporização; não apagar o módulo antes de atualizar todos os consumidores e testes.
+
+  Concluído: a tabela CB cobre os 256 opcodes, então o fallback CB era inalcançável; e as funções legadas de DI/EI/HALT/STOP/ilegais só retornavam os 4 ciclos do fetch, sem efeito, porque os efeitos reais já estavam no `match` de `CPU::execute_next`. Foram removidos `CPU::decode`, `instructions::decode`, `Instruction`, `FlagBits`, `control.rs` e `helpers.rs`; `instructions` ficou com `ILLEGAL_OPCODES` e `control_name`, usado pelo debugger. DI/EI/HALT/STOP não foram migrados para microcódigo, porque isso não simplificaria. O retorno `unknown` de `execute_next`, sempre falso, saiu: a função retorna só os ciclos (API pública alterada); debugger (`run`) e trace agora param quando a CPU trava num opcode ilegal. Testes novos confirmam que cada opcode tem microcódigo ou é instrução de controle, que a tabela CB é completa e que as instruções de controle gastam 4 ciclos. A suíte Rust e as 163 ROMs passaram.
 
 - [ ] **L04 — Separar seleção de boot dos nomes de arquivo de teste.**
   Em `src/main.rs` e `run_all_tests.sh`, manter a escolha de modelo por nome restrita à infraestrutura de testes, usando seleção explícita quando necessário. Renomear uma ROM de jogo não deve mudar o hardware emulado; as variantes Mooneye devem continuar recebendo o modelo esperado.

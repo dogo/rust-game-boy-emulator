@@ -198,7 +198,7 @@ pub fn run(cpu: &mut CPU) -> TestResult {
         }
 
         // Executa uma instrução
-        let (cycles, _) = cpu.execute_next();
+        let cycles = cpu.execute_next();
         instruction_count += 1;
 
         if cycles == 0 {

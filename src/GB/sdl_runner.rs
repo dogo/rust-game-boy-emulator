@@ -183,7 +183,7 @@ fn emulation_thread(
             }
             skip_breakpoint = false;
 
-            let (cycles, _) = cpu.execute_next();
+            let cycles = cpu.execute_next();
             let c = cycles as u64;
 
             frame_cycle_accum += c;

@@ -138,9 +138,12 @@ pub fn run_with_trace(cpu: &mut CPU, max_steps: usize) {
             );
         }
 
-        let (_cycles, unknown) = cpu.execute_next();
-        if unknown {
-            println!("Parando: opcode desconhecido {:02X} em {:04X}", opcode, pc);
+        cpu.execute_next();
+        if cpu.locked {
+            println!(
+                "Parando: CPU travada por opcode ilegal {:02X} em {:04X}",
+                opcode, pc
+            );
             break;
         }
     }

@@ -13,9 +13,8 @@ fn di_does_not_execute_cb_set_6_e() {
     let mut cpu = cpu_with_rom(&[0xF3]);
     cpu.registers.set_de(0x0000);
 
-    let (_cycles, unknown) = cpu.execute_next();
+    cpu.execute_next();
 
-    assert!(!unknown);
     assert_eq!(cpu.registers.get_de(), 0x0000);
     assert!(!cpu.ime);
 }
@@ -25,9 +24,8 @@ fn cb_f3_still_executes_set_6_e() {
     let mut cpu = cpu_with_rom(&[0xCB, 0xF3]);
     cpu.registers.set_de(0x0000);
 
-    let (_cycles, unknown) = cpu.execute_next();
+    cpu.execute_next();
 
-    assert!(!unknown);
     assert_eq!(cpu.registers.get_de(), 0x0040);
 }
 
@@ -129,11 +127,32 @@ fn illegal_opcodes_lock_the_cpu_for_good() {
         cpu.bus.write(0xFF0F, 0x1F);
         let div = cpu.bus.read(0xFF04);
         for _ in 0..1000 {
-            let (_, unknown) = cpu.execute_next();
-            assert!(!unknown, "{opcode:02X}");
+            cpu.execute_next();
         }
         assert_eq!(cpu.registers.get_pc(), 0x0001, "{opcode:02X}");
         assert_eq!(cpu.registers.get_a(), 0, "{opcode:02X}");
         assert_ne!(cpu.bus.read(0xFF04), div, "timer parou em {opcode:02X}");
+    }
+}
+
+#[test]
+fn every_opcode_is_microcode_or_a_cpu_control_instruction() {
+    use gb_emu::GB::{instructions, microcode};
+    for opcode in 0..=0xFFu8 {
+        let has_microcode = opcode == 0xCB || microcode::lookup(opcode).is_some();
+        let is_control = instructions::control_name(opcode).is_some();
+        assert!(has_microcode != is_control, "{opcode:02X}");
+        assert!(
+            microcode::cb_prefix::lookup(opcode).is_some(),
+            "CB {opcode:02X}"
+        );
+    }
+}
+
+#[test]
+fn control_instructions_take_only_the_fetch() {
+    for opcode in [0xF3, 0xFB, 0x76, 0x10] {
+        let mut cpu = cpu_with_rom(&[opcode, 0x00]);
+        assert_eq!(cpu.execute_next(), 4, "{opcode:02X}");
     }
 }
