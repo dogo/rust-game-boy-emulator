@@ -161,41 +161,32 @@ fn emulation_thread(
 
     // Debugger com breakpoints
     let mut debugger = Debugger::new();
+    // Após retomar, a instrução no PC atual executa mesmo se tiver breakpoint
+    let mut skip_breakpoint = false;
 
-    // Pré-buffer de áudio (~80ms)
-    {
-        let mut buf = state.audio_buffer.lock().unwrap();
-        let prefill = (SAMPLE_RATE as usize * 80) / 1000;
-        for _ in 0..prefill {
-            buf.push_back((0.0, 0.0));
-        }
-    }
+    prefill_audio(&state);
 
     while state.running.load(Ordering::Relaxed) {
         let frame_start = Instant::now();
 
         // Checa se debug foi solicitado
-        if state.debug_requested.load(Ordering::Relaxed) {
-            state.paused.store(true, Ordering::Relaxed);
+        if state.debug_requested.load(Ordering::Acquire) {
+            state.paused.store(true, Ordering::Release);
 
             // Usa o loop de comandos do debugger
-            let should_quit = debugger.debug_command_loop(cpu, &cmd_rx, &resp_tx);
+            let should_quit = debugger.debug_command_loop(cpu, &cmd_rx, &resp_tx, &state.running);
 
             if should_quit {
                 state.running.store(false, Ordering::Relaxed);
             }
 
-            state.debug_requested.store(false, Ordering::Relaxed);
-            state.paused.store(false, Ordering::Relaxed);
+            skip_breakpoint = true;
+            // A interface espera paused=false; debug_requested precisa estar limpo antes
+            state.debug_requested.store(false, Ordering::Release);
+            state.paused.store(false, Ordering::Release);
 
-            // Limpa e preenche buffer de áudio após debug
-            {
-                let mut buf = state.audio_buffer.lock().unwrap();
-                buf.clear();
-                for _ in 0..2048 {
-                    buf.push_back((0.0, 0.0));
-                }
-            }
+            // Mesma folga do início; com menos, o buffer não se recupera e estala
+            prefill_audio(&state);
             continue;
         }
 
@@ -203,13 +194,16 @@ fn emulation_thread(
         process_joypad_input(cpu, &state);
 
         // Roda um frame completo de emulação
+        let mut breakpoint_hit = false;
         while frame_cycle_accum < CYCLES_PER_FRAME {
             // Checa breakpoints
-            if debugger.check_breakpoint(cpu.registers.get_pc()) {
+            if !skip_breakpoint && debugger.check_breakpoint(cpu.registers.get_pc()) {
                 println!("🔴 Breakpoint hit at 0x{:04X}", cpu.registers.get_pc());
-                state.debug_requested.store(true, Ordering::Relaxed);
+                state.debug_requested.store(true, Ordering::Release);
+                breakpoint_hit = true;
                 break;
             }
+            skip_breakpoint = false;
 
             let (cycles, _) = cpu.execute_next();
             let c = cycles as u64;
@@ -226,6 +220,11 @@ fn emulation_thread(
                     buffer.pop_front();
                 }
             }
+        }
+
+        if breakpoint_hit {
+            // Frame parcial: os ciclos acumulados continuam após a retomada
+            continue;
         }
 
         frame_cycle_accum -= CYCLES_PER_FRAME;
@@ -257,6 +256,13 @@ fn emulation_thread(
     }
 
     println!("🛑 Emulation thread finalizada após {} frames", frame_count);
+}
+
+/// Reinicia o buffer de áudio com ~80ms de silêncio
+fn prefill_audio(state: &SharedState) {
+    let mut buf = state.audio_buffer.lock().unwrap();
+    buf.clear();
+    buf.resize((SAMPLE_RATE as usize * 80) / 1000, (0.0, 0.0));
 }
 
 fn process_joypad_input(cpu: &mut CPU, state: &Arc<SharedState>) {
@@ -467,24 +473,30 @@ pub fn run(cpu: &mut CPU) {
                         );
                         return;
                     }
-                    InputResult::Debug => {
-                        state.debug_requested.store(true, Ordering::Relaxed);
-
-                        // Espera emulação pausar
-                        while !state.paused.load(Ordering::Relaxed)
-                            && state.running.load(Ordering::Relaxed)
-                        {
-                            thread::sleep(Duration::from_millis(1));
-                        }
-
-                        // Usa o loop de input do debugger
-                        if Debugger::terminal_input_loop(&cmd_tx, &resp_rx) {
-                            state.running.store(false, Ordering::Relaxed);
-                            println!("👋 Saindo via debugger");
-                            return;
-                        }
-                    }
+                    InputResult::Debug => state.debug_requested.store(true, Ordering::Release),
                     InputResult::Continue => {}
+                }
+            }
+
+            // F12 ou breakpoint atingido pela thread de emulação
+            if state.debug_requested.load(Ordering::Acquire) {
+                // Espera emulação pausar
+                while !state.paused.load(Ordering::Acquire) && state.running.load(Ordering::Relaxed)
+                {
+                    thread::sleep(Duration::from_millis(1));
+                }
+
+                // Usa o loop de input do debugger
+                if Debugger::terminal_input_loop(&cmd_tx, &resp_rx) {
+                    state.running.store(false, Ordering::Relaxed);
+                    println!("👋 Saindo via debugger");
+                    return;
+                }
+
+                // Espera a retomada para não reabrir o debugger com a pausa anterior
+                while state.paused.load(Ordering::Acquire) && state.running.load(Ordering::Relaxed)
+                {
+                    thread::sleep(Duration::from_millis(1));
                 }
             }
 
@@ -540,7 +552,6 @@ mod known_regressions {
     use super::*;
 
     #[test]
-    #[ignore = "I01: breakpoint automático não deve estourar o contador de ciclos"]
     fn automatic_breakpoint_does_not_underflow_frame_count() {
         let mut cpu = CPU::new(vec![0; 32768]);
         let state = Arc::new(SharedState::new());
@@ -561,6 +572,102 @@ mod known_regressions {
         }));
         stop.join().unwrap();
         assert!(result.is_ok());
+    }
+
+    // NOP em 0x0000 seguido de JR -2 em 0x0001 (laço infinito)
+    fn loop_rom() -> Vec<u8> {
+        let mut rom = vec![0; 32768];
+        rom[1] = 0x18;
+        rom[2] = 0xFE;
+        rom
+    }
+
+    fn wait_until(cond: impl Fn() -> bool) -> bool {
+        let start = Instant::now();
+        while !cond() {
+            if start.elapsed() > Duration::from_secs(5) {
+                return false;
+            }
+            thread::sleep(Duration::from_millis(1));
+        }
+        true
+    }
+
+    // Encerra a emulação se uma asserção falhar, evitando que o join trave o teste
+    struct StopOnDrop(Arc<SharedState>);
+    impl Drop for StopOnDrop {
+        fn drop(&mut self) {
+            self.0.running.store(false, Ordering::Relaxed);
+        }
+    }
+
+    fn expect_text(rx: &Receiver<DebugResponse>, needle: &str) {
+        match rx.recv_timeout(Duration::from_secs(5)) {
+            Ok(DebugResponse::Text(text)) => assert!(text.contains(needle), "{text}"),
+            other => panic!("resposta inesperada: {other:?}"),
+        }
+    }
+
+    /// Breakpoint no PC da pausa (primeiro opcode do frame): continue executa a instrução.
+    #[test]
+    fn breakpoint_on_first_opcode_resumes_past_it() {
+        let mut cpu = CPU::new(loop_rom());
+        let state = Arc::new(SharedState::new());
+        let (tx, rx) = mpsc::channel();
+        let (resp_tx, resp_rx) = mpsc::channel();
+        state.debug_requested.store(true, Ordering::Relaxed);
+        tx.send(DebugCommand::AddBreakpoint(0x0000)).unwrap();
+        tx.send(DebugCommand::Continue).unwrap();
+
+        thread::scope(|scope| {
+            let emu_state = state.clone();
+            let stop = StopOnDrop(state.clone());
+            let emu = scope.spawn(|| emulation_thread(&mut cpu, emu_state, rx, resp_tx));
+            expect_text(&resp_rx, "0x0000");
+            assert!(matches!(resp_rx.recv().unwrap(), DebugResponse::Resume));
+
+            assert!(wait_until(|| !state.paused.load(Ordering::Acquire)));
+            thread::sleep(Duration::from_millis(50));
+            assert!(!state.paused.load(Ordering::Acquire));
+            drop(stop);
+            emu.join().unwrap();
+        });
+        assert_eq!(cpu.registers.get_pc(), 0x0001);
+    }
+
+    /// Breakpoint no meio do frame: step, continue (reatinge no laço) e quit durante a pausa.
+    #[test]
+    fn mid_frame_breakpoint_step_continue_and_quit() {
+        let mut cpu = CPU::new(loop_rom());
+        let state = Arc::new(SharedState::new());
+        let (tx, rx) = mpsc::channel();
+        let (resp_tx, resp_rx) = mpsc::channel();
+        state.debug_requested.store(true, Ordering::Relaxed);
+        tx.send(DebugCommand::AddBreakpoint(0x0001)).unwrap();
+        tx.send(DebugCommand::Continue).unwrap();
+
+        thread::scope(|scope| {
+            let emu_state = state.clone();
+            let _stop = StopOnDrop(state.clone());
+            let emu = scope.spawn(|| emulation_thread(&mut cpu, emu_state, rx, resp_tx));
+            expect_text(&resp_rx, "0x0001");
+            assert!(matches!(resp_rx.recv().unwrap(), DebugResponse::Resume));
+            assert!(wait_until(|| state.paused.load(Ordering::Acquire)));
+
+            tx.send(DebugCommand::Step).unwrap();
+            expect_text(&resp_rx, "0001");
+            tx.send(DebugCommand::Continue).unwrap();
+            assert!(matches!(resp_rx.recv().unwrap(), DebugResponse::Resume));
+            // Só há resposta se o laço voltou ao breakpoint e reabriu o debugger
+            tx.send(DebugCommand::ShowRegisters).unwrap();
+            expect_text(&resp_rx, "PC: 0001");
+            assert!(state.paused.load(Ordering::Acquire));
+
+            tx.send(DebugCommand::Quit).unwrap();
+            assert!(matches!(resp_rx.recv().unwrap(), DebugResponse::Quit));
+            emu.join().unwrap();
+        });
+        assert!(!state.running.load(Ordering::Relaxed));
     }
 
     #[test]

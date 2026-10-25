@@ -4,6 +4,7 @@
 use crate::GB::CPU::CPU;
 use crate::GB::instructions;
 use std::io::{self, Write};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{Receiver, Sender};
 use std::time::Duration;
 
@@ -346,9 +347,11 @@ impl Debugger {
             io::stdout().flush().unwrap();
 
             let mut input = String::new();
-            if io::stdin().read_line(&mut input).is_err() {
-                println!("Erro ao ler input");
-                continue;
+            // EOF ou erro persistente: sem terminal, retoma em vez de repetir o prompt
+            if !matches!(io::stdin().read_line(&mut input), Ok(n) if n > 0) {
+                println!("\n⚠️  Terminal indisponível; retomando execução");
+                self.debugging = false;
+                return false;
             }
 
             let input = input.trim();
@@ -481,6 +484,7 @@ impl Debugger {
         cpu: &mut CPU,
         cmd_rx: &Receiver<DebugCommand>,
         resp_tx: &Sender<DebugResponse>,
+        running: &AtomicBool,
     ) -> bool {
         loop {
             match cmd_rx.recv_timeout(Duration::from_millis(100)) {
@@ -498,7 +502,12 @@ impl Debugger {
                         return false; // Continuar execução
                     }
                 }
-                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => continue,
+                // Interface encerrada (ESC/janela) durante a pausa
+                Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                    if !running.load(Ordering::Relaxed) {
+                        return true;
+                    }
+                }
                 Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => return true,
             }
         }
@@ -517,8 +526,10 @@ impl Debugger {
             io::stdout().flush().unwrap();
 
             let mut input = String::new();
-            if io::stdin().read_line(&mut input).is_err() {
-                continue;
+            // EOF ou erro persistente: sem terminal, retoma em vez de repetir o prompt
+            if !matches!(io::stdin().read_line(&mut input), Ok(n) if n > 0) {
+                println!("\n⚠️  Terminal indisponível; retomando emulação");
+                input = String::from("c");
             }
 
             let input = input.trim();
