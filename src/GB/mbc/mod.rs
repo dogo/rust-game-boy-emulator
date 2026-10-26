@@ -114,6 +114,9 @@ pub trait MBC: Send {
     /// Escreve RAM externa (0xA000-0xBFFF)
     fn write_ram(&mut self, address: u16, value: u8);
 
+    /// RAM do cartucho, sem o relógio que alguns saves levam junto
+    fn ram(&self) -> &[u8];
+
     /// Salva RAM para arquivo
     fn save_ram(&self) -> Option<Vec<u8>>;
 

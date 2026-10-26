@@ -25,6 +25,10 @@ impl MBC5 {
 }
 
 impl MBC for MBC5 {
+    fn ram(&self) -> &[u8] {
+        &self.ram
+    }
+
     fn read_rom(&self, address: u16) -> u8 {
         match address {
             0x0000..=0x3FFF => self.rom.get(address as usize).copied().unwrap_or(0xFF),

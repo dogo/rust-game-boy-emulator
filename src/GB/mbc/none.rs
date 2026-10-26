@@ -20,6 +20,10 @@ impl NoMBC {
 }
 
 impl MBC for NoMBC {
+    fn ram(&self) -> &[u8] {
+        &self.ram
+    }
+
     fn read_rom(&self, address: u16) -> u8 {
         self.rom.get(address as usize).copied().unwrap_or(0xFF)
     }

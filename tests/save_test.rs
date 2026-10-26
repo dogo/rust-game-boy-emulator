@@ -1,5 +1,6 @@
 use gb_emu::GB::bus::MemoryBus;
 use gb_emu::GB::mbc::mbc1::MBC1;
+use gb_emu::GB::mbc::mbc3::MBC3;
 use std::fs;
 #[cfg(unix)]
 use std::os::unix::fs::{PermissionsExt, symlink};
@@ -220,6 +221,32 @@ fn periodic_save_writes_only_when_ram_changes() {
     bus.write(0xA000, 0x42);
     bus.save_cart_ram_if_changed(path, &mut last).unwrap();
     assert_eq!(fs::read(&save).unwrap()[0], 0x42);
+
+    fs::remove_file(save).unwrap();
+    fs::remove_dir(dir).unwrap();
+}
+
+#[test]
+fn periodic_save_ignores_the_mbc3_clock() {
+    let dir = test_dir();
+    let save = dir.join("game.sav");
+    let path = save.to_str().unwrap();
+    let mut rom = vec![0; 0x8000];
+    rom[0x0147] = 0x10; // MBC3+TIMER+RAM+BATTERY
+    let mut bus = MemoryBus::new(Box::new(MBC3::new(rom, 0x2000)));
+    let mut last = None;
+
+    bus.save_cart_ram_if_changed(path, &mut last).unwrap();
+    fs::remove_file(&save).unwrap();
+    // O horário salvo muda a cada segundo; a RAM não
+    std::thread::sleep(std::time::Duration::from_millis(1100));
+    bus.save_cart_ram_if_changed(path, &mut last).unwrap();
+    assert!(!save.exists(), "só o relógio mudou");
+
+    bus.write(0x0000, 0x0A);
+    bus.write(0xA000, 0x42);
+    bus.save_cart_ram_if_changed(path, &mut last).unwrap();
+    assert_eq!(fs::read(&save).unwrap().len(), 0x2000 + 13, "RAM e relógio");
 
     fs::remove_file(save).unwrap();
     fs::remove_dir(dir).unwrap();

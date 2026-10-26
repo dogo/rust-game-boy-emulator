@@ -218,18 +218,17 @@ impl MemoryBus {
             .map_or(Ok(()), |data| write_save(path, &data))
     }
 
-    /// Como `save_cart_ram`, mas só grava se a RAM mudou desde a gravação guardada em `last`
+    /// Como `save_cart_ram`, mas só grava se a RAM mudou desde a cópia em `last`. O relógio do
+    /// MBC3 fica fora da comparação: ele muda todo segundo e se recupera pelo horário salvo.
     pub fn save_cart_ram_if_changed(
         &self,
         path: &str,
         last: &mut Option<Vec<u8>>,
     ) -> Result<(), String> {
-        let data = self.mbc.save_ram();
-        if data != *last {
-            if let Some(bytes) = &data {
-                write_save(path, bytes)?;
-            }
-            *last = data;
+        let ram = self.mbc.ram();
+        if last.as_deref() != Some(ram) {
+            self.save_cart_ram(path)?;
+            *last = Some(ram.to_vec());
         }
         Ok(())
     }
