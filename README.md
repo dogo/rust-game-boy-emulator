@@ -40,12 +40,13 @@ If a `dmg_boot.bin` (256 bytes) is in the working directory it is executed;
 otherwise the emulator starts in the post-boot state of the chosen model.
 The selected hardware model applies in either case.
 To show an SGB game's colors and border, run with `--model sgb` (or `sgb2`).
+To use a CGB-compatible game's native colors, run with `--model cgb` (or `cgb0`/`agb`).
 
 `examples/frame_capture.rs` runs a ROM without a window from a button script and
 writes screenshots and saves to an output directory:
 
 ```sh
-cargo run --release --example frame_capture -- <rom> <out_dir> [save.sav] wait:600 tap:START shot:title
+cargo run --release --example frame_capture -- <rom> <out_dir> [--model cgb] [save.sav] wait:600 tap:START shot:title
 ```
 
 ## Controls
@@ -80,10 +81,11 @@ an error and leaves the file untouched.
 
 - **Supported cartridge types** (`$0147`): `$00`–`$03`, `$05`–`$06`, `$08`–`$09`,
   `$0F`–`$13`, `$19`–`$1E`. Other types are rejected at startup.
-- **Game Boy Color:** the PPU is DMG-only. CGB-compatible ROMs (flag `$80`) run as
-  DMG games. **CGB-only ROMs are not supported:** without `--model` the emulator refuses
-  them with an error; with `--model cgb` they start in CGB mode but have no CGB
-  graphics (VRAM/WRAM banks, attributes, palettes) or CGB DMA.
+- **Game Boy Color:** CGB-compatible ROMs (flag `$80`) default to DMG mode; choose
+  `--model cgb` for native colors. CGB-only ROMs require an explicit CGB model.
+  Native BG/window/OBJ palettes, VRAM and WRAM banks, and VRAM DMA are supported.
+  Colors are direct RGB555 output without CGB LCD color correction; VRAM DMA copies
+  complete 16-byte blocks at once, so byte-level timing is not reproduced.
 - **Super Game Boy:** `sgb`/`sgb2` models display cartridge borders and color
   palettes for SGB-enabled ROMs. Joypad packets, multiplayer detection, palette
   selection, color regions, screen masks and border transfers are supported.
@@ -96,7 +98,7 @@ an error and leaves the file untouched.
 
 | Suite | Command | Result |
 |-------|---------|--------|
-| Rust unit and integration tests | `cargo test` | 169 passed, 0 ignored |
+| Rust unit and integration tests | `cargo test` | 180 passed, 0 ignored |
 | Blargg | `./run_all_tests.sh blargg` | 52/52 |
 | Mooneye (`acceptance`, `emulator-only`, `misc`) | `./run_all_tests.sh mooneye` | 111/111 |
 
@@ -112,7 +114,8 @@ What the suites do and do not show:
   PPU timing, MBCs and APU registers. They are not visual or audio compatibility
   tests.
 - `tests/acid2_test.rs` runs [dmg-acid2](https://github.com/mattcurrie/dmg-acid2)
-  and compares the frame pixel by pixel with the hardware reference.
+  and [cgb-acid2](https://github.com/mattcurrie/cgb-acid2), comparing each frame
+  pixel by pixel with its reference image.
 - `tests/apu_pitch_test.rs` measures the frequency of each sound channel from the
   generated samples.
 - Four games were played through boot, menus, gameplay, saving and a one-hour

@@ -40,7 +40,7 @@ fn write_save_atomically(path: &Path, temp_path: &Path, data: &[u8]) -> io::Resu
 
 pub struct MemoryBus {
     mbc: Box<dyn MBC + Send>,
-    wram: [u8; 0x2000], // Work RAM (8KB)
+    wram: [u8; 0x8000], // CGB: 8 bancos de 4 KB; DMG usa apenas bancos 0 e 1
     hram: [u8; 0x7F],   // High RAM (127 bytes)
     timer: Timer,
     pub joypad: Joypad,
@@ -81,12 +81,21 @@ pub struct MemoryBus {
 
     // ===== CGB =====
     pub(crate) model: HardwareModel,
-    pub cgb_mode: bool,  // true se hardware e ROM usam modo CGB
     pub cgb_speed: bool, // false = velocidade normal, true = velocidade dupla
-    pub key1: u8,        // 0xFF4D: bit 0 = solicitação de troca de velocidade
+    video_cycle_remainder: u32,
+    apu_mcycle_remainder: u32,
+    pub key1: u8, // 0xFF4D: bit 0 = solicitação de troca de velocidade
     // HWIO específicos de CGB em modo de compatibilidade
     cgb_hwio_enabled: bool,
-    vbk: u8,  // 0xFF4F (bit 0)
+    vbk: u8,            // 0xFF4F (bit 0)
+    svbk: u8,           // 0xFF70 (bits 0-2; zero seleciona banco 1)
+    hdma_regs: [u8; 4], // 0xFF51-0xFF54
+    hdma_source: u16,
+    hdma_dest: u16,
+    hdma_remaining: u8, // blocos de 16 bytes
+    hdma_active: bool,
+    hdma_status: u8,
+    hdma_stall_cycles: u32,
     bcps: u8, // 0xFF68
     ocps: u8, // 0xFF6A
     ff72: u8, // 0xFF72
@@ -97,13 +106,36 @@ pub struct MemoryBus {
 impl MemoryBus {
     pub(crate) fn set_model(&mut self, model: HardwareModel) {
         self.model = model;
-        self.cgb_mode = model.is_cgb() && self.mbc.read_rom(0x0143) & 0x80 != 0;
+        self.ppu
+            .set_cgb_mode(model.is_cgb() && self.mbc.read_rom(0x0143) & 0x80 != 0);
         self.apu.set_cgb_mode(model.is_cgb());
         self.set_cgb_compat_hwio(model.is_cgb());
         self.sgb = model.is_sgb().then(|| {
             let supported = self.mbc.read_rom(0x0146) == 0x03 && self.mbc.read_rom(0x014B) == 0x33;
             Sgb::new(supported)
         });
+    }
+
+    pub fn is_cgb_mode(&self) -> bool {
+        self.ppu.is_cgb_mode()
+    }
+
+    fn wram_index(&self, address: u16) -> usize {
+        let base = if address >= 0xE000 {
+            address - 0x2000
+        } else {
+            address
+        };
+        if base < 0xD000 {
+            (base - 0xC000) as usize
+        } else {
+            let bank = if self.is_cgb_mode() {
+                self.svbk.max(1)
+            } else {
+                1
+            };
+            bank as usize * 0x1000 + (base - 0xD000) as usize
+        }
     }
 
     /// Retorna true se Joypad deve acordar do STOP (detecta novo botão pressionado)
@@ -189,7 +221,7 @@ impl MemoryBus {
     }
 
     pub fn new_with_model(mbc: Box<dyn MBC + Send>, model: HardwareModel) -> Self {
-        let mut wram = [0u8; 0x2000];
+        let mut wram = [0u8; 0x8000];
         let mut hram = [0u8; 0x7F];
         fill_random(&mut wram);
         fill_random(&mut hram);
@@ -228,11 +260,20 @@ impl MemoryBus {
             serial_output_buffer: Vec::new(),
             cpu_cycle_log: 0,
             model,
-            cgb_mode: false,
             cgb_speed: false,
+            video_cycle_remainder: 0,
+            apu_mcycle_remainder: 0,
             key1: 0,
             cgb_hwio_enabled: false,
             vbk: 0,
+            svbk: 0,
+            hdma_regs: [0; 4],
+            hdma_source: 0,
+            hdma_dest: 0x8000,
+            hdma_remaining: 0,
+            hdma_active: false,
+            hdma_status: 0xFF,
+            hdma_stall_cycles: 0,
             bcps: 0,
             ocps: 0,
             ff72: 0,
@@ -248,6 +289,7 @@ impl MemoryBus {
         self.ppu.cgb_mode2_vblank_stat_quirk = enabled;
         if enabled {
             self.vbk = 0;
+            self.svbk = 0;
             self.bcps = 0xC8;
             self.ocps = 0xD0;
             self.ff72 = 0x00;
@@ -255,6 +297,7 @@ impl MemoryBus {
             self.ff75 = 0x8F;
         } else {
             self.vbk = 0;
+            self.svbk = 0;
             self.bcps = 0;
             self.ocps = 0;
             self.ff72 = 0;
@@ -292,13 +335,14 @@ impl MemoryBus {
             0x8000..=0x9FFF => {
                 if self.ppu.cpu_vram_blocked() {
                     0xFF
+                } else if self.is_cgb_mode() && self.vbk != 0 {
+                    self.ppu.read_vram_bank1(address)
                 } else {
                     self.ppu.read_vram(address)
                 }
             }
             0xA000..=0xBFFF => self.mbc.read_ram(address),
-            0xC000..=0xDFFF => self.wram[(address - 0xC000) as usize],
-            0xE000..=0xFDFF => self.wram[(address - 0xE000) as usize],
+            0xC000..=0xFDFF => self.wram[self.wram_index(address)],
             // OAM: bloqueada em mode 2/3 e durante DMA
             0xFE00..=0xFE9F => {
                 if self.ppu.cpu_oam_blocked() || self.oam_dma_active {
@@ -336,7 +380,7 @@ impl MemoryBus {
                 // KEY1: registrador de troca de velocidade (apenas CGB)
                 // Bit 7 = velocidade atual (0=normal, 1=dupla), Bit 0 = solicitação pendente
                 // Bits 1-6 sempre leem como 1
-                if self.cgb_mode {
+                if self.is_cgb_mode() {
                     (self.cgb_speed as u8) << 7 | 0x7E | (self.key1 & 0x01)
                 } else {
                     0xFF
@@ -349,6 +393,14 @@ impl MemoryBus {
                     0xFF
                 }
             }
+            0xFF51..=0xFF54 => 0xFF,
+            0xFF55 => {
+                if self.is_cgb_mode() {
+                    self.hdma_status
+                } else {
+                    0xFF
+                }
+            }
             0xFF68 => {
                 if self.cgb_hwio_enabled {
                     self.bcps
@@ -356,7 +408,13 @@ impl MemoryBus {
                     0xFF
                 }
             }
-            0xFF69 => 0xFF,
+            0xFF69 => {
+                if self.is_cgb_mode() {
+                    self.ppu.read_cgb_palette(false, self.bcps)
+                } else {
+                    0xFF
+                }
+            }
             0xFF6A => {
                 if self.cgb_hwio_enabled {
                     self.ocps
@@ -364,7 +422,20 @@ impl MemoryBus {
                     0xFF
                 }
             }
-            0xFF6B => 0xFF,
+            0xFF6B => {
+                if self.is_cgb_mode() {
+                    self.ppu.read_cgb_palette(true, self.ocps)
+                } else {
+                    0xFF
+                }
+            }
+            0xFF70 => {
+                if self.is_cgb_mode() {
+                    0xF8 | self.svbk
+                } else {
+                    0xFF
+                }
+            }
             0xFF72 => {
                 if self.cgb_hwio_enabled {
                     self.ff72
@@ -428,29 +499,14 @@ impl MemoryBus {
             0x8000..=0x9FFF => {
                 if self.ppu.cpu_vram_write_blocked() {
                     // escrita ignorada
+                } else if self.is_cgb_mode() && self.vbk != 0 {
+                    self.ppu.write_vram_bank1(address, value);
                 } else {
                     self.ppu.write_vram(address, value);
                 }
             }
             0xA000..=0xBFFF => self.mbc.write_ram(address, value),
-            0xC000..=0xDFFF => {
-                let idx = (address - 0xC000) as usize;
-                self.wram[idx] = value;
-                // Espelha na echo RAM
-                let echo_addr = address + 0x2000;
-                if echo_addr <= 0xFDFF {
-                    self.wram[(echo_addr - 0xE000) as usize] = value;
-                }
-            }
-            0xE000..=0xFDFF => {
-                let idx = (address - 0xE000) as usize;
-                self.wram[idx] = value;
-                // Espelha na WRAM principal
-                let main_addr = address - 0x2000;
-                if main_addr >= 0xC000 && main_addr <= 0xDFFF {
-                    self.wram[(main_addr - 0xC000) as usize] = value;
-                }
-            }
+            0xC000..=0xFDFF => self.wram[self.wram_index(address)] = value,
             // OAM: bloqueada em mode 2/3 e durante DMA
             0xFE00..=0xFE9F => {
                 if self.ppu.cpu_oam_write_blocked() || self.oam_dma_active {
@@ -536,10 +592,17 @@ impl MemoryBus {
                 self.if_ = value;
             }
             0xFF10..=0xFF3F => self.apu.write_register(address, value),
-            0xFF40..=0xFF4B => self.ppu.write_register(address, value, &mut self.if_),
+            0xFF40..=0xFF4B => {
+                self.ppu.write_register(address, value, &mut self.if_);
+                if address == 0xFF40 && !self.lcd_on() && self.hdma_active {
+                    while self.hdma_active {
+                        self.transfer_hdma_block();
+                    }
+                }
+            }
             0xFF4D => {
                 // KEY1: apenas bit 0 é gravável (solicitação de troca de velocidade)
-                if self.cgb_mode {
+                if self.is_cgb_mode() {
                     self.key1 = value & 0x01;
                 }
             }
@@ -548,18 +611,47 @@ impl MemoryBus {
                     self.vbk = value & 0x01;
                 }
             }
+            0xFF51..=0xFF54 => {
+                if self.is_cgb_mode() {
+                    self.hdma_regs[(address - 0xFF51) as usize] = value;
+                }
+            }
+            0xFF55 => {
+                if self.is_cgb_mode() {
+                    self.start_hdma(value);
+                }
+            }
             0xFF68 => {
                 if self.cgb_hwio_enabled {
                     self.bcps = (value & 0xBF) | 0x40;
                 }
             }
-            0xFF69 => {}
+            0xFF69 => {
+                if self.is_cgb_mode() {
+                    self.ppu.write_cgb_palette(false, self.bcps, value);
+                    if self.bcps & 0x80 != 0 {
+                        self.bcps = (self.bcps & 0xC0) | (self.bcps.wrapping_add(1) & 0x3F);
+                    }
+                }
+            }
             0xFF6A => {
                 if self.cgb_hwio_enabled {
                     self.ocps = (value & 0xBF) | 0x40;
                 }
             }
-            0xFF6B => {}
+            0xFF6B => {
+                if self.is_cgb_mode() {
+                    self.ppu.write_cgb_palette(true, self.ocps, value);
+                    if self.ocps & 0x80 != 0 {
+                        self.ocps = (self.ocps & 0xC0) | (self.ocps.wrapping_add(1) & 0x3F);
+                    }
+                }
+            }
+            0xFF70 => {
+                if self.is_cgb_mode() {
+                    self.svbk = value & 0x07;
+                }
+            }
             0xFF72 => {
                 if self.cgb_hwio_enabled {
                     self.ff72 = value;
@@ -605,7 +697,7 @@ impl MemoryBus {
     /// DMG: barramento principal (ROM, SRAM, WRAM) ou de VRAM; modelo do SameBoy
     /// (`is_addr_in_dma_use`). O CGB separa os barramentos e não entra aqui.
     fn oam_dma_conflict(&self, address: u16) -> Option<u16> {
-        if self.cgb_mode
+        if self.is_cgb_mode()
             || self.cgb_hwio_enabled
             || !self.oam_dma_active
             || self.oam_dma_index == 0
@@ -646,19 +738,60 @@ impl MemoryBus {
             0x0000..=0x7FFF => self.mbc.read_rom(addr),
             0x8000..=0x9FFF => self.ppu.read_vram(addr),
             0xA000..=0xBFFF => self.mbc.read_ram(addr),
-            0xC000..=0xDFFF => self.wram[(addr - 0xC000) as usize],
-            0xE000..=0xFDFF => {
-                let base = addr - 0x2000;
-                if (0xC000..=0xDDFF).contains(&base) {
-                    self.wram[(base - 0xC000) as usize]
-                } else {
-                    0xFF
-                }
-            }
+            0xC000..=0xFDFF => self.wram[self.wram_index(addr)],
             0xFE00..=0xFFFF => {
                 let base = addr - 0x2000;
-                self.wram[(base - 0xC000) as usize]
+                self.wram[self.wram_index(base)]
             }
+        }
+    }
+
+    fn start_hdma(&mut self, value: u8) {
+        if self.hdma_active {
+            if value & 0x80 == 0 {
+                self.hdma_active = false;
+                self.hdma_status = 0x80 | (self.hdma_remaining - 1);
+            }
+            return;
+        }
+        self.hdma_source = u16::from_be_bytes([self.hdma_regs[0], self.hdma_regs[1] & 0xF0]);
+        self.hdma_dest =
+            0x8000 | (((self.hdma_regs[2] & 0x1F) as u16) << 8) | (self.hdma_regs[3] & 0xF0) as u16;
+        self.hdma_remaining = (value & 0x7F) + 1;
+        self.hdma_active = value & 0x80 != 0 && self.lcd_on();
+        self.hdma_status = self.hdma_remaining - 1;
+        if !self.hdma_active {
+            while self.hdma_remaining != 0 && self.hdma_dest < 0xA000 {
+                self.transfer_hdma_block();
+            }
+        }
+    }
+
+    fn transfer_hdma_block(&mut self) {
+        // shortcut: copia o bloco inteiro no início do HBlank; detalhar arbitragem por byte se ROMs de timing exigirem.
+        for offset in 0..16 {
+            let src = self.hdma_source.wrapping_add(offset);
+            let value = if src < 0x8000 || (0xA000..0xE000).contains(&src) {
+                self.oam_dma_read_source(src)
+            } else {
+                0xFF
+            };
+            let dest = self.hdma_dest + offset;
+            if self.vbk == 0 {
+                self.ppu.write_vram(dest, value);
+            } else {
+                self.ppu.write_vram_bank1(dest, value);
+            }
+        }
+        self.hdma_source = self.hdma_source.wrapping_add(16);
+        self.hdma_dest += 16;
+        self.hdma_remaining -= 1;
+        self.hdma_stall_cycles += if self.cgb_speed { 64 } else { 32 };
+        if self.hdma_remaining == 0 || self.hdma_dest >= 0xA000 {
+            self.hdma_active = false;
+            self.hdma_status = 0xFF;
+        } else {
+            self.hdma_status = self.hdma_remaining - 1;
         }
     }
 
@@ -726,6 +859,15 @@ impl MemoryBus {
         self.step_oam_dma(cycles);
         self.step_serial_transfer(cycles);
 
+        let video_cycles = if self.cgb_speed {
+            let total = self.video_cycle_remainder + cycles;
+            self.video_cycle_remainder = total % 2;
+            total / 2
+        } else {
+            self.video_cycle_remainder = 0;
+            cycles
+        };
+
         // Timer otimizado - processa cycles em bulk
         let (new_tima, new_if, events) =
             self.timer
@@ -741,10 +883,11 @@ impl MemoryBus {
             self.apu.div_secondary_event();
         }
 
-        self.apu.tick_t_cycles(cycles);
+        self.apu.tick_t_cycles(video_cycles);
 
         // APU channel timers - otimizado para processar múltiplos M-cycles de uma vez
-        let m_cycles = cycles / 4;
+        let m_cycles = (self.apu_mcycle_remainder + video_cycles) / 4;
+        self.apu_mcycle_remainder = (self.apu_mcycle_remainder + video_cycles) % 4;
         if m_cycles > 0 {
             // Chama tick_m_cycle apenas uma vez com o número de M-cycles
             // Se tick_m_cycle não suporta múltiplos cycles, mantém o loop mas otimizado
@@ -754,7 +897,11 @@ impl MemoryBus {
         }
 
         let previous_ly = self.ppu.ly;
-        self.ppu.step(cycles, &mut self.if_);
+        let previous_mode = self.ppu.mode;
+        self.ppu.step(video_cycles, &mut self.if_);
+        if self.hdma_active && previous_mode != 0 && self.ppu.mode == 0 && self.ppu.ly < 144 {
+            self.transfer_hdma_block();
+        }
         if previous_ly == 143 && self.ppu.ly == 144 {
             if let Some(sgb) = &mut self.sgb {
                 sgb.on_frame(&self.ppu.framebuffer);
@@ -769,6 +916,15 @@ impl MemoryBus {
         }
         self.tick(cycles);
         self.cpu_cycle_log = self.cpu_cycle_log.saturating_add(cycles);
+        while self.hdma_stall_cycles != 0 {
+            let mut stalled = std::mem::take(&mut self.hdma_stall_cycles);
+            self.cpu_cycle_log = self.cpu_cycle_log.saturating_add(stalled);
+            while stalled != 0 {
+                let step = stalled.min(4);
+                self.tick(step);
+                stalled -= step;
+            }
+        }
     }
 
     #[inline]

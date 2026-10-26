@@ -2,6 +2,7 @@
 //! Arquitetura: Emulação em thread separada + Render com VSync no main thread
 
 use crate::GB::CPU::CPU;
+use crate::GB::PPU::rgb555_to_rgb888;
 use crate::GB::debugger::{DebugCommand, DebugResponse, Debugger};
 use crate::GB::sgb;
 use std::collections::VecDeque;
@@ -185,8 +186,28 @@ fn emulation_thread(
             skip_breakpoint = false;
 
             let cycles = cpu.execute_next();
-            frame_cycle_accum += cycles;
-            apu_cycle_accum += cycles as f64;
+            let video_cycles = cycles / if cpu.bus.cgb_speed { 2 } else { 1 };
+            frame_cycle_accum += video_cycles;
+            apu_cycle_accum += video_cycles as f64;
+
+            // Copia no VBlank, antes que o PPU reescreva as primeiras linhas do próximo frame.
+            if cpu.bus.ppu.frame_ready {
+                cpu.bus.ppu.frame_ready = false;
+                if let Some(sgb) = &mut cpu.bus.sgb {
+                    state
+                        .frame_buffer
+                        .submit_frame(sgb.render(&cpu.bus.ppu.framebuffer));
+                } else if cpu.bus.is_cgb_mode() {
+                    let mut rgb = vec![0; GB_WIDTH * GB_HEIGHT * 3];
+                    for (pixel, color) in rgb.chunks_exact_mut(3).zip(&cpu.bus.ppu.cgb_framebuffer)
+                    {
+                        pixel.copy_from_slice(&rgb555_to_rgb888(*color));
+                    }
+                    state.frame_buffer.submit_frame(&rgb);
+                } else {
+                    state.frame_buffer.submit_frame(&cpu.bus.ppu.framebuffer);
+                }
+            }
 
             while apu_cycle_accum >= cycles_per_sample {
                 apu_cycle_accum -= cycles_per_sample;
@@ -207,17 +228,6 @@ fn emulation_thread(
         frame_cycle_accum -= CYCLES_PER_FRAME;
         frame_count += 1;
         fps_frame_count += 1;
-
-        if cpu.bus.ppu.frame_ready {
-            cpu.bus.ppu.frame_ready = false;
-            if let Some(sgb) = &mut cpu.bus.sgb {
-                state
-                    .frame_buffer
-                    .submit_frame(sgb.render(&cpu.bus.ppu.framebuffer));
-            } else {
-                state.frame_buffer.submit_frame(&cpu.bus.ppu.framebuffer);
-            }
-        }
 
         if fps_timer.elapsed() >= Duration::from_secs(1) {
             let fps = fps_frame_count as f64 / fps_timer.elapsed().as_secs_f64();
@@ -377,12 +387,13 @@ pub fn run(cpu: &mut CPU) {
     let video = sdl_ctx.video().expect("Falha subsistema de vídeo");
 
     let sgb_mode = cpu.bus.sgb.is_some();
+    let cgb_mode = cpu.bus.is_cgb_mode();
     let (width, height) = if sgb_mode {
         (sgb::WIDTH, sgb::HEIGHT)
     } else {
         (GB_WIDTH, GB_HEIGHT)
     };
-    let frame_size = if sgb_mode {
+    let frame_size = if sgb_mode || cgb_mode {
         width * height * 3
     } else {
         width * height
@@ -473,7 +484,7 @@ pub fn run(cpu: &mut CPU) {
                 texture
                     .with_lock(None, |buf: &mut [u8], pitch| {
                         for y in 0..height {
-                            if sgb_mode {
+                            if sgb_mode || cgb_mode {
                                 buf[y * pitch..y * pitch + width * 3].copy_from_slice(
                                     &framebuffer[y * width * 3..(y + 1) * width * 3],
                                 );
@@ -672,6 +683,45 @@ mod known_regressions {
                     last = k;
                 }
             }
+        });
+    }
+
+    #[test]
+    fn cgb_frame_is_published_before_next_scanlines_overwrite_it() {
+        use std::cell::Cell;
+
+        let mut rom = vec![0; 0x8000];
+        rom[0x143] = 0xC0;
+        rom[0x100..0x118].copy_from_slice(&[
+            0x3E, 0x00, 0xE0, 0x68, // BG palette index 0
+            0xF0, 0x44, 0xFE, 0x90, 0x20, 0xFA, // aguarda VBlank
+            0x78, 0xEE, 0x1F, 0x47, 0xE0, 0x69, // alterna a cor de fundo
+            0xF0, 0x44, 0xA7, 0x20, 0xFB, // aguarda LY=0
+            0xC3, 0x04, 0x01, // repete
+        ]);
+        let mut cpu = CPU::new_with_model(rom, crate::GB::model::HardwareModel::Cgb);
+        cpu.init_post_boot();
+        cpu.bus.ppu.ly = 60; // deixa o relógio da interface fora de fase com VBlank
+        let state = Arc::new(SharedState::new(GB_WIDTH * GB_HEIGHT * 3));
+        let (tx, rx) = mpsc::channel();
+        let (resp_tx, _resp_rx) = mpsc::channel();
+
+        thread::scope(|scope| {
+            let emu_state = state.clone();
+            let stop = StopOnDrop(state.clone());
+            let emu = scope.spawn(|| emulation_thread(&mut cpu, emu_state, rx, resp_tx));
+            let checked = Cell::new(0);
+            assert!(wait_until(|| {
+                if let Some(frame) = state.frame_buffer.get_frame() {
+                    let first = &frame[..3];
+                    assert!(frame.chunks_exact(3).all(|pixel| pixel == first));
+                    checked.set(checked.get() + 1);
+                }
+                checked.get() >= 3
+            }));
+            drop(stop);
+            drop(tx);
+            emu.join().unwrap();
         });
     }
 

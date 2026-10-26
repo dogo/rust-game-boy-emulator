@@ -13,15 +13,32 @@ struct Sprite {
 }
 
 use crate::fill_random;
+
+pub fn rgb555_to_rgb888(color: u16) -> [u8; 3] {
+    let expand = |channel: u16| ((channel << 3) | (channel >> 2)) as u8;
+    [
+        expand(color & 31),
+        expand((color >> 5) & 31),
+        expand((color >> 10) & 31),
+    ]
+}
+
 pub struct PPU {
     // VRAM (Video RAM) - 8KB (0x8000-0x9FFF)
     // 0x8000-0x97FF: Tile data (384 tiles × 16 bytes = 6KB)
     // 0x9800-0x9BFF: Tile map 0 (32×32 = 1KB)
     // 0x9C00-0x9FFF: Tile map 1 (32×32 = 1KB)
     pub vram: [u8; 0x2000],
+    pub vram_bank1: [u8; 0x2000],
 
     // Framebuffer - 160×144 pixels, cada pixel = 0-3 (2 bits por cor)
     pub framebuffer: [u8; 160 * 144],
+    // Cor RGB555 nativa do CGB; o framebuffer de 2 bits continua servindo DMG/SGB.
+    pub cgb_framebuffer: [u16; 160 * 144],
+    cgb_mode: bool,
+    bg_palette_ram: [u8; 64],
+    obj_palette_ram: [u8; 64],
+    bg_over_obj: [bool; 160 * 144],
 
     /// Per-pixel BG priority buffer (true = BG/window pixel is opaque)
     pub bg_priority: [bool; 160 * 144],
@@ -71,6 +88,14 @@ pub struct PPU {
 }
 
 impl PPU {
+    pub fn is_cgb_mode(&self) -> bool {
+        self.cgb_mode
+    }
+
+    pub(crate) fn set_cgb_mode(&mut self, enabled: bool) {
+        self.cgb_mode = enabled;
+    }
+
     /// Atualiza LCDC e trata ON/OFF conforme hardware
     fn set_lcdc(&mut self, new_val: u8, iflags: &mut u8) {
         let was_on = (self.lcdc & 0x80) != 0;
@@ -126,6 +151,8 @@ impl PPU {
         // VRAM com lixo de power-on
         let mut vram = [0u8; 0x2000];
         fill_random(&mut vram);
+        let mut vram_bank1 = [0u8; 0x2000];
+        fill_random(&mut vram_bank1);
 
         // OAM com lixo de power-on
         let mut oam = [0u8; 160];
@@ -133,7 +160,13 @@ impl PPU {
 
         PPU {
             vram,
+            vram_bank1,
             framebuffer: [0; 160 * 144],
+            cgb_framebuffer: [0; 160 * 144],
+            cgb_mode: false,
+            bg_palette_ram: [0; 64],
+            obj_palette_ram: [0; 64],
+            bg_over_obj: [false; 160 * 144],
             bg_priority: [false; 160 * 144],
             lcdc: 0x91, // Default pós-boot: LCD on, BG on, 8x8 sprites
             stat: 0x00,
@@ -284,8 +317,12 @@ impl PPU {
             self.wy_trigger = true;
         }
 
-        // LCDC bit 5 (window) e bit 0 (BG/window) precisam estar ligados
-        if (self.lcdc & 0x21) != 0x21 || !self.wy_trigger || self.wx > 166 {
+        // No CGB, LCDC.0 controla prioridade, não visibilidade da window.
+        if (self.lcdc & 0x20) == 0
+            || (!self.cgb_mode && (self.lcdc & 0x01) == 0)
+            || !self.wy_trigger
+            || self.wx > 166
+        {
             return;
         }
 
@@ -338,21 +375,29 @@ impl PPU {
                 continue;
             }
 
-            // Ler linha do tile
-            let byte1 = self.vram[(tile_addr + (pixel_y as u16) * 2) as usize];
-            let byte2 = self.vram[(tile_addr + (pixel_y as u16) * 2 + 1) as usize];
-
-            // Extrair cor do pixel
-            let bit_pos = 7 - pixel_x;
-            let bit1 = (byte1 >> bit_pos) & 1;
-            let bit2 = (byte2 >> bit_pos) & 1;
-            let color = (bit2 << 1) | bit1;
+            let (color, attrs) = if self.cgb_mode {
+                self.cgb_bg_pixel(tile_map_addr, tile_addr as usize, pixel_x, pixel_y)
+            } else {
+                let byte1 = self.vram[(tile_addr + (pixel_y as u16) * 2) as usize];
+                let byte2 = self.vram[(tile_addr + (pixel_y as u16) * 2 + 1) as usize];
+                let bit_pos = 7 - pixel_x;
+                (((byte2 >> bit_pos) & 1) << 1 | ((byte1 >> bit_pos) & 1), 0)
+            };
 
             // Aplicar paleta BGP (window usa mesma paleta que BG)
-            let final_color = self.apply_palette(color);
+            let final_color = if self.cgb_mode {
+                color
+            } else {
+                self.apply_palette(color)
+            };
             self.framebuffer[line_start + screen_x as usize] = final_color;
+            if self.cgb_mode {
+                self.cgb_framebuffer[line_start + screen_x as usize] =
+                    self.cgb_color(false, attrs & 0x07, color);
+            }
             // Window priority: true if window pixel is opaque (color != 0)
             self.bg_priority[line_start + screen_x as usize] = color != 0;
+            self.bg_over_obj[line_start + screen_x as usize] = color != 0 && attrs & 0x80 != 0;
         }
     }
 
@@ -378,12 +423,14 @@ impl PPU {
         if visible_sprites.len() > 10 {
             visible_sprites.truncate(10);
         }
-        // Ordena por prioridade DMG: x menor primeiro, depois OAM menor
-        visible_sprites.sort_by(|a, b| {
-            let ax = a.0.x;
-            let bx = b.0.x;
-            if ax != bx { ax.cmp(&bx) } else { a.1.cmp(&b.1) }
-        });
+        // No CGB, a ordem no OAM determina a prioridade entre sprites.
+        if !self.cgb_mode {
+            visible_sprites.sort_by(|a, b| {
+                let ax = a.0.x;
+                let bx = b.0.x;
+                if ax != bx { ax.cmp(&bx) } else { a.1.cmp(&b.1) }
+            });
+        }
         // O primeiro sprite opaco em cada pixel vence, mesmo que o fundo o esconda depois
         let mut claimed = [false; 160];
         for &(sprite, _sprite_index) in visible_sprites.iter() {
@@ -425,8 +472,13 @@ impl PPU {
             return;
         } // Bounds check
 
-        let byte1 = self.vram[tile_addr as usize];
-        let byte2 = self.vram[(tile_addr + 1) as usize];
+        let bank = if self.cgb_mode && sprite.attributes & 0x08 != 0 {
+            &self.vram_bank1
+        } else {
+            &self.vram
+        };
+        let byte1 = bank[tile_addr as usize];
+        let byte2 = bank[(tile_addr + 1) as usize];
 
         // Renderizar 8 pixels da linha do sprite
         for pixel_x in 0..8 {
@@ -460,15 +512,30 @@ impl PPU {
             let framebuffer_pos = (line as usize) * 160 + (screen_x as usize);
 
             // Se sprite tem prioridade baixa, só desenha sobre BG/window "opaque" pixel
-            if bg_priority && self.bg_priority[framebuffer_pos] {
+            let hidden = if self.cgb_mode {
+                self.lcdc & 0x01 != 0
+                    && self.bg_priority[framebuffer_pos]
+                    && (bg_priority || self.bg_over_obj[framebuffer_pos])
+            } else {
+                bg_priority && self.bg_priority[framebuffer_pos]
+            };
+            if hidden {
                 continue;
             }
 
             // Aplicar paleta (bit 4 escolhe OBP0 ou OBP1)
             let use_obp1 = (sprite.attributes & 0x10) != 0;
-            let final_color = self.apply_sprite_palette(color, use_obp1);
+            let final_color = if self.cgb_mode {
+                color
+            } else {
+                self.apply_sprite_palette(color, use_obp1)
+            };
 
             self.framebuffer[framebuffer_pos] = final_color;
+            if self.cgb_mode {
+                self.cgb_framebuffer[framebuffer_pos] =
+                    self.cgb_color(true, sprite.attributes & 0x07, color);
+            }
         }
     }
 
@@ -622,16 +689,66 @@ impl PPU {
         (self.bgp >> shift) & 0x03
     }
 
+    fn cgb_color(&self, obj: bool, palette: u8, color: u8) -> u16 {
+        let ram = if obj {
+            &self.obj_palette_ram
+        } else {
+            &self.bg_palette_ram
+        };
+        let offset = palette as usize * 8 + color as usize * 2;
+        u16::from_le_bytes([ram[offset], ram[offset + 1]]) & 0x7FFF
+    }
+
+    fn cgb_bg_pixel(&self, map_addr: usize, tile_addr: usize, x: usize, y: usize) -> (u8, u8) {
+        let attrs = self.vram_bank1[map_addr];
+        let bank = if attrs & 0x08 != 0 {
+            &self.vram_bank1
+        } else {
+            &self.vram
+        };
+        let x = if attrs & 0x20 != 0 { 7 - x } else { x };
+        let y = if attrs & 0x40 != 0 { 7 - y } else { y };
+        let low = bank[tile_addr + y * 2];
+        let high = bank[tile_addr + y * 2 + 1];
+        let bit = 7 - x;
+        (((high >> bit) & 1) << 1 | ((low >> bit) & 1), attrs)
+    }
+
+    pub fn read_cgb_palette(&self, obj: bool, index: u8) -> u8 {
+        if self.cpu_vram_blocked() {
+            return 0xFF;
+        }
+        let ram = if obj {
+            &self.obj_palette_ram
+        } else {
+            &self.bg_palette_ram
+        };
+        ram[(index & 0x3F) as usize]
+    }
+
+    pub fn write_cgb_palette(&mut self, obj: bool, index: u8, value: u8) {
+        if self.cpu_vram_blocked() {
+            return;
+        }
+        let ram = if obj {
+            &mut self.obj_palette_ram
+        } else {
+            &mut self.bg_palette_ram
+        };
+        ram[(index & 0x3F) as usize] = value;
+    }
+
     // Renderiza uma scanline (linha) do background
     // ly = linha atual (0-143)
     // Escreve 160 pixels no framebuffer na posição correta
     pub fn render_bg_scanline(&mut self) {
         // LCDC bit 0: BG/Window enable
-        if (self.lcdc & 0x01) == 0 {
+        if !self.cgb_mode && (self.lcdc & 0x01) == 0 {
             // BG desabilitado, preencher com branco (cor 0)
             let line = self.ly as usize * 160..(self.ly as usize + 1) * 160;
             self.framebuffer[line.clone()].fill(0);
             self.bg_priority[line].fill(false);
+            self.bg_over_obj[self.ly as usize * 160..(self.ly as usize + 1) * 160].fill(false);
             return;
         }
 
@@ -679,21 +796,32 @@ impl PPU {
                 (0x1000u16 as i16 + (signed as i16) * 16) as u16
             };
 
-            // Ler 2 bytes da linha do tile
-            let byte1 = self.vram[(tile_addr + pixel_y as u16 * 2) as usize];
-            let byte2 = self.vram[(tile_addr + pixel_y as u16 * 2 + 1) as usize];
-
-            // Extrair pixel
-            let bit_index = 7 - pixel_x;
-            let lsb = (byte1 >> bit_index) & 1;
-            let msb = (byte2 >> bit_index) & 1;
-            let color = (msb << 1) | lsb;
+            let (color, attrs) = if self.cgb_mode {
+                self.cgb_bg_pixel(tile_map_addr, tile_addr as usize, pixel_x, pixel_y)
+            } else {
+                let byte1 = self.vram[(tile_addr + pixel_y as u16 * 2) as usize];
+                let byte2 = self.vram[(tile_addr + pixel_y as u16 * 2 + 1) as usize];
+                let bit_index = 7 - pixel_x;
+                (
+                    ((byte2 >> bit_index) & 1) << 1 | ((byte1 >> bit_index) & 1),
+                    0,
+                )
+            };
 
             // Aplicar paleta e escrever no framebuffer
-            let final_color = self.apply_palette(color);
+            let final_color = if self.cgb_mode {
+                color
+            } else {
+                self.apply_palette(color)
+            };
             self.framebuffer[line_start + screen_x] = final_color;
+            if self.cgb_mode {
+                self.cgb_framebuffer[line_start + screen_x] =
+                    self.cgb_color(false, attrs & 0x07, color);
+            }
             // BG priority: true if BG pixel is opaque (color != 0)
             self.bg_priority[line_start + screen_x] = color != 0;
+            self.bg_over_obj[line_start + screen_x] = color != 0 && attrs & 0x80 != 0;
         }
     }
 
@@ -715,11 +843,24 @@ impl PPU {
         }
     }
 
+    pub fn read_vram_bank1(&self, addr: u16) -> u8 {
+        self.vram_bank1
+            .get((addr - 0x8000) as usize)
+            .copied()
+            .unwrap_or(0xFF)
+    }
+
     // Escreve byte na VRAM
     pub fn write_vram(&mut self, addr: u16, val: u8) {
         let offset = (addr - 0x8000) as usize;
         if offset < 0x2000 {
             self.vram[offset] = val;
+        }
+    }
+
+    pub fn write_vram_bank1(&mut self, addr: u16, val: u8) {
+        if let Some(byte) = self.vram_bank1.get_mut((addr - 0x8000) as usize) {
+            *byte = val;
         }
     }
 

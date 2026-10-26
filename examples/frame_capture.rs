@@ -1,11 +1,12 @@
 //! Roda uma ROM sem janela seguindo um roteiro e grava screenshots em BMP.
 //!
-//! Uso: cargo run --release --example frame_capture -- <rom> <dir_saida> [save] <passos...>
+//! Uso: cargo run --release --example frame_capture -- <rom> <dir_saida> [--model cgb] [save] <passos...>
 //! Passos: `wait:N` (N frames), `press:BOTÃO`, `release:BOTÃO`, `tap:BOTÃO` (6 frames),
 //! `shot:NOME` (grava NOME.bmp), `save:NOME` (grava a RAM do cartucho em NOME.sav).
 //! O save de entrada, se dado (arquivo .sav), é só lido; nada é gravado fora de <dir_saida>.
 
-use gb_emu::GB::CPU::CPU;
+use gb_emu::GB::CPU::{BootModel, CPU};
+use gb_emu::GB::PPU::{PPU, rgb555_to_rgb888};
 use std::time::Instant;
 use std::{env, fs, path::Path, process};
 
@@ -30,7 +31,7 @@ fn set_button(cpu: &mut CPU, button: &str, down: bool) {
     }
 }
 
-fn write_bmp(path: &Path, framebuffer: &[u8]) {
+fn write_bmp(path: &Path, ppu: &PPU) {
     let row = W * 3; // 480, já múltiplo de 4
     let size = 54 + row * H;
     let mut bmp = Vec::with_capacity(size);
@@ -46,9 +47,15 @@ fn write_bmp(path: &Path, framebuffer: &[u8]) {
     bmp.extend_from_slice(&[0; 24]);
     // Mesmas cores do sdl_runner; BMP guarda as linhas de baixo para cima
     for y in (0..H).rev() {
-        for &px in &framebuffer[y * W..(y + 1) * W] {
-            let shade = [0xFF, 0xAA, 0x55, 0x00][px as usize & 3];
-            bmp.extend_from_slice(&[shade; 3]);
+        for x in 0..W {
+            let index = y * W + x;
+            if ppu.is_cgb_mode() {
+                let [r, g, b] = rgb555_to_rgb888(ppu.cgb_framebuffer[index]);
+                bmp.extend_from_slice(&[b, g, r]);
+            } else {
+                let shade = [0xFF, 0xAA, 0x55, 0x00][ppu.framebuffer[index] as usize & 3];
+                bmp.extend_from_slice(&[shade; 3]);
+            }
         }
     }
     fs::write(path, bmp).expect("falha ao gravar screenshot");
@@ -64,10 +71,19 @@ fn main() {
     let out = Path::new(&args[1]);
     fs::create_dir_all(out).expect("falha ao criar diretório de saída");
 
-    let mut cpu = CPU::new(rom);
+    let mut steps = &args[2..];
+    let mut cpu = if steps.first().is_some_and(|s| s == "--model") {
+        let model = steps
+            .get(1)
+            .and_then(|name| BootModel::from_name(name))
+            .expect("--model requer um modelo válido");
+        steps = &steps[2..];
+        CPU::new_with_model(rom, model)
+    } else {
+        CPU::new(rom)
+    };
     cpu.init_post_boot();
 
-    let mut steps = &args[2..];
     if let Some(save) = steps.first().filter(|s| s.ends_with(".sav")) {
         cpu.bus.load_cart_ram(save).expect("falha ao carregar save");
         steps = &steps[1..];
@@ -95,7 +111,7 @@ fn main() {
                 set_button(&mut cpu, arg, false);
                 frames += 6;
             }
-            "shot" => write_bmp(&out.join(format!("{arg}.bmp")), &cpu.bus.ppu.framebuffer),
+            "shot" => write_bmp(&out.join(format!("{arg}.bmp")), &cpu.bus.ppu),
             "save" => {
                 let path = out.join(format!("{arg}.sav"));
                 cpu.bus

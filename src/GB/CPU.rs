@@ -50,6 +50,11 @@ impl CPU {
         if self.bus.model != model {
             self.bus.set_model(model);
         }
+        if model.is_cgb() {
+            // A boot ROM CGB limpa os dois bancos de VRAM antes de entregar o cartucho.
+            self.bus.ppu.vram.fill(0);
+            self.bus.ppu.vram_bank1.fill(0);
+        }
         match model {
             BootModel::Dmg0 => {
                 self.registers.set_af(0x0100);
@@ -306,7 +311,7 @@ impl CPU {
             }
             Some(CpuControl::Stop) => {
                 // Em modo CGB com KEY1 bit 0 setado, STOP troca a velocidade da CPU
-                if self.bus.cgb_mode && (self.bus.key1 & 0x01) != 0 {
+                if self.bus.is_cgb_mode() && (self.bus.key1 & 0x01) != 0 {
                     self.bus.cgb_speed = !self.bus.cgb_speed;
                     self.bus.key1 = 0; // limpa solicitação de troca
                 } else {
