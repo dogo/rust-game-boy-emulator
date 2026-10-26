@@ -139,6 +139,34 @@ fn invalid_save_exits_without_replacing_file() {
 }
 
 #[test]
+fn cart_without_ram_exits_cleanly_without_save() {
+    let dir: PathBuf =
+        std::env::temp_dir().join(format!("gb-emu-no-ram-{:016x}", gb_emu::random_u64()));
+    fs::create_dir(&dir).unwrap();
+    // Opcode ilegal no entry point: o --trace para quando a CPU trava e o main tenta salvar
+    let mut rom = rom_with_cart_type(0x00);
+    rom.resize(0x8000, 0);
+    rom[0x0100] = 0xD3;
+    let rom_path = dir.join("game.gb");
+    fs::write(&rom_path, rom).unwrap();
+
+    let output = Command::new(env!("CARGO_BIN_EXE_gb_emu"))
+        .arg("--trace")
+        .arg(&rom_path)
+        .current_dir(&dir)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(!dir.join("game.sav").exists());
+
+    fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
 fn oversized_save_for_mbc1_is_rejected_and_kept() {
     // Save de 32 KB (outro jogo) num MBC1 com 8 KB de RAM
     assert_save_rejected(rom_with_cart_type(0x03), &vec![0x5A; 32 * 1024]);

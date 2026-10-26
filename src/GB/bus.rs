@@ -154,6 +154,7 @@ impl MemoryBus {
             .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))
     }
 
+    /// Grava a RAM do cartucho em `path`; sem RAM a gravar, não faz nada
     pub fn save_cart_ram(&self, path: &str) -> Result<(), String> {
         if let Some(data) = self.mbc.save_ram() {
             let target = match fs::canonicalize(path) {
@@ -164,10 +165,8 @@ impl MemoryBus {
             let temp_path = target.with_file_name(format!(".gbemu-{:016x}.tmp", random_u64()));
             write_save_atomically(&target, &temp_path, &data)
                 .map_err(|error| format!("{path}: {error}"))?;
-            Ok(())
-        } else {
-            Err("No RAM to save".to_string())
         }
+        Ok(())
     }
 
     pub fn new(mbc: Box<dyn MBC + Send>) -> Self {

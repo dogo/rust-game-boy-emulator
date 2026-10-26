@@ -145,3 +145,13 @@ fn stray_save_for_cart_without_ram_is_ignored() {
     assert!(mbc.load_ram(&[1, 2, 3]).is_ok());
     assert!(mbc.save_ram().is_none());
 }
+
+#[test]
+fn cart_without_ram_saves_nothing_and_succeeds() {
+    let dir = test_dir();
+    let save = dir.join("game.sav");
+    let bus = MemoryBus::new(gb_emu::GB::mbc::create_mbc(vec![0; 32 * 1024]));
+    bus.save_cart_ram(save.to_str().unwrap()).unwrap();
+    assert!(!save.exists());
+    fs::remove_dir(dir).unwrap();
+}
