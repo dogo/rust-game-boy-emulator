@@ -6,7 +6,7 @@ use std::os::unix::fs::{PermissionsExt, symlink};
 use std::path::PathBuf;
 
 fn test_dir() -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("gb-emu-save-test-{:016x}", rand::random::<u64>()));
+    let dir = std::env::temp_dir().join(format!("gb-emu-save-test-{:016x}", gb_emu::random_u64()));
     fs::create_dir(&dir).unwrap();
     dir
 }
@@ -113,4 +113,35 @@ fn missing_save_symlink_target_is_an_error() {
 
     fs::remove_file(link).unwrap();
     fs::remove_dir(dir).unwrap();
+}
+
+#[test]
+fn ram_carts_accept_only_saves_of_their_ram_size() {
+    // (tipo, código de RAM no header, bytes de RAM)
+    for (cart_type, ram_code, ram_len) in [
+        (0x03, 0x02, 8 * 1024),  // MBC1
+        (0x06, 0x00, 512),       // MBC2
+        (0x1B, 0x03, 32 * 1024), // MBC5
+        (0x09, 0x02, 8 * 1024),  // ROM+RAM+bateria
+    ] {
+        let mut rom = vec![0; 32 * 1024];
+        rom[0x147] = cart_type;
+        rom[0x149] = ram_code;
+        let mut mbc = gb_emu::GB::mbc::create_mbc(rom);
+        for len in [0, ram_len - 1, ram_len + 1, 4 * ram_len] {
+            assert!(
+                mbc.load_ram(&vec![0x42; len]).is_err(),
+                "{cart_type:02X}: {len}"
+            );
+        }
+        mbc.load_ram(&vec![0x0A; ram_len]).unwrap();
+        assert_eq!(mbc.save_ram().unwrap().len(), ram_len, "{cart_type:02X}");
+    }
+}
+
+#[test]
+fn stray_save_for_cart_without_ram_is_ignored() {
+    let mut mbc = gb_emu::GB::mbc::create_mbc(vec![0; 32 * 1024]);
+    assert!(mbc.load_ram(&[1, 2, 3]).is_ok());
+    assert!(mbc.save_ram().is_none());
 }

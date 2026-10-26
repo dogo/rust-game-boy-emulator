@@ -63,8 +63,6 @@ impl MBC for MBC2 {
         Some(self.ram.to_vec())
     }
     fn load_ram(&mut self, data: &[u8]) -> Result<(), String> {
-        let len = data.len().min(512);
-        self.ram[..len].copy_from_slice(&data[..len]);
-        Ok(())
+        super::load_exact(&mut self.ram, data)
     }
 }

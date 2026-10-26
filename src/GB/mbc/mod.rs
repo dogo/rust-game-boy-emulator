@@ -4,6 +4,24 @@ pub mod mbc3;
 pub mod mbc5;
 pub mod none;
 
+/// Copia um save para a RAM do cartucho. Recusa tamanho diferente: carregar um arquivo
+/// de outro jogo e regravá-lo com outro tamanho na saída destruiria o original.
+/// Sem RAM, o arquivo é ignorado, porque o emulador nunca o regrava.
+pub(crate) fn load_exact(ram: &mut [u8], data: &[u8]) -> Result<(), String> {
+    if ram.is_empty() {
+        return Ok(());
+    }
+    if data.len() != ram.len() {
+        return Err(format!(
+            "tamanho inválido do save: {} bytes (o cartucho tem {} bytes de RAM)",
+            data.len(),
+            ram.len()
+        ));
+    }
+    ram.copy_from_slice(data);
+    Ok(())
+}
+
 /// Tipos de cartucho (byte $0147) que `create_mbc` emula
 pub fn is_supported_cart_type(cart_type: u8) -> bool {
     matches!(

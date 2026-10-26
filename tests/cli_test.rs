@@ -69,7 +69,7 @@ fn run_headless(dir: &std::path::Path, rom_name: &str, extra: &[&str]) -> std::p
 #[test]
 fn rom_name_does_not_choose_the_hardware_but_model_flag_does() {
     let dir: PathBuf =
-        std::env::temp_dir().join(format!("gb-emu-boot-model-{:016x}", rand::random::<u64>()));
+        std::env::temp_dir().join(format!("gb-emu-boot-model-{:016x}", gb_emu::random_u64()));
     fs::create_dir(&dir).unwrap();
 
     assert!(run_headless(&dir, "game-mgb.gb", &[]).status.success());
@@ -89,7 +89,7 @@ fn rom_name_does_not_choose_the_hardware_but_model_flag_does() {
 fn unknown_cartridge_type_is_rejected() {
     let dir: PathBuf = std::env::temp_dir().join(format!(
         "gb-emu-unknown-cart-{:016x}",
-        rand::random::<u64>()
+        gb_emu::random_u64()
     ));
     fs::create_dir(&dir).unwrap();
     let rom_path = dir.join("game.gb");
@@ -109,19 +109,17 @@ fn unknown_cartridge_type_is_rejected() {
     fs::remove_dir(dir).unwrap();
 }
 
-#[test]
-fn invalid_save_exits_without_replacing_file() {
+/// O emulador deve sair com erro ao carregar `save` e deixar o arquivo intacto
+fn assert_save_rejected(rom: Vec<u8>, save: &[u8]) {
     let dir: PathBuf = std::env::temp_dir().join(format!(
         "gb-emu-invalid-save-{:016x}",
-        rand::random::<u64>()
+        gb_emu::random_u64()
     ));
     fs::create_dir(&dir).unwrap();
     let rom_path = dir.join("game.gb");
     let save_path = dir.join("game.sav");
-    let mut save = vec![0; 8 * 1024];
-    save.extend_from_slice(&[61, 0, 0, 0, 0]);
-    fs::write(&rom_path, mbc3_rom()).unwrap();
-    fs::write(&save_path, &save).unwrap();
+    fs::write(&rom_path, rom).unwrap();
+    fs::write(&save_path, save).unwrap();
 
     let output = Command::new(env!("CARGO_BIN_EXE_gb_emu"))
         .arg("--headless")
@@ -134,7 +132,18 @@ fn invalid_save_exits_without_replacing_file() {
     assert!(stderr.contains("Erro ao carregar save"), "stderr: {stderr}");
     assert_eq!(fs::read(&save_path).unwrap(), save);
 
-    fs::remove_file(rom_path).unwrap();
-    fs::remove_file(save_path).unwrap();
-    fs::remove_dir(dir).unwrap();
+    fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn invalid_save_exits_without_replacing_file() {
+    let mut save = vec![0; 8 * 1024];
+    save.extend_from_slice(&[61, 0, 0, 0, 0]);
+    assert_save_rejected(mbc3_rom(), &save);
+}
+
+#[test]
+fn oversized_save_for_mbc1_is_rejected_and_kept() {
+    // Save de 32 KB (outro jogo) num MBC1 com 8 KB de RAM
+    assert_save_rejected(rom_with_cart_type(0x03), &vec![0x5A; 32 * 1024]);
 }
