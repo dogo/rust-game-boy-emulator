@@ -37,7 +37,7 @@ Sem janela, com renderização de linhas ligada, `--release`: 750–1.100 fps (1
 
 ## Q02 — Imagem, áudio e latência (25/10/2026, parcial)
 
-**Imagem.** [dmg-acid2](https://github.com/mattcurrie/dmg-acid2) v1.0 (Matt Currie, MIT), executada com `examples/frame_capture` por 120 frames: o screenshot bate pixel a pixel com `img/reference-dmg.png` do projeto (0 de 23.040 pixels diferentes). A ROM e a referência não estão no repositório.
+**Imagem.** [dmg-acid2](https://github.com/mattcurrie/dmg-acid2) v1.0 (Matt Currie, MIT), executada com `examples/frame_capture` por 120 frames: o screenshot bate pixel a pixel com `img/reference-dmg.png` do projeto (0 de 23.040 pixels diferentes). Agora é teste automático (`tests/acid2_test.rs`, ROM e licença em `tests/fixtures/dmg-acid2/`); com o PPU de antes da etapa 2 (commit `215cae5`), 842 pixels diferiam.
 
 **Afinação.** Medida nas amostras geradas a 44,1 kHz como no `sdl_runner` (`tests/apu_pitch_test.rs`), contra as fórmulas do Pan Docs:
 
