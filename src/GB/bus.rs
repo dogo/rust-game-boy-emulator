@@ -38,6 +38,16 @@ fn write_save_atomically(path: &Path, temp_path: &Path, data: &[u8]) -> io::Resu
     result
 }
 
+fn write_save(path: &str, data: &[u8]) -> Result<(), String> {
+    let target = match fs::canonicalize(path) {
+        Ok(target) => target,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => PathBuf::from(path),
+        Err(error) => return Err(format!("{path}: {error}")),
+    };
+    let temp_path = target.with_file_name(format!(".gbemu-{:016x}.tmp", random_u64()));
+    write_save_atomically(&target, &temp_path, data).map_err(|error| format!("{path}: {error}"))
+}
+
 pub struct MemoryBus {
     mbc: Box<dyn MBC + Send>,
     wram: [u8; 0x8000], // CGB: 8 bancos de 4 KB; DMG usa apenas bancos 0 e 1
@@ -203,15 +213,23 @@ impl MemoryBus {
 
     /// Grava a RAM do cartucho em `path`; sem RAM a gravar, não faz nada
     pub fn save_cart_ram(&self, path: &str) -> Result<(), String> {
-        if let Some(data) = self.mbc.save_ram() {
-            let target = match fs::canonicalize(path) {
-                Ok(target) => target,
-                Err(error) if error.kind() == io::ErrorKind::NotFound => PathBuf::from(path),
-                Err(error) => return Err(format!("{path}: {error}")),
-            };
-            let temp_path = target.with_file_name(format!(".gbemu-{:016x}.tmp", random_u64()));
-            write_save_atomically(&target, &temp_path, &data)
-                .map_err(|error| format!("{path}: {error}"))?;
+        self.mbc
+            .save_ram()
+            .map_or(Ok(()), |data| write_save(path, &data))
+    }
+
+    /// Como `save_cart_ram`, mas só grava se a RAM mudou desde a gravação guardada em `last`
+    pub fn save_cart_ram_if_changed(
+        &self,
+        path: &str,
+        last: &mut Option<Vec<u8>>,
+    ) -> Result<(), String> {
+        let data = self.mbc.save_ram();
+        if data != *last {
+            if let Some(bytes) = &data {
+                write_save(path, bytes)?;
+            }
+            *last = data;
         }
         Ok(())
     }

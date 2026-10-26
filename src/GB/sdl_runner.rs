@@ -130,6 +130,7 @@ fn emulation_thread(
     state: Arc<SharedState>,
     cmd_rx: Receiver<DebugCommand>,
     resp_tx: Sender<DebugResponse>,
+    sav_path: Option<&str>,
 ) {
     let cycles_per_sample = GB_CPU_HZ as f64 / SAMPLE_RATE as f64;
     let target_frame_time = Duration::from_secs_f64(1.0 / GB_FPS);
@@ -143,6 +144,7 @@ fn emulation_thread(
     // Debugger com breakpoints
     let mut debugger = Debugger::new();
     let mut skip_breakpoint = false;
+    let mut saved_ram = None;
 
     prefill_audio(&state);
 
@@ -228,6 +230,14 @@ fn emulation_thread(
         frame_cycle_accum -= CYCLES_PER_FRAME;
         frame_count += 1;
         fps_frame_count += 1;
+
+        // Uma vez por segundo, para um travamento ou kill não perder o que o jogo salvou
+        if let Some(path) = sav_path
+            && frame_count.is_multiple_of(60)
+            && let Err(error) = cpu.bus.save_cart_ram_if_changed(path, &mut saved_ram)
+        {
+            eprintln!("⚠️ Erro ao salvar: {error}");
+        }
 
         if fps_timer.elapsed() >= Duration::from_secs(1) {
             let fps = fps_frame_count as f64 / fps_timer.elapsed().as_secs_f64();
@@ -379,7 +389,7 @@ fn handle_input(state: &Arc<SharedState>, event: &Event) -> InputResult {
 // ENTRY POINT
 // =============================================================================
 
-pub fn run(cpu: &mut CPU) {
+pub fn run(cpu: &mut CPU, sav_path: &str) {
     println!("🎮 Iniciando modo gráfico SDL3 (threaded)");
     println!("   ESC = sair | F12 = debugger");
 
@@ -435,7 +445,7 @@ pub fn run(cpu: &mut CPU) {
     thread::scope(|scope| {
         let state_clone = state.clone();
         let _emu_handle = scope.spawn(move || {
-            emulation_thread(cpu, state_clone, cmd_rx, resp_tx);
+            emulation_thread(cpu, state_clone, cmd_rx, resp_tx, Some(sav_path));
         });
 
         let mut render_frame_count: u64 = 0;
@@ -554,7 +564,7 @@ mod known_regressions {
             let _ = tx.send(DebugCommand::Quit);
         });
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            emulation_thread(&mut cpu, state, rx, resp_tx);
+            emulation_thread(&mut cpu, state, rx, resp_tx, None);
         }));
         stop.join().unwrap();
         assert!(result.is_ok());
@@ -607,7 +617,7 @@ mod known_regressions {
         thread::scope(|scope| {
             let emu_state = state.clone();
             let stop = StopOnDrop(state.clone());
-            let emu = scope.spawn(|| emulation_thread(&mut cpu, emu_state, rx, resp_tx));
+            let emu = scope.spawn(|| emulation_thread(&mut cpu, emu_state, rx, resp_tx, None));
             expect_text(&resp_rx, "0x0000");
             assert!(matches!(resp_rx.recv().unwrap(), DebugResponse::Resume));
 
@@ -633,7 +643,7 @@ mod known_regressions {
         thread::scope(|scope| {
             let emu_state = state.clone();
             let _stop = StopOnDrop(state.clone());
-            let emu = scope.spawn(|| emulation_thread(&mut cpu, emu_state, rx, resp_tx));
+            let emu = scope.spawn(|| emulation_thread(&mut cpu, emu_state, rx, resp_tx, None));
             expect_text(&resp_rx, "0x0001");
             assert!(matches!(resp_rx.recv().unwrap(), DebugResponse::Resume));
             assert!(wait_until(|| state.paused.load(Ordering::Acquire)));
@@ -709,7 +719,7 @@ mod known_regressions {
         thread::scope(|scope| {
             let emu_state = state.clone();
             let stop = StopOnDrop(state.clone());
-            let emu = scope.spawn(|| emulation_thread(&mut cpu, emu_state, rx, resp_tx));
+            let emu = scope.spawn(|| emulation_thread(&mut cpu, emu_state, rx, resp_tx, None));
             let checked = Cell::new(0);
             assert!(wait_until(|| {
                 if let Some(frame) = state.frame_buffer.get_frame() {

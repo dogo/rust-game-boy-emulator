@@ -124,7 +124,7 @@ fn main() {
         run_trace(&mut cpu, &data);
     } else {
         GB::cartridge::print_info(&data);
-        GB::sdl_runner::run(&mut cpu);
+        GB::sdl_runner::run(&mut cpu, &sav_path);
     }
 
     // Salva RAM

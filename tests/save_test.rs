@@ -200,3 +200,27 @@ fn only_battery_backed_carts_persist_ram() {
         assert_eq!(saved[0] & 0x0F, 0x05, "{battery:02X}: com bateria grava");
     }
 }
+
+#[test]
+fn periodic_save_writes_only_when_ram_changes() {
+    let dir = test_dir();
+    let save = dir.join("game.sav");
+    let path = save.to_str().unwrap();
+    let mut bus = bus_with_ram();
+    let mut last = None;
+
+    bus.save_cart_ram_if_changed(path, &mut last).unwrap();
+    assert!(save.exists());
+
+    fs::remove_file(&save).unwrap();
+    bus.save_cart_ram_if_changed(path, &mut last).unwrap();
+    assert!(!save.exists(), "RAM igual: nada a gravar");
+
+    bus.write(0x0000, 0x0A);
+    bus.write(0xA000, 0x42);
+    bus.save_cart_ram_if_changed(path, &mut last).unwrap();
+    assert_eq!(fs::read(&save).unwrap()[0], 0x42);
+
+    fs::remove_file(save).unwrap();
+    fs::remove_dir(dir).unwrap();
+}
