@@ -34,7 +34,7 @@ cargo build --release
 | *(none)* | Opens a 3× window with audio |
 | `--headless` | Runs without a window as a test runner: exits 0 on pass, 1 on failure, 2 on timeout (Blargg serial/memory and Mooneye protocols) |
 | `--trace` | Prints every executed instruction |
-| `--model <model>` | Hardware to emulate: `dmg0`, `dmg`, `mgb`, `sgb`, `sgb2`, `cgb0`, `cgb`, `agb`. Default: `dmg`, or `cgb` for CGB-only ROMs. The ROM file name never selects the model |
+| `--model <model>` | Hardware to emulate: `dmg0`, `dmg`, `mgb`, `sgb`, `sgb2`, `cgb0`, `cgb`, `agb`. Default: `dmg`. CGB-only ROMs are refused unless a model is given. The ROM file name never selects the model |
 
 If a `dmg_boot.bin` (256 bytes) is in the working directory it is executed;
 otherwise the emulator starts in the post-boot state of the chosen model.
@@ -79,8 +79,9 @@ an error and leaves the file untouched.
 - **Supported cartridge types** (`$0147`): `$00`–`$03`, `$05`–`$06`, `$08`–`$09`,
   `$0F`–`$13`, `$19`–`$1E`. Other types are rejected at startup.
 - **Game Boy Color:** the PPU is DMG-only. CGB-compatible ROMs (flag `$80`) run as
-  DMG games. **CGB-only ROMs are not supported:** they start in CGB mode but have no
-  CGB graphics (VRAM/WRAM banks, attributes, palettes) or CGB DMA.
+  DMG games. **CGB-only ROMs are not supported:** without `--model` the emulator refuses
+  them with an error; with `--model cgb` they start in CGB mode but have no CGB
+  graphics (VRAM/WRAM banks, attributes, palettes) or CGB DMA.
 - **Super Game Boy:** the `sgb`/`sgb2` models only set the post-boot state; SGB
   borders, palettes and commands are not emulated.
 - Graphics are drawn per scanline, so mid-scanline register changes are not

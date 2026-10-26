@@ -201,8 +201,10 @@ Critério de saída: há evidência de uso gráfico e sonoro e uma medição rep
 
 O PPU atual é DMG. Aprovar testes CGB de áudio ou snapshots de boot não demonstra suporte a jogos CGB. Até existir suporte suficiente, informar claramente a limitação e recusar execução normal de ROMs exclusivamente CGB; preservar os caminhos necessários aos testes de hardware.
 
-- [ ] **C01 — Definir e comunicar os modos suportados.**
+- [x] **C01 — Definir e comunicar os modos suportados.**
   Manter ROMs compatíveis com flag 0x80 no caminho DMG enquanto necessário e diferenciar ROMs exclusivamente CGB. Testar a política de aceitação e documentá-la antes de anunciar suporte.
+
+  Concluído: ROMs exclusivas de CGB (flag `$C0`) são recusadas com erro quando não há `--model`; com `--model cgb` elas rodam como antes, sem gráficos CGB. ROMs CGB-compatíveis (`$80`) continuam no caminho DMG sem aviso. O modelo padrão passou a ser sempre `dmg`. As 13 ROMs de teste só CGB (12 de `cgb_sound` e `interrupt_time`), que não têm sufixo de modelo no nome, recebem `--model cgb` pelo `boot_model_for` de `run_all_tests.sh`, que lê a flag do header. Um teste de linha de comando cobre a recusa, a execução com `--model cgb` e a ROM `$80` sem `--model`; a recusa falha no código anterior. README e ajuda do `--model` atualizados. A suíte Rust e as 163 ROMs passaram.
 
 - [ ] **C02 — Implementar memória, atributos e paletas CGB.**
   Planejar bancos de VRAM/WRAM, registradores de seleção, atributos de tiles, paletas e regras de prioridade. Cada recurso deve ter teste específico e preservar o funcionamento DMG.

@@ -16,9 +16,27 @@ fn rom_with_cart_type(cart_type: u8) -> Vec<u8> {
     rom[0x0104..0x0134].copy_from_slice(&logo);
     rom[0x0147] = cart_type;
     rom[0x0149] = 0x02;
+    fix_header_checksum(&mut rom);
+    rom
+}
+
+fn fix_header_checksum(rom: &mut [u8]) {
     rom[0x014D] = rom[0x0134..=0x014C]
         .iter()
         .fold(0u8, |sum, &byte| sum.wrapping_sub(byte).wrapping_sub(1));
+}
+
+/// Passa direto pelo protocolo Mooneye, com a flag CGB ($0143) dada
+fn passing_rom_with_cgb_flag(flag: u8) -> Vec<u8> {
+    let mut rom = rom_with_cart_type(0x00);
+    rom.resize(0x8000, 0);
+    rom[0x0100..0x0104].copy_from_slice(&[0x00, 0xC3, 0x50, 0x01]); // jp $0150
+    let fib = [
+        0x06, 3, 0x0E, 5, 0x16, 8, 0x1E, 13, 0x26, 21, 0x2E, 34, 0x40,
+    ];
+    rom[0x0150..0x0150 + fib.len()].copy_from_slice(&fib);
+    rom[0x0143] = flag;
+    fix_header_checksum(&mut rom);
     rom
 }
 
@@ -81,6 +99,37 @@ fn rom_name_does_not_choose_the_hardware_but_model_flag_does() {
     let invalid = run_headless(&dir, "game.gb", &["--model", "nes"]);
     assert!(!invalid.status.success());
     assert!(String::from_utf8_lossy(&invalid.stderr).contains("Modelo inválido"));
+
+    fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn cgb_only_rom_needs_an_explicit_model() {
+    let dir: PathBuf =
+        std::env::temp_dir().join(format!("gb-emu-cgb-only-{:016x}", gb_emu::random_u64()));
+    fs::create_dir(&dir).unwrap();
+    let run = |flag: u8, extra: &[&str]| {
+        let rom_path = dir.join(format!("game-{flag:02x}.gb"));
+        fs::write(&rom_path, passing_rom_with_cgb_flag(flag)).unwrap();
+        Command::new(env!("CARGO_BIN_EXE_gb_emu"))
+            .arg("--headless")
+            .args(extra)
+            .arg(&rom_path)
+            .current_dir(&dir)
+            .output()
+            .unwrap()
+    };
+
+    let refused = run(0xC0, &[]);
+    assert!(!refused.status.success());
+    let stderr = String::from_utf8_lossy(&refused.stderr);
+    assert!(
+        stderr.contains("exclusiva de Game Boy Color"),
+        "stderr: {stderr}"
+    );
+    assert!(run(0xC0, &["--model", "cgb"]).status.success());
+    // CGB-compatível ($80) continua no caminho DMG sem --model
+    assert!(run(0x80, &[]).status.success());
 
     fs::remove_dir_all(dir).unwrap();
 }
