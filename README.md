@@ -88,8 +88,9 @@ an error and leaves the file untouched.
   complete 16-byte blocks at once, so byte-level timing is not reproduced.
 - **Super Game Boy:** `sgb`/`sgb2` models display cartridge borders and color
   palettes for SGB-enabled ROMs. Joypad packets, multiplayer detection, palette
-  selection, color regions, screen masks and border transfers are supported.
-  SNES-side code, sound and other SGB commands are not emulated.
+  commands (PAL01–PAL12, PAL_SET, PAL_TRN), ATTR_BLK color regions, screen masks
+  and border transfers are supported. ATTR_LIN, ATTR_DIV, ATTR_CHR, ATTR_TRN,
+  ATTR_SET, SNES-side code and sound are not emulated.
 - Graphics are drawn per scanline, so mid-scanline register changes are not
   reproduced.
 - Illegal opcodes hard-lock the CPU, as on hardware.

@@ -131,6 +131,21 @@ impl Sgb {
 
     fn execute(&mut self, packet: &[u8]) {
         match packet[0] >> 3 {
+            command @ 0x00..=0x03 => {
+                let (a, b) = [(0, 1), (2, 3), (0, 3), (1, 2)][command as usize];
+                let color = |i: usize| u16::from_le_bytes([packet[1 + i * 2], packet[2 + i * 2]]);
+                // A cor 0 é uma só para todas as paletas: vale a última enviada
+                for palette in &mut self.palettes {
+                    palette[0] = color(0);
+                }
+                for c in 1..4 {
+                    self.palettes[a][c] = color(c);
+                    self.palettes[b][c] = color(c + 3);
+                }
+                if self.border_ready {
+                    self.render_border();
+                }
+            }
             0x04 => self.attribute_block(packet),
             0x0a => {
                 for palette in 0..4 {
@@ -159,7 +174,8 @@ impl Sgb {
             0x13 => self.pending_transfer = Some(Transfer::Tiles((packet[1] & 1) as usize)),
             0x14 => self.pending_transfer = Some(Transfer::Border),
             0x17 => self.mask = packet[1] & 3,
-            // shortcut: ignora comandos do lado SNES, emulá-los se um jogo depender de seus efeitos.
+            // shortcut: ignora ATTR_LIN, ATTR_DIV, ATTR_CHR, ATTR_TRN, ATTR_SET (e o ATF do PAL_SET) e os
+            // comandos do lado SNES (som, DATA_SND/DATA_TRN, JUMP); emular se um jogo depender deles.
             _ => {}
         }
     }
@@ -291,8 +307,9 @@ impl Sgb {
                     let palette = self.attributes[(y / 8) * 20 + x / 8] as usize;
                     let shade = (shades[y * GAME_WIDTH + x] & 3) as usize;
                     let offset = (y * GAME_WIDTH + x) * 3;
-                    self.game_rgb[offset..offset + 3]
-                        .copy_from_slice(&rgb555(self.palettes[palette][shade]));
+                    // A cor 0 de toda paleta mostra o fundo comum
+                    let color = self.palettes[if shade == 0 { 0 } else { palette }][shade];
+                    self.game_rgb[offset..offset + 3].copy_from_slice(&rgb555(color));
                 }
             }
         }
@@ -439,6 +456,48 @@ mod tests {
             "linha com sua própria paleta"
         );
         assert_eq!(sgb.attributes[3 * 20 + 3], 3, "dentro");
+    }
+
+    #[test]
+    fn pal_commands_set_two_palettes_and_share_color_zero() {
+        let mut sgb = Sgb::new(true);
+        let mut packet = [0; 16];
+        packet[0] = 0x09; // PAL23
+        packet[1..3].copy_from_slice(&0x001fu16.to_le_bytes()); // cor 0: vermelho
+        packet[3..5].copy_from_slice(&0x03e0u16.to_le_bytes()); // paleta 2, cor 1: verde
+        packet[9..11].copy_from_slice(&0x7c00u16.to_le_bytes()); // paleta 3, cor 1: azul
+        send(&mut sgb, &packet);
+        packet = [0; 16];
+        packet[..8].copy_from_slice(&[0x21, 1, 4, 0x20, 1, 1, 18, 16]); // fora = paleta 2
+        send(&mut sgb, &packet);
+
+        let pixel = |frame: &[u8], x: usize, y: usize| {
+            let offset = ((y + 40) * WIDTH + x + 48) * 3;
+            frame[offset..offset + 3].to_vec()
+        };
+        let frame = sgb.render(&[1; GAME_WIDTH * GAME_HEIGHT]);
+        assert_eq!(pixel(frame, 0, 0), [0, 255, 0], "paleta 2, cor 1");
+        assert_eq!(
+            pixel(frame, 80, 72),
+            [173, 173, 173],
+            "paleta 0 mantém a cor 1"
+        );
+        let frame = sgb.render(&[0; GAME_WIDTH * GAME_HEIGHT]);
+        assert_eq!(pixel(frame, 0, 0), [255, 0, 0], "cor 0 compartilhada");
+        assert_eq!(pixel(frame, 80, 72), [255, 0, 0], "cor 0 compartilhada");
+        assert_eq!(sgb.palettes[3][1], 0x7c00);
+
+        // PAL_SET traz uma cor 0 por paleta, mas a tela mostra só a da paleta 0
+        sgb.system_palettes[1][0] = 0x7c00;
+        packet = [0; 16];
+        packet[0] = 0x51; // PAL_SET: paleta 0 = sistema 0, paleta 1 = sistema 1
+        packet[3] = 1;
+        send(&mut sgb, &packet);
+        packet = [0; 16];
+        packet[..8].copy_from_slice(&[0x21, 1, 4, 0x10, 1, 1, 18, 16]); // fora = paleta 1
+        send(&mut sgb, &packet);
+        let frame = sgb.render(&[0; GAME_WIDTH * GAME_HEIGHT]);
+        assert_eq!(pixel(frame, 0, 0), [0, 0, 0], "cor 0 da paleta 0");
     }
 
     #[test]
