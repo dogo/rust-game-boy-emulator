@@ -11,8 +11,11 @@ fn test_dir() -> PathBuf {
     dir
 }
 
+/// MBC1+RAM+BATTERY ($03): só cartuchos com bateria têm save
 fn bus_with_ram() -> MemoryBus {
-    MemoryBus::new(Box::new(MBC1::new(vec![0; 0x8000], 0x2000)))
+    let mut rom = vec![0; 0x8000];
+    rom[0x0147] = 0x03;
+    MemoryBus::new(Box::new(MBC1::new(rom, 0x2000)))
 }
 
 #[test]
@@ -154,4 +157,46 @@ fn cart_without_ram_saves_nothing_and_succeeds() {
     bus.save_cart_ram(save.to_str().unwrap()).unwrap();
     assert!(!save.exists());
     fs::remove_dir(dir).unwrap();
+}
+
+#[test]
+fn only_battery_backed_carts_persist_ram() {
+    // (tipo sem bateria, tipo equivalente com bateria, código de RAM)
+    for (plain, battery, ram_code) in [
+        (0x02, 0x03, 0x02), // MBC1+RAM
+        (0x05, 0x06, 0x00), // MBC2
+        (0x12, 0x13, 0x02), // MBC3+RAM
+        (0x1A, 0x1B, 0x02), // MBC5+RAM
+        (0x08, 0x09, 0x02), // ROM+RAM
+    ] {
+        let cart = |cart_type: u8| {
+            let mut rom = vec![0; 32 * 1024];
+            rom[0x147] = cart_type;
+            rom[0x149] = ram_code;
+            let mut mbc = gb_emu::GB::mbc::create_mbc(rom);
+            mbc.write_register(0x0000, 0x0A);
+            mbc.write_ram(0xA000, 0x05);
+            mbc
+        };
+
+        let mut mbc = cart(plain);
+        assert_eq!(
+            mbc.read_ram(0xA000) & 0x0F,
+            0x05,
+            "{plain:02X}: RAM na sessão"
+        );
+        assert!(mbc.save_ram().is_none(), "{plain:02X}: não deve gerar .sav");
+        let stray = cart(battery).save_ram().unwrap();
+        let mut other = stray.clone();
+        other[0] = 0x0C;
+        mbc.load_ram(&other).unwrap();
+        assert_eq!(
+            mbc.read_ram(0xA000) & 0x0F,
+            0x05,
+            "{plain:02X}: .sav ignorado"
+        );
+
+        let saved = cart(battery).save_ram().unwrap();
+        assert_eq!(saved[0] & 0x0F, 0x05, "{battery:02X}: com bateria grava");
+    }
 }

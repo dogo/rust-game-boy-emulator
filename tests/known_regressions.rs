@@ -8,6 +8,13 @@ use gb_emu::GB::{
 };
 use std::time::{SystemTime, UNIX_EPOCH};
 
+/// Header MBC3+TIMER+RAM+BATTERY ($10): só cartuchos com bateria têm save
+fn battery_rom() -> Vec<u8> {
+    let mut rom = vec![0; 32768];
+    rom[0x0147] = 0x10;
+    rom
+}
+
 #[test]
 fn sprites_keep_lower_oam_priority() {
     let mut p = PPU::new();
@@ -99,7 +106,7 @@ fn joypad_reads_both_selected_groups() {
 
 #[test]
 fn rtc_halt_is_preserved_when_loading() {
-    let mut m = MBC3::new(vec![0; 32768], 8192);
+    let mut m = MBC3::new(battery_rom(), 8192);
     let mut save = vec![0; 8192];
     save.extend_from_slice(&[10, 0, 0, 0, 0x40]);
     let now = SystemTime::now()
@@ -123,7 +130,7 @@ fn rtc_only_cart_can_be_saved() {
 
 #[test]
 fn malformed_rtc_seconds_does_not_crash() {
-    let mut m = MBC3::new(vec![0; 32768], 8192);
+    let mut m = MBC3::new(battery_rom(), 8192);
     let mut save = vec![0; 8192];
     save.extend_from_slice(&[61, 0, 0, 0, 0]);
     let now = SystemTime::now()

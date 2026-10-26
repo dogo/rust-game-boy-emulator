@@ -211,7 +211,8 @@ impl MBC for MBC3 {
     }
 
     fn save_ram(&self) -> Option<Vec<u8>> {
-        if self.ram.is_empty() && !matches!(self.rom.get(0x0147).copied(), Some(0x0F | 0x10)) {
+        let has_rtc = matches!(self.rom.get(0x0147).copied(), Some(0x0F | 0x10));
+        if !super::rom_has_battery(&self.rom) || (self.ram.is_empty() && !has_rtc) {
             None
         } else {
             // Cria uma cópia mutável para atualizarmos o RTC antes de salvar
@@ -228,6 +229,10 @@ impl MBC for MBC3 {
     }
 
     fn load_ram(&mut self, data: &[u8]) -> Result<(), String> {
+        // Sem bateria o emulador nunca grava save, então um arquivo existente é ignorado
+        if !super::rom_has_battery(&self.rom) {
+            return Ok(());
+        }
         let ram_len = self.ram.len();
         let has_rtc = data.len() == ram_len + 5;
         let has_timestamp = data.len() == ram_len + 13;

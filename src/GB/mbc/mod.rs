@@ -4,11 +4,28 @@ pub mod mbc3;
 pub mod mbc5;
 pub mod none;
 
+/// Tipos de cartucho com bateria (Pan Docs): só eles preservam RAM e RTC entre sessões
+pub fn has_battery(cart_type: u8) -> bool {
+    matches!(
+        cart_type,
+        0x03 | 0x06 | 0x09 | 0x0F | 0x10 | 0x13 | 0x1B | 0x1E
+    )
+}
+
+pub(crate) fn rom_has_battery(rom: &[u8]) -> bool {
+    has_battery(rom.get(0x0147).copied().unwrap_or(0x00))
+}
+
+/// RAM a gravar no `.sav`: só cartuchos com bateria e com RAM têm save
+pub(crate) fn battery_save(rom: &[u8], ram: &[u8]) -> Option<Vec<u8>> {
+    (rom_has_battery(rom) && !ram.is_empty()).then(|| ram.to_vec())
+}
+
 /// Copia um save para a RAM do cartucho. Recusa tamanho diferente: carregar um arquivo
 /// de outro jogo e regravá-lo com outro tamanho na saída destruiria o original.
-/// Sem RAM, o arquivo é ignorado, porque o emulador nunca o regrava.
-pub(crate) fn load_exact(ram: &mut [u8], data: &[u8]) -> Result<(), String> {
-    if ram.is_empty() {
+/// Sem bateria ou sem RAM, o arquivo é ignorado, porque o emulador nunca o regrava.
+pub(crate) fn load_exact(rom: &[u8], ram: &mut [u8], data: &[u8]) -> Result<(), String> {
+    if !rom_has_battery(rom) || ram.is_empty() {
         return Ok(());
     }
     if data.len() != ram.len() {
@@ -37,7 +54,7 @@ pub fn create_mbc(rom: Vec<u8>) -> Box<dyn MBC + Send> {
     let ram_size = get_ram_size_for_type(&rom, cart_type);
     match cart_type {
         0x00 => Box::new(none::NoMBC::new(rom)),
-        0x08 | 0x09 => Box::new(none::NoMBC::with_ram(rom, ram_size, cart_type == 0x09)),
+        0x08 | 0x09 => Box::new(none::NoMBC::with_ram(rom, ram_size)),
         0x01..=0x03 => Box::new(mbc1::MBC1::new(rom, ram_size)),
         0x05..=0x06 => Box::new(mbc2::MBC2::new(rom)),
         0x0F..=0x13 => Box::new(mbc3::MBC3::new(rom, ram_size)),

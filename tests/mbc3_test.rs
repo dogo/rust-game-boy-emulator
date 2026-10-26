@@ -1,6 +1,13 @@
 use gb_emu::GB::mbc::{MBC, create_mbc, mbc3::MBC3};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+/// Header MBC3+TIMER+RAM+BATTERY ($10): só cartuchos com bateria têm save
+fn battery_rom() -> Vec<u8> {
+    let mut rom = vec![0; 32 * 1024];
+    rom[0x0147] = 0x10;
+    rom
+}
+
 #[test]
 fn test_mbc3_rom_banking_basic() {
     // 128 banks × 16KB = 2MB (valor máximo típico do MBC3)
@@ -129,8 +136,7 @@ fn test_mbc3_rtc_latch_freezes_time() {
 
 #[test]
 fn test_mbc3_save_and_load_ram_with_rtc() {
-    let rom = vec![0; 32 * 1024];
-    let mut mbc = MBC3::new(rom, 8 * 1024);
+    let mut mbc = MBC3::new(battery_rom(), 8 * 1024);
 
     // Habilitar RAM/RTC
     mbc.write_register(0x0000, 0x0A);
@@ -151,8 +157,7 @@ fn test_mbc3_save_and_load_ram_with_rtc() {
     let saved = mbc.save_ram().expect("MBC3 should have save data");
 
     // Criar novo MBC3 e carregar save
-    let rom2 = vec![0; 32 * 1024];
-    let mut mbc2 = MBC3::new(rom2, 8 * 1024);
+    let mut mbc2 = MBC3::new(battery_rom(), 8 * 1024);
     mbc2.load_ram(&saved).unwrap();
 
     // RAM deve ter sido restaurada
@@ -178,7 +183,7 @@ fn test_mbc3_save_and_load_ram_with_rtc() {
 
 #[test]
 fn test_mbc3_active_rtc_advances_while_closed() {
-    let mut mbc = MBC3::new(vec![0; 32 * 1024], 8 * 1024);
+    let mut mbc = MBC3::new(battery_rom(), 8 * 1024);
     let mut save = vec![0; 8 * 1024];
     save.extend_from_slice(&[10, 0, 0, 0, 0]);
     let now = SystemTime::now()
@@ -221,7 +226,7 @@ fn test_mbc3_rtc_only_cartridge_round_trips() {
 
 #[test]
 fn test_mbc3_loads_legacy_save_without_timestamp() {
-    let mut mbc = MBC3::new(vec![0; 32 * 1024], 8 * 1024);
+    let mut mbc = MBC3::new(battery_rom(), 8 * 1024);
     let mut save = vec![0; 8 * 1024];
     save.extend_from_slice(&[25, 2, 1, 0, 0]);
 
@@ -234,7 +239,7 @@ fn test_mbc3_loads_legacy_save_without_timestamp() {
     mbc.write_register(0x4000, 0x0A);
     assert_eq!(mbc.read_ram(0xA000), 1);
 
-    let mut ram_only = MBC3::new(vec![0; 32 * 1024], 8 * 1024);
+    let mut ram_only = MBC3::new(battery_rom(), 8 * 1024);
     ram_only.load_ram(&[0x42; 8 * 1024]).unwrap();
     ram_only.write_register(0x0000, 0x0A);
     assert_eq!(ram_only.read_ram(0xA000), 0x42);
@@ -242,7 +247,7 @@ fn test_mbc3_loads_legacy_save_without_timestamp() {
 
 #[test]
 fn test_mbc3_rejects_invalid_rtc_without_changing_ram() {
-    let mut mbc = MBC3::new(vec![0; 32 * 1024], 8 * 1024);
+    let mut mbc = MBC3::new(battery_rom(), 8 * 1024);
     mbc.write_register(0x0000, 0x0A);
     mbc.write_ram(0xA000, 0x42);
     mbc.write_register(0x4000, 0x08);
@@ -271,7 +276,7 @@ fn test_mbc3_rejects_invalid_rtc_without_changing_ram() {
 
 #[test]
 fn test_mbc3_rejects_truncated_save() {
-    let mut mbc = MBC3::new(vec![0; 32 * 1024], 8 * 1024);
+    let mut mbc = MBC3::new(battery_rom(), 8 * 1024);
     for length in [0, 8 * 1024 - 1, 8 * 1024 + 4, 8 * 1024 + 12, 8 * 1024 + 14] {
         assert!(mbc.load_ram(&vec![0; length]).is_err());
     }
@@ -282,7 +287,7 @@ fn test_mbc3_handles_extreme_timestamps() {
     let mut save = vec![0; 8 * 1024];
     save.extend_from_slice(&[10, 0, 0, 0, 0]);
     save.extend_from_slice(&i64::MIN.to_le_bytes());
-    let mut mbc = MBC3::new(vec![0; 32 * 1024], 8 * 1024);
+    let mut mbc = MBC3::new(battery_rom(), 8 * 1024);
     assert!(mbc.load_ram(&save).is_err());
     save[8 * 1024 + 5..].copy_from_slice(&0i64.to_le_bytes());
     assert!(mbc.load_ram(&save).is_err());
@@ -309,7 +314,7 @@ fn test_mbc3_day_rollover_sets_carry() {
         .as_secs() as i64;
     save.extend_from_slice(&(now - 1).to_le_bytes());
 
-    let mut mbc = MBC3::new(vec![0; 32 * 1024], 8 * 1024);
+    let mut mbc = MBC3::new(battery_rom(), 8 * 1024);
     mbc.load_ram(&save).unwrap();
     mbc.write_register(0x0000, 0x0A);
     mbc.write_register(0x4000, 0x0B);
@@ -320,7 +325,7 @@ fn test_mbc3_day_rollover_sets_carry() {
 
 #[test]
 fn test_mbc3_normalizes_out_of_range_register_writes() {
-    let mut mbc = MBC3::new(vec![0; 32 * 1024], 0);
+    let mut mbc = MBC3::new(battery_rom(), 0);
     mbc.write_register(0x0000, 0x0A);
     mbc.write_register(0x4000, 0x0C);
     mbc.write_ram(0xA000, 0x40);

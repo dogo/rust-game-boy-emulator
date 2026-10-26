@@ -60,9 +60,9 @@ impl MBC for MBC2 {
         }
     }
     fn save_ram(&self) -> Option<Vec<u8>> {
-        Some(self.ram.to_vec())
+        super::battery_save(&self.rom, &self.ram)
     }
     fn load_ram(&mut self, data: &[u8]) -> Result<(), String> {
-        super::load_exact(&mut self.ram, data)
+        super::load_exact(&self.rom, &mut self.ram, data)
     }
 }

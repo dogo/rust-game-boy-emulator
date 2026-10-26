@@ -4,19 +4,17 @@ use super::MBC;
 pub struct NoMBC {
     rom: Vec<u8>,
     ram: Vec<u8>,
-    battery: bool,
 }
 
 impl NoMBC {
     pub fn new(rom: Vec<u8>) -> Self {
-        Self::with_ram(rom, 0, false)
+        Self::with_ram(rom, 0)
     }
 
-    pub fn with_ram(rom: Vec<u8>, ram_size: usize, battery: bool) -> Self {
+    pub fn with_ram(rom: Vec<u8>, ram_size: usize) -> Self {
         Self {
             rom,
             ram: vec![0; ram_size.min(0x2000)],
-            battery,
         }
     }
 }
@@ -37,9 +35,9 @@ impl MBC for NoMBC {
         }
     }
     fn save_ram(&self) -> Option<Vec<u8>> {
-        (self.battery && !self.ram.is_empty()).then(|| self.ram.clone())
+        super::battery_save(&self.rom, &self.ram)
     }
     fn load_ram(&mut self, data: &[u8]) -> Result<(), String> {
-        super::load_exact(&mut self.ram, data)
+        super::load_exact(&self.rom, &mut self.ram, data)
     }
 }
