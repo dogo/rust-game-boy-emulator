@@ -123,15 +123,15 @@ impl PPU {
         }
     }
     pub fn new() -> Self {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
 
         // VRAM com lixo de power-on
         let mut vram = [0u8; 0x2000];
-        rng.fill(&mut vram[..]);
+        rng.fill_bytes(&mut vram[..]);
 
         // OAM com lixo de power-on
         let mut oam = [0u8; 160];
-        rng.fill(&mut oam[..]);
+        rng.fill_bytes(&mut oam[..]);
 
         PPU {
             vram,

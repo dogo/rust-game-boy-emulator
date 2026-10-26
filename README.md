@@ -20,8 +20,9 @@ what was checked in real games is in [VALIDACAO.md](VALIDACAO.md).
 
 ## Building and running
 
-Requires a Rust toolchain (edition 2024) and the SDL3 shared library
-(`sdl3` crate 0.16; CI builds SDL3 from source, see `.github/workflows/ci.yml`).
+Requires a Rust toolchain (edition 2024; CI uses 1.99.1) and the SDL3 shared library,
+version 3.4 (`sdl3` crate 0.20, bindings for SDL 3.4.18; CI builds that SDL release
+from source, see `.github/workflows/ci.yml`).
 
 ```sh
 cargo build --release

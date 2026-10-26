@@ -172,11 +172,11 @@ impl MemoryBus {
     }
 
     pub fn new(mbc: Box<dyn MBC + Send>) -> Self {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let mut wram = [0u8; 0x2000];
         let mut hram = [0u8; 0x7F];
-        rng.fill(&mut wram[..]);
-        rng.fill(&mut hram[..]);
+        rng.fill_bytes(&mut wram[..]);
+        rng.fill_bytes(&mut hram[..]);
         Self {
             mbc,
             wram,
