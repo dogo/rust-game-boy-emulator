@@ -8,3 +8,4 @@ mooneye-roms.tmp/
 
 !gb-test-roms/**/*.gb
 !tests/fixtures/**/*.gb
+!tests/fixtures/**/*.gbc
