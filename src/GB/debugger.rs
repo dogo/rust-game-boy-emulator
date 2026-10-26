@@ -504,11 +504,14 @@ impl Debugger {
                 return true;
             }
 
-            match resp_rx.recv_timeout(Duration::from_secs(5)) {
+            match resp_rx.recv() {
                 Ok(DebugResponse::Text(text)) => println!("{}", text),
                 Ok(DebugResponse::Resume) => return false,
                 Ok(DebugResponse::Quit) => return true,
-                Err(_) => println!("Timeout esperando resposta"),
+                Err(_) => {
+                    println!("Erro: thread de emulação desconectada");
+                    return true;
+                }
             }
         }
     }
