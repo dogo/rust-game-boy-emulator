@@ -3,7 +3,7 @@ use crate::GB::PPU;
 use crate::GB::joypad::Joypad;
 use crate::GB::mbc::MBC;
 use crate::GB::timer::Timer;
-use rand::Rng;
+use crate::{fill_random, random_u64};
 use std::fs::{self, OpenOptions};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
@@ -161,8 +161,7 @@ impl MemoryBus {
                 Err(error) if error.kind() == io::ErrorKind::NotFound => PathBuf::from(path),
                 Err(error) => return Err(format!("{path}: {error}")),
             };
-            let temp_path =
-                target.with_file_name(format!(".gbemu-{:016x}.tmp", rand::random::<u64>()));
+            let temp_path = target.with_file_name(format!(".gbemu-{:016x}.tmp", random_u64()));
             write_save_atomically(&target, &temp_path, &data)
                 .map_err(|error| format!("{path}: {error}"))?;
             Ok(())
@@ -172,11 +171,10 @@ impl MemoryBus {
     }
 
     pub fn new(mbc: Box<dyn MBC + Send>) -> Self {
-        let mut rng = rand::rng();
         let mut wram = [0u8; 0x2000];
         let mut hram = [0u8; 0x7F];
-        rng.fill_bytes(&mut wram[..]);
-        rng.fill_bytes(&mut hram[..]);
+        fill_random(&mut wram);
+        fill_random(&mut hram);
         Self {
             mbc,
             wram,

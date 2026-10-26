@@ -87,10 +87,8 @@ fn rom_name_does_not_choose_the_hardware_but_model_flag_does() {
 
 #[test]
 fn unknown_cartridge_type_is_rejected() {
-    let dir: PathBuf = std::env::temp_dir().join(format!(
-        "gb-emu-unknown-cart-{:016x}",
-        gb_emu::random_u64()
-    ));
+    let dir: PathBuf =
+        std::env::temp_dir().join(format!("gb-emu-unknown-cart-{:016x}", gb_emu::random_u64()));
     fs::create_dir(&dir).unwrap();
     let rom_path = dir.join("game.gb");
     fs::write(&rom_path, rom_with_cart_type(0x22)).unwrap();
@@ -111,10 +109,8 @@ fn unknown_cartridge_type_is_rejected() {
 
 /// O emulador deve sair com erro ao carregar `save` e deixar o arquivo intacto
 fn assert_save_rejected(rom: Vec<u8>, save: &[u8]) {
-    let dir: PathBuf = std::env::temp_dir().join(format!(
-        "gb-emu-invalid-save-{:016x}",
-        gb_emu::random_u64()
-    ));
+    let dir: PathBuf =
+        std::env::temp_dir().join(format!("gb-emu-invalid-save-{:016x}", gb_emu::random_u64()));
     fs::create_dir(&dir).unwrap();
     let rom_path = dir.join("game.gb");
     let save_path = dir.join("game.sav");

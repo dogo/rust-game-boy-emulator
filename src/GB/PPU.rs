@@ -12,7 +12,7 @@ struct Sprite {
     attributes: u8, // Bit 7=prioridade, 6=flip Y, 5=flip X, 4=paleta, 3-0=unused
 }
 
-use rand::Rng;
+use crate::fill_random;
 pub struct PPU {
     // VRAM (Video RAM) - 8KB (0x8000-0x9FFF)
     // 0x8000-0x97FF: Tile data (384 tiles × 16 bytes = 6KB)
@@ -123,15 +123,13 @@ impl PPU {
         }
     }
     pub fn new() -> Self {
-        let mut rng = rand::rng();
-
         // VRAM com lixo de power-on
         let mut vram = [0u8; 0x2000];
-        rng.fill_bytes(&mut vram[..]);
+        fill_random(&mut vram);
 
         // OAM com lixo de power-on
         let mut oam = [0u8; 160];
-        rng.fill_bytes(&mut oam[..]);
+        fill_random(&mut oam);
 
         PPU {
             vram,
