@@ -31,9 +31,6 @@ Defeitos observados: nenhum nos cenários acima. No Pokémon, o primeiro A após
 
 Não coberto pela Q01: a interface SDL (entrada real, latência, VSync), o áudio e a comparação com referências de imagem — ver Q02. As cores dos screenshots são as quatro tonalidades de cinza do `sdl_runner`.
 
-## Desempenho observado durante a Q01
-
-Sem janela, com renderização de linhas ligada, `--release`: 750–1.100 fps (12–18× a velocidade real) nas execuções curtas e 1.036 fps (17,3×) na sessão de uma hora. Medição formal na Q03.
 
 ## Q02 — Imagem, áudio e latência (25/10/2026, parcial)
 
@@ -50,3 +47,30 @@ Sem janela, com renderização de linhas ligada, `--release`: 750–1.100 fps (1
 Amostras sem NaN nem valores fora de [−1, 1] nas medições. As 24 ROMs de som do Blargg continuam passando; elas testam registradores, comprimento, sweep e wave RAM, não a afinação.
 
 **Escuta.** Com a correção, o usuário ouviu o jogo na interface SDL e não notou problemas. Pausa/retomada por F12 e os controles já tinham sido usados na sessão gráfica da etapa 1. Não houve medição objetiva de estalos nem de latência.
+
+## Q03 — Desempenho (25/10/2026)
+
+Máquina: AMD Ryzen 7 5800X3D (8 núcleos/16 threads, até 4,55 GHz), 31 GB, Linux 7.3.0 (CachyOS, Wayland), rustc 1.93.0, perfil `release` padrão do Cargo.
+
+**Sem janela** (`examples/frame_capture`, renderização de linhas ligada, 3.600 frames, três execuções):
+
+| Jogo | fps | × velocidade real |
+|---|---|---|
+| Zelda | 929–976 | 15,6–16,3 |
+| Pokémon Blue | 884–923 | 14,8–15,4 |
+| Kirby's Pinball Land | 846–859 | 14,2–14,4 |
+| Barbie | 830–946 | 13,9–15,8 |
+
+Cerca de 1 ms por frame, contra 16,7 ms de orçamento. No Zelda, retirar temporariamente os ticks do APU de `bus.tick` subiu para ~1.138 fps (o APU custa ~18% do tempo de emulação) e retirar a renderização subiu para ~1.000 fps (~6%). Como a emulação inteira ocupa ~6% de um núcleo em tempo real, o laço de `apu.tick_m_cycle()` não é um gargalo e não foi alterado. A suíte de 163 ROMs leva ~8 s.
+
+**Com janela** (Zelda na intro, 20 s medidos em `/proc/<pid>/task/*/stat`):
+
+| | Antes | Depois |
+|---|---|---|
+| Thread de render | 55% de um núcleo | 2% |
+| Thread de emulação | 14% | 14% |
+| Processo | 78% | 16,5% |
+
+A hint de VSync usava o nome da macro (`"SDL_HINT_RENDER_VSYNC"`) em vez do valor `"SDL_RENDER_VSYNC"`, então o renderer nunca sincronizava e o laço de render girava sem parar. A hint `SDL_HINT_RENDER_SCALE_QUALITY`, do SDL2, não existe no SDL3, cujas texturas usam filtro linear por padrão: a imagem ampliada 3× saía borrada. Ambos corrigidos em `src/GB/sdl_runner.rs` (hint com o nome certo e `ScaleMode::Nearest` na textura). Os 14% da emulação são ~6% de trabalho e o restante a espera ativa do último ~1 ms de cada frame, mantida pela precisão do ritmo.
+
+Ritmo e áudio numa sessão de 2 minutos: emulação a 59,7 FPS; buffer de áudio entre 31 e 83 ms, média por janela de 20 s entre 53 e 62 ms, sem deriva nem esvaziamento. O buffer não tem controle de taxa; sessões muito mais longas não foram medidas.

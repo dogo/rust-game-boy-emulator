@@ -278,8 +278,8 @@ fn process_joypad_input(cpu: &mut CPU, state: &Arc<SharedState>) {
 
 fn init_sdl() -> Result<sdl3::Sdl, String> {
     sdl3::hint::set("SDL_VIDEO_X11_NET_WM_BYPASS_COMPOSITOR", "0");
-    sdl3::hint::set("SDL_HINT_RENDER_SCALE_QUALITY", "nearest");
-    sdl3::hint::set("SDL_HINT_RENDER_VSYNC", "1");
+    // Valor de SDL_HINT_RENDER_VSYNC; sem VSync o laço de render gira sem parar
+    sdl3::hint::set("SDL_RENDER_VSYNC", "1");
     sdl3::init().map_err(|e| format!("{:?}", e))
 }
 
@@ -394,6 +394,8 @@ pub fn run(cpu: &mut CPU) {
     let mut texture = texture_creator
         .create_texture_streaming(sdl3::pixels::PixelFormat::RGB24, 160, 144)
         .expect("Falha texture");
+    // SDL3 filtra texturas em linear por padrão, o que borra os pixels ampliados
+    texture.set_scale_mode(sdl3::render::ScaleMode::Nearest);
 
     let mut event_pump = sdl_ctx.event_pump().expect("Falha event pump");
 

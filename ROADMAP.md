@@ -185,8 +185,10 @@ Critério de saída: debugger e trace descrevem instruções reais, não existem
 
   Concluído (ver [VALIDACAO.md](VALIDACAO.md)): dmg-acid2 bate pixel a pixel com a referência de hardware. A medição de afinação revelou dois defeitos, agora cobertos por `tests/apu_pitch_test.rs` e corrigidos em `src/GB/APU.rs`: os canais de pulso tinham período de N+1 M-cycles (tom até ~11% baixo nas notas agudas) e o ruído rodava 4× mais lento, porque o divisor do Pan Docs, em T-cycles, era contado em M-cycles. O canal de onda já estava certo. Com a correção, o usuário ouviu o jogo na interface sem notar problemas; estalos e latência não foram medidos objetivamente.
 
-- [ ] **Q03 — Medir os caminhos de execução.**
+- [x] **Q03 — Medir os caminhos de execução.**
   Registrar máquina, perfil de build, ROM e tempo de execução para headless e uso gráfico. Medir consumo de CPU, ritmo de frames e buffer de áudio. Investigar o loop de `apu.tick_m_cycle()` em `bus.tick` apenas se ele aparecer como custo relevante; processamento em lote deve preservar a ordem dos eventos e resultados de áudio.
+
+  Concluído (ver [VALIDACAO.md](VALIDACAO.md)): sem janela, os quatro jogos rodam a 14–16× a velocidade real (~1 ms por frame). O APU responde por ~18% do tempo de emulação, mas a emulação inteira ocupa ~6% de um núcleo em tempo real, então o laço de `apu.tick_m_cycle()` não foi alterado. Com janela, o processo usava 78% de um núcleo porque a hint de VSync tinha o nome errado (`"SDL_HINT_RENDER_VSYNC"` em vez de `"SDL_RENDER_VSYNC"`) e o laço de render nunca bloqueava; com a correção, 16,5%. A hint de escala do SDL2 também não existia no SDL3, que filtra texturas em linear; a textura agora usa `ScaleMode::Nearest`. Em 2 minutos, 59,7 FPS e buffer de áudio entre 31 e 83 ms sem deriva.
 
 - [ ] **Q04 — Atualizar a documentação com o que foi validado.**
   Atualizar README com comandos, controles, limites DMG/CGB, suítes e resultados atuais. Distinguir testes de registradores/timing de compatibilidade visual e sonora. Manter contagens de testes sincronizadas com as execuções reais.
