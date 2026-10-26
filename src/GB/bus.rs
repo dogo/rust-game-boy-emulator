@@ -2,6 +2,8 @@ use crate::GB::APU;
 use crate::GB::PPU;
 use crate::GB::joypad::Joypad;
 use crate::GB::mbc::MBC;
+use crate::GB::model::HardwareModel;
+use crate::GB::sgb::Sgb;
 use crate::GB::timer::Timer;
 use crate::{fill_random, random_u64};
 use std::fs::{self, OpenOptions};
@@ -42,6 +44,7 @@ pub struct MemoryBus {
     hram: [u8; 0x7F],   // High RAM (127 bytes)
     timer: Timer,
     pub joypad: Joypad,
+    pub sgb: Option<Sgb>,
     pub ppu: PPU::PPU,
     pub apu: APU::APU,
     tima: u8,                  // FF05
@@ -77,7 +80,8 @@ pub struct MemoryBus {
     cpu_cycle_log: u32,
 
     // ===== CGB =====
-    pub cgb_mode: bool,  // true se ROM é CGB
+    pub(crate) model: HardwareModel,
+    pub cgb_mode: bool,  // true se hardware e ROM usam modo CGB
     pub cgb_speed: bool, // false = velocidade normal, true = velocidade dupla
     pub key1: u8,        // 0xFF4D: bit 0 = solicitação de troca de velocidade
     // HWIO específicos de CGB em modo de compatibilidade
@@ -91,6 +95,17 @@ pub struct MemoryBus {
 }
 
 impl MemoryBus {
+    pub(crate) fn set_model(&mut self, model: HardwareModel) {
+        self.model = model;
+        self.cgb_mode = model.is_cgb() && self.mbc.read_rom(0x0143) & 0x80 != 0;
+        self.apu.set_cgb_mode(model.is_cgb());
+        self.set_cgb_compat_hwio(model.is_cgb());
+        self.sgb = model.is_sgb().then(|| {
+            let supported = self.mbc.read_rom(0x0146) == 0x03 && self.mbc.read_rom(0x014B) == 0x33;
+            Sgb::new(supported)
+        });
+    }
+
     /// Retorna true se Joypad deve acordar do STOP (detecta novo botão pressionado)
     /// Alguma linha P10-P13 em zero: botão pressionado em um grupo selecionado
     pub fn joypad_line_low(&self) -> bool {
@@ -170,16 +185,21 @@ impl MemoryBus {
     }
 
     pub fn new(mbc: Box<dyn MBC + Send>) -> Self {
+        Self::new_with_model(mbc, HardwareModel::DmgAbc)
+    }
+
+    pub fn new_with_model(mbc: Box<dyn MBC + Send>, model: HardwareModel) -> Self {
         let mut wram = [0u8; 0x2000];
         let mut hram = [0u8; 0x7F];
         fill_random(&mut wram);
         fill_random(&mut hram);
-        Self {
+        let mut bus = Self {
             mbc,
             wram,
             hram,
             timer: Timer::new(),
             joypad: Joypad::new(),
+            sgb: None,
             ppu: PPU::PPU::new(),
             apu: APU::APU::new(),
             tima: 0,
@@ -207,6 +227,7 @@ impl MemoryBus {
             serial_last_transmitted: 0x00,
             serial_output_buffer: Vec::new(),
             cpu_cycle_log: 0,
+            model,
             cgb_mode: false,
             cgb_speed: false,
             key1: 0,
@@ -217,13 +238,9 @@ impl MemoryBus {
             ff72: 0,
             ff73: 0,
             ff75: 0,
-        }
-    }
-
-    /// Configura o modelo do Game Boy baseado na ROM
-    pub fn set_cgb_mode(&mut self, is_cgb: bool) {
-        self.apu.set_cgb_mode(is_cgb);
-        self.cgb_mode = is_cgb;
+        };
+        bus.set_model(model);
+        bus
     }
 
     pub fn set_cgb_compat_hwio(&mut self, enabled: bool) {
@@ -290,7 +307,10 @@ impl MemoryBus {
                     self.ppu.read_oam(address)
                 }
             }
-            0xFF00 => self.joypad.read(),
+            0xFF00 => {
+                let value = self.joypad.read();
+                self.sgb.as_ref().map_or(value, |sgb| sgb.read_joyp(value))
+            }
             0xFF01 => self.serial_sb,
             0xFF02 => {
                 // Bit 7: Transfer Start Flag (read-only durante transferência)
@@ -439,7 +459,12 @@ impl MemoryBus {
                     self.ppu.write_oam(address, value);
                 }
             }
-            0xFF00 => self.joypad.write(value),
+            0xFF00 => {
+                self.joypad.write(value);
+                if let Some(sgb) = &mut self.sgb {
+                    sgb.write_joyp(value);
+                }
+            }
             0xFF01 => {
                 // SB pode ser escrito mesmo durante transferência (mas não é recomendado)
                 self.serial_sb = value;
@@ -728,7 +753,13 @@ impl MemoryBus {
             }
         }
 
+        let previous_ly = self.ppu.ly;
         self.ppu.step(cycles, &mut self.if_);
+        if previous_ly == 143 && self.ppu.ly == 144 {
+            if let Some(sgb) = &mut self.sgb {
+                sgb.on_frame(&self.ppu.framebuffer);
+            }
+        }
     }
 
     #[inline]

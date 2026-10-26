@@ -10,10 +10,10 @@ ROMs fornecidas pelo usuário. Hashes registrados, não conferidos com o No-Intr
 |---|---|---|---|---|
 | Legend of Zelda: Link's Awakening (Rev 2) | `Legend of Zelda, The - Link's Awakening (USA, Europe) (Rev 2).gb` | `5ab63def958728933571c3b4f6af54db14f3f8b2` | $03 MBC1+RAM+bateria, 512 KB, RAM 8 KB | DMG |
 | Kirby's Pinball Land | `Kirby's Pinball Land (USA, Europe).gb` | `06efdb138ff56cd9522dece44adadd3fae169c76` | $06 MBC2+bateria, 256 KB | DMG |
-| Pokémon Blue (SGB Enhanced) | `Pokemon - Blue Version (USA, Europe) (SGB Enhanced).gb` | `d7037c83e1ae5b39bde3c30787637ba1d4c48ce2` | $13 MBC3+RAM+bateria, 1 MB, RAM 32 KB | DMG (flag SGB ignorada) |
+| Pokémon Blue (SGB Enhanced) | `Pokemon - Blue Version (USA, Europe) (SGB Enhanced).gb` | `d7037c83e1ae5b39bde3c30787637ba1d4c48ce2` | $13 MBC3+RAM+bateria, 1 MB, RAM 32 KB | DMG padrão; cores e borda com `--model sgb` |
 | Barbie: Ocean Discovery | `Barbie - Ocean Discovery (USA) (GB Compatible).gbc` | `fab988692a19d53e71fc754dea3a01506b104d9f` | $19 MBC5, 1 MB | DMG (CGB-compatível, flag $80) |
 
-Execução: `examples/frame_capture.rs`, sem janela, modelo DMG pós-boot, com o roteiro de botões e esperas de cada linha e screenshots inspecionados visualmente. Saves lidos de cópias; nenhum `.sav` original foi gravado.
+Execução original: `examples/frame_capture.rs`, sem janela, modelo DMG pós-boot, com o roteiro de botões e esperas de cada linha e screenshots inspecionados visualmente. O modo SGB de Pokémon Blue foi verificado separadamente: o jogo detectou o SGB, recebeu borda e paletas coloridas, e a interface SDL executou 274 quadros com vídeo e áudio fictícios. Saves lidos de cópias; nenhum `.sav` original foi gravado.
 
 | Cenário | Zelda | Kirby | Pokémon | Barbie |
 |---|---|---|---|---|

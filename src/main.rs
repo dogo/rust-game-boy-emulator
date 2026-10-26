@@ -25,7 +25,7 @@ fn main() {
         eprintln!("  --trace     : Executa com trace detalhado");
         eprintln!("  --headless  : Executa sem interface gráfica");
         eprintln!(
-            "  --model     : Hardware emulado ({}); padrão: dmg. ROMs só CGB exigem --model",
+            "  --model     : Hardware emulado ({}); padrão: dmg. ROMs só CGB exigem modelo CGB",
             GB::CPU::BootModel::NAMES
         );
         return;
@@ -66,8 +66,9 @@ fn main() {
         std::process::exit(1);
     }
 
-    // O PPU só desenha como o DMG: sem --model explícito, uma ROM só CGB não roda
-    if GB::cartridge::is_cgb_only_rom(&data) && boot_model.is_none() {
+    let model = boot_model.unwrap_or(GB::CPU::BootModel::DmgAbc);
+    // O PPU ainda não desenha os recursos CGB, mas ROMs só CGB exigem hardware CGB.
+    if GB::cartridge::is_cgb_only_rom(&data) && !model.is_cgb() {
         eprintln!(
             "❌ ROM exclusiva de Game Boy Color: o emulador desenha só como o DMG. \
              Use --model cgb para executar mesmo assim, sem os gráficos CGB."
@@ -76,14 +77,14 @@ fn main() {
     }
 
     // Inicializa CPU
-    let mut cpu = GB::CPU::CPU::new(data.clone());
+    let mut cpu = GB::CPU::CPU::new_with_model(data.clone(), model);
 
     // Boot ROM ou estado pós-boot
     if let Ok(boot_rom) = fs::read("dmg_boot.bin") {
         cpu.bus.load_boot_rom(boot_rom);
         cpu.registers.set_pc(0x0000);
     } else {
-        cpu.init_post_boot_model(boot_model.unwrap_or(GB::CPU::BootModel::DmgAbc));
+        cpu.init_post_boot();
     }
 
     // Carrega save

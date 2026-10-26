@@ -3,6 +3,7 @@
 
 use crate::GB::CPU::CPU;
 use crate::GB::debugger::{DebugCommand, DebugResponse, Debugger};
+use crate::GB::sgb;
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
@@ -32,13 +33,13 @@ struct LatestFrame {
 }
 
 impl LatestFrame {
-    fn new() -> Self {
+    fn new(size: usize) -> Self {
         Self {
-            frame: Mutex::new((vec![0u8; GB_WIDTH * GB_HEIGHT], false)),
+            frame: Mutex::new((vec![0u8; size], false)),
         }
     }
 
-    fn submit_frame(&self, framebuffer: &[u8; GB_WIDTH * GB_HEIGHT]) {
+    fn submit_frame(&self, framebuffer: &[u8]) {
         let mut frame = self.frame.lock().unwrap();
         frame.0.copy_from_slice(framebuffer);
         frame.1 = true;
@@ -70,9 +71,9 @@ struct SharedState {
 }
 
 impl SharedState {
-    fn new() -> Self {
+    fn new(frame_size: usize) -> Self {
         Self {
-            frame_buffer: LatestFrame::new(),
+            frame_buffer: LatestFrame::new(frame_size),
             audio_buffer: Mutex::new(VecDeque::with_capacity(SAMPLE_RATE as usize)),
             running: AtomicBool::new(true),
             paused: AtomicBool::new(false),
@@ -209,7 +210,13 @@ fn emulation_thread(
 
         if cpu.bus.ppu.frame_ready {
             cpu.bus.ppu.frame_ready = false;
-            state.frame_buffer.submit_frame(&cpu.bus.ppu.framebuffer);
+            if let Some(sgb) = &mut cpu.bus.sgb {
+                state
+                    .frame_buffer
+                    .submit_frame(sgb.render(&cpu.bus.ppu.framebuffer));
+            } else {
+                state.frame_buffer.submit_frame(&cpu.bus.ppu.framebuffer);
+            }
         }
 
         if fps_timer.elapsed() >= Duration::from_secs(1) {
@@ -369,7 +376,18 @@ pub fn run(cpu: &mut CPU) {
     let sdl_ctx = init_sdl().expect("Falha ao inicializar SDL3");
     let video = sdl_ctx.video().expect("Falha subsistema de vídeo");
 
-    let state = Arc::new(SharedState::new());
+    let sgb_mode = cpu.bus.sgb.is_some();
+    let (width, height) = if sgb_mode {
+        (sgb::WIDTH, sgb::HEIGHT)
+    } else {
+        (GB_WIDTH, GB_HEIGHT)
+    };
+    let frame_size = if sgb_mode {
+        width * height * 3
+    } else {
+        width * height
+    };
+    let state = Arc::new(SharedState::new(frame_size));
     let _audio_device = setup_audio(&sdl_ctx, state.clone());
 
     // Canais para debug
@@ -378,7 +396,7 @@ pub fn run(cpu: &mut CPU) {
 
     let scale = 3u32;
     let mut window = video
-        .window("GB Emulator", 160 * scale, 144 * scale)
+        .window("GB Emulator", width as u32 * scale, height as u32 * scale)
         .position_centered()
         .build()
         .expect("Falha ao criar janela");
@@ -392,7 +410,11 @@ pub fn run(cpu: &mut CPU) {
 
     let texture_creator = canvas.texture_creator();
     let mut texture = texture_creator
-        .create_texture_streaming(sdl3::pixels::PixelFormat::RGB24, 160, 144)
+        .create_texture_streaming(
+            sdl3::pixels::PixelFormat::RGB24,
+            width as u32,
+            height as u32,
+        )
         .expect("Falha texture");
     // SDL3 filtra texturas em linear por padrão, o que borra os pixels ampliados
     texture.set_scale_mode(sdl3::render::ScaleMode::Nearest);
@@ -449,18 +471,24 @@ pub fn run(cpu: &mut CPU) {
 
             if let Some(framebuffer) = state.frame_buffer.get_frame() {
                 texture
-                    .with_lock(None, |buf: &mut [u8], _pitch| {
-                        for i in 0..(144 * 160) {
-                            let shade = match framebuffer[i] {
-                                0 => 0xFF,
-                                1 => 0xAA,
-                                2 => 0x55,
-                                _ => 0x00,
-                            };
-                            let off = i * 3;
-                            buf[off] = shade;
-                            buf[off + 1] = shade;
-                            buf[off + 2] = shade;
+                    .with_lock(None, |buf: &mut [u8], pitch| {
+                        for y in 0..height {
+                            if sgb_mode {
+                                buf[y * pitch..y * pitch + width * 3].copy_from_slice(
+                                    &framebuffer[y * width * 3..(y + 1) * width * 3],
+                                );
+                            } else {
+                                for x in 0..width {
+                                    let shade = match framebuffer[y * width + x] {
+                                        0 => 0xFF,
+                                        1 => 0xAA,
+                                        2 => 0x55,
+                                        _ => 0x00,
+                                    };
+                                    let off = y * pitch + x * 3;
+                                    buf[off..off + 3].fill(shade);
+                                }
+                            }
                         }
                     })
                     .unwrap();
@@ -473,7 +501,7 @@ pub fn run(cpu: &mut CPU) {
                 .copy(
                     &texture,
                     None,
-                    Some(Rect::new(0, 0, 160 * scale, 144 * scale).into()),
+                    Some(Rect::new(0, 0, width as u32 * scale, height as u32 * scale).into()),
                 )
                 .unwrap();
             canvas.present();
@@ -501,7 +529,7 @@ mod known_regressions {
     #[test]
     fn automatic_breakpoint_does_not_underflow_frame_count() {
         let mut cpu = CPU::new(vec![0; 32768]);
-        let state = Arc::new(SharedState::new());
+        let state = Arc::new(SharedState::new(GB_WIDTH * GB_HEIGHT));
         state.debug_requested.store(true, Ordering::Relaxed);
         let (tx, rx) = mpsc::channel();
         let (resp_tx, _resp_rx) = mpsc::channel();
@@ -558,7 +586,7 @@ mod known_regressions {
     #[test]
     fn breakpoint_on_first_opcode_resumes_past_it() {
         let mut cpu = CPU::new(loop_rom());
-        let state = Arc::new(SharedState::new());
+        let state = Arc::new(SharedState::new(GB_WIDTH * GB_HEIGHT));
         let (tx, rx) = mpsc::channel();
         let (resp_tx, resp_rx) = mpsc::channel();
         state.debug_requested.store(true, Ordering::Relaxed);
@@ -584,7 +612,7 @@ mod known_regressions {
     #[test]
     fn mid_frame_breakpoint_step_continue_and_quit() {
         let mut cpu = CPU::new(loop_rom());
-        let state = Arc::new(SharedState::new());
+        let state = Arc::new(SharedState::new(GB_WIDTH * GB_HEIGHT));
         let (tx, rx) = mpsc::channel();
         let (resp_tx, resp_rx) = mpsc::channel();
         state.debug_requested.store(true, Ordering::Relaxed);
@@ -617,7 +645,7 @@ mod known_regressions {
 
     #[test]
     fn latest_frame_is_delivered_once_and_newest_wins() {
-        let frames = LatestFrame::new();
+        let frames = LatestFrame::new(GB_WIDTH * GB_HEIGHT);
         assert!(frames.get_frame().is_none());
         frames.submit_frame(&[1; GB_WIDTH * GB_HEIGHT]);
         frames.submit_frame(&[2; GB_WIDTH * GB_HEIGHT]);
@@ -628,7 +656,7 @@ mod known_regressions {
     #[test]
     fn concurrent_publish_never_yields_partial_frame() {
         const FRAMES: u8 = 200;
-        let frames = LatestFrame::new();
+        let frames = LatestFrame::new(GB_WIDTH * GB_HEIGHT);
         thread::scope(|scope| {
             scope.spawn(|| {
                 for k in 1..=FRAMES {
@@ -669,7 +697,7 @@ mod known_regressions {
     fn joypad_test_setup() -> (CPU, Arc<SharedState>) {
         let mut cpu = CPU::new(vec![0; 32768]);
         cpu.bus.write(0xFF0F, 0);
-        (cpu, Arc::new(SharedState::new()))
+        (cpu, Arc::new(SharedState::new(GB_WIDTH * GB_HEIGHT)))
     }
 
     #[test]

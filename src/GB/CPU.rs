@@ -1,4 +1,5 @@
 use crate::GB::microcode::{self, CpuControl};
+pub use crate::GB::model::HardwareModel as BootModel;
 use crate::GB::registers;
 
 pub struct CPU {
@@ -14,44 +15,22 @@ pub struct CPU {
     pub cycles: u64, // Contagem total de ciclos
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum BootModel {
-    Dmg0,   // Game Boy original (DMG-0)
-    DmgAbc, // Game Boy original (DMG-A/B/C)
-    Mgb,    // Game Boy Pocket (MGB)
-    Sgb,    // Super Game Boy (SGB)
-    Sgb2,   // Super Game Boy 2 (SGB2)
-    Cgb,    // Game Boy Color (CGB-A/B/C/D/E)
-    Cgb0,   // Game Boy Color first revision (CGB-0)
-    Agb,    // Game Boy Advance running in Game Boy Color mode (AGB/AGS)
-}
-
-impl BootModel {
-    pub const NAMES: &'static str = "dmg0, dmg, mgb, sgb, sgb2, cgb0, cgb, agb";
-
-    /// Nome aceito por `--model`
-    pub fn from_name(name: &str) -> Option<Self> {
-        Some(match name.to_ascii_lowercase().as_str() {
-            "dmg0" => BootModel::Dmg0,
-            "dmg" => BootModel::DmgAbc,
-            "mgb" => BootModel::Mgb,
-            "sgb" => BootModel::Sgb,
-            "sgb2" => BootModel::Sgb2,
-            "cgb0" => BootModel::Cgb0,
-            "cgb" => BootModel::Cgb,
-            "agb" => BootModel::Agb,
-            _ => return None,
-        })
-    }
-}
-
 impl CPU {
+    /// Mantém a escolha padrão anterior para chamadores que não selecionam hardware.
     pub fn new(rom: Vec<u8>) -> Self {
-        let is_cgb = crate::GB::cartridge::is_cgb_only_rom(&rom);
+        let model = if crate::GB::cartridge::is_cgb_only_rom(&rom) {
+            BootModel::Cgb
+        } else {
+            BootModel::DmgAbc
+        };
+        Self::new_with_model(rom, model)
+    }
+
+    pub fn new_with_model(rom: Vec<u8>, model: BootModel) -> Self {
         let mbc = crate::GB::mbc::create_mbc(rom);
-        let mut cpu = CPU {
+        CPU {
             registers: registers::Registers::new(),
-            bus: crate::GB::bus::MemoryBus::new(mbc),
+            bus: crate::GB::bus::MemoryBus::new_with_model(mbc, model),
             ime: false,
             ime_enable_next: false,
             halted: false,
@@ -60,25 +39,17 @@ impl CPU {
             locked: false,
             opcode: 0,
             cycles: 0,
-        };
-
-        // O core gráfico ainda é DMG-only. ROMs CGB-compatible (flag 0x80)
-        // devem iniciar no caminho DMG; caso contrário elas tentam usar VRAM
-        // banks, tile attributes e paletas CGB que ainda não existem aqui.
-        cpu.bus.set_cgb_mode(is_cgb);
-        cpu
+        }
     }
 
     pub fn init_post_boot(&mut self) {
-        let model = if self.bus.cgb_mode {
-            BootModel::Cgb
-        } else {
-            BootModel::DmgAbc
-        };
-        self.init_post_boot_model(model);
+        self.init_post_boot_model(self.bus.model);
     }
 
     pub fn init_post_boot_model(&mut self, model: BootModel) {
+        if self.bus.model != model {
+            self.bus.set_model(model);
+        }
         match model {
             BootModel::Dmg0 => {
                 self.registers.set_af(0x0100);

@@ -5,7 +5,7 @@
 //! `shot:NOME` (grava NOME.bmp), `save:NOME` (grava a RAM do cartucho em NOME.sav).
 //! O save de entrada, se dado (arquivo .sav), é só lido; nada é gravado fora de <dir_saida>.
 
-use gb_emu::GB::CPU::{BootModel, CPU};
+use gb_emu::GB::CPU::CPU;
 use std::time::Instant;
 use std::{env, fs, path::Path, process};
 
@@ -65,12 +65,7 @@ fn main() {
     fs::create_dir_all(out).expect("falha ao criar diretório de saída");
 
     let mut cpu = CPU::new(rom);
-    let model = if cpu.bus.cgb_mode {
-        BootModel::Cgb
-    } else {
-        BootModel::DmgAbc
-    };
-    cpu.init_post_boot_model(model);
+    cpu.init_post_boot();
 
     let mut steps = &args[2..];
     if let Some(save) = steps.first().filter(|s| s.ends_with(".sav")) {

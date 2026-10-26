@@ -128,6 +128,7 @@ fn cgb_only_rom_needs_an_explicit_model() {
         "stderr: {stderr}"
     );
     assert!(run(0xC0, &["--model", "cgb"]).status.success());
+    assert!(!run(0xC0, &["--model", "dmg"]).status.success());
     // CGB-compatível ($80) continua no caminho DMG sem --model
     assert!(run(0x80, &[]).status.success());
 

@@ -1,4 +1,4 @@
-use gb_emu::GB::CPU::CPU;
+use gb_emu::GB::CPU::{BootModel, CPU};
 
 /// WRAM $C000-$C09F = índice do byte, $D000-$D09F = índice + 0x80 (com wrap)
 fn cpu_with_wram_pattern() -> CPU {
@@ -96,9 +96,9 @@ fn restarted_dma_conflicts_with_new_source() {
 }
 
 #[test]
-fn cgb_mode_has_no_dmg_bus_conflicts() {
-    let mut cpu = cpu_with_wram_pattern();
-    cpu.bus.set_cgb_mode(true);
+fn cgb_hardware_has_no_dmg_bus_conflicts() {
+    let mut cpu = CPU::new_with_model(vec![0; 32768], BootModel::Cgb);
+    cpu.bus.write(0xC007, 7);
     start_dma(&mut cpu, 0x10);
     assert_eq!(cpu.bus.cpu_read(0xC007), 7);
 }

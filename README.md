@@ -34,10 +34,12 @@ cargo build --release
 | *(none)* | Opens a 3× window with audio |
 | `--headless` | Runs without a window as a test runner: exits 0 on pass, 1 on failure, 2 on timeout (Blargg serial/memory and Mooneye protocols) |
 | `--trace` | Prints every executed instruction |
-| `--model <model>` | Hardware to emulate: `dmg0`, `dmg`, `mgb`, `sgb`, `sgb2`, `cgb0`, `cgb`, `agb`. Default: `dmg`. CGB-only ROMs are refused unless a model is given. The ROM file name never selects the model |
+| `--model <model>` | Hardware to emulate: `dmg0`, `dmg`, `mgb`, `sgb`, `sgb2`, `cgb0`, `cgb`, `agb`. Default: `dmg`. CGB-only ROMs require a CGB model. The ROM file name never selects the model |
 
 If a `dmg_boot.bin` (256 bytes) is in the working directory it is executed;
 otherwise the emulator starts in the post-boot state of the chosen model.
+The selected hardware model applies in either case.
+To show an SGB game's colors and border, run with `--model sgb` (or `sgb2`).
 
 `examples/frame_capture.rs` runs a ROM without a window from a button script and
 writes screenshots and saves to an output directory:
@@ -82,8 +84,10 @@ an error and leaves the file untouched.
   DMG games. **CGB-only ROMs are not supported:** without `--model` the emulator refuses
   them with an error; with `--model cgb` they start in CGB mode but have no CGB
   graphics (VRAM/WRAM banks, attributes, palettes) or CGB DMA.
-- **Super Game Boy:** the `sgb`/`sgb2` models only set the post-boot state; SGB
-  borders, palettes and commands are not emulated.
+- **Super Game Boy:** `sgb`/`sgb2` models display cartridge borders and color
+  palettes for SGB-enabled ROMs. Joypad packets, multiplayer detection, palette
+  selection, color regions, screen masks and border transfers are supported.
+  SNES-side code, sound and other SGB commands are not emulated.
 - Graphics are drawn per scanline, so mid-scanline register changes are not
   reproduced.
 - Illegal opcodes hard-lock the CPU, as on hardware.
@@ -92,7 +96,7 @@ an error and leaves the file untouched.
 
 | Suite | Command | Result |
 |-------|---------|--------|
-| Rust unit and integration tests | `cargo test` | 157 passed, 0 ignored |
+| Rust unit and integration tests | `cargo test` | 169 passed, 0 ignored |
 | Blargg | `./run_all_tests.sh blargg` | 52/52 |
 | Mooneye (`acceptance`, `emulator-only`, `misc`) | `./run_all_tests.sh mooneye` | 111/111 |
 
