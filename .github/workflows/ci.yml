@@ -20,7 +20,7 @@ jobs:
           submodules: recursive
 
       - name: Install build dependencies
-        run: sudo apt-get update && sudo apt-get install -y build-essential git cmake libasound2-dev libpulse-dev libaudio-dev libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev libxinerama-dev libxss-dev libwayland-dev libxkbcommon-dev libdrm-dev libgbm-dev libudev-dev libegl1-mesa-dev libgles2-mesa-dev
+        run: sudo apt-get update && sudo apt-get install -y build-essential git cmake libasound2-dev libpulse-dev libaudio-dev libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev libxinerama-dev libxss-dev libwayland-dev libxkbcommon-dev libdrm-dev libgbm-dev libudev-dev libegl1-mesa-dev libgles2-mesa-dev libxtst-dev
 
       - name: Detect SDL3 version from Cargo.lock
         id: sdl3ver
