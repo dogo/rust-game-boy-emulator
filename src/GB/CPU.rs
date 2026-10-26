@@ -69,28 +69,6 @@ impl CPU {
         cpu
     }
 
-    // Stack operations
-    #[inline]
-    pub fn push_u16(&mut self, value: u16) {
-        let mut sp = self.registers.get_sp();
-        sp = sp.wrapping_sub(1);
-        self.bus.cpu_write(sp, (value >> 8) as u8);
-        sp = sp.wrapping_sub(1);
-        self.bus.cpu_write(sp, (value & 0xFF) as u8);
-        self.registers.set_sp(sp);
-    }
-
-    #[inline]
-    pub fn pop_u16(&mut self) -> u16 {
-        let mut sp = self.registers.get_sp();
-        let lo = self.bus.cpu_read(sp) as u16;
-        sp = sp.wrapping_add(1);
-        let hi = self.bus.cpu_read(sp) as u16;
-        sp = sp.wrapping_add(1);
-        self.registers.set_sp(sp);
-        (hi << 8) | lo
-    }
-
     pub fn init_post_boot(&mut self) {
         let model = if self.bus.cgb_mode {
             BootModel::Cgb

@@ -212,10 +212,6 @@ impl SweepUnit {
         false
     }
 
-    pub fn is_enabled(&self) -> bool {
-        self.enabled
-    }
-
     /// Atualiza período e shift sem alterar enabled/timer (para escrita no NR10)
     pub fn update_period_shift(&mut self, period: u8, shift: u8) {
         self.period = period;
@@ -306,18 +302,10 @@ impl LengthCounter {
         self.counter
     }
 
-    pub fn set_to_max(&mut self) {
-        self.counter = self.max_length;
-    }
-
     pub fn decrement(&mut self) {
         if self.counter > 0 {
             self.counter -= 1;
         }
-    }
-
-    pub fn is_enabled(&self) -> bool {
-        self.enable
     }
 }
 

@@ -802,12 +802,6 @@ impl MemoryBus {
     }
 
     #[inline]
-    pub fn cpu_write_no_oam_bug(&mut self, address: u16, value: u8) {
-        self.cpu_bus_write(address, value);
-        self.consume_cpu_cycles(4);
-    }
-
-    #[inline]
     pub fn cpu_idle(&mut self, cycles: u32) {
         self.consume_cpu_cycles(cycles);
     }
@@ -843,13 +837,6 @@ impl MemoryBus {
     pub fn oam_bug_read_inc_dec(&mut self, hl_value: u16) {
         if Self::is_oam_range(hl_value) {
             self.ppu.trigger_oam_bug_read_inc_dec();
-        }
-    }
-
-    /// Chamado quando LD [HLI],A ou LD [HLD],A é executado com HL no range OAM
-    pub fn oam_bug_write_inc_dec(&mut self, hl_value: u16) {
-        if Self::is_oam_range(hl_value) {
-            self.ppu.trigger_oam_bug_write();
         }
     }
 

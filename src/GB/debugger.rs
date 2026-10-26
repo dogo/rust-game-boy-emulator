@@ -43,7 +43,6 @@ pub enum DebugResponse {
 // =============================================================================
 
 pub struct Debugger {
-    debugging: bool,
     breakpoints: Vec<u16>,
     watchpoints: Vec<u16>,
 }
@@ -51,26 +50,9 @@ pub struct Debugger {
 impl Debugger {
     pub fn new() -> Self {
         Self {
-            debugging: false,
             breakpoints: Vec::new(),
             watchpoints: Vec::new(),
         }
-    }
-
-    // =========================================================================
-    // GETTERS / SETTERS
-    // =========================================================================
-
-    pub fn is_debugging(&self) -> bool {
-        self.debugging
-    }
-
-    pub fn set_debugging(&mut self, debug: bool) {
-        self.debugging = debug;
-    }
-
-    pub fn get_breakpoints(&self) -> &[u16] {
-        &self.breakpoints
     }
 
     pub fn check_breakpoint(&self, pc: u16) -> bool {
@@ -329,127 +311,6 @@ impl Debugger {
     }
 
     // =========================================================================
-    // MODO SINGLE-THREAD (loop original)
-    // =========================================================================
-
-    /// Verifica se PC está em um breakpoint (modo single-thread)
-    pub fn check_breakpoints(&mut self, pc: u16) {
-        if self.breakpoints.contains(&pc) {
-            println!("\n🔴 Breakpoint hit at 0x{:04X}", pc);
-            self.debugging = true;
-        }
-    }
-
-    /// Loop principal do debugger - retorna true se deve sair do emulador
-    pub fn debugloop(&mut self, cpu: &mut CPU) -> bool {
-        loop {
-            print!("(gbd) ");
-            io::stdout().flush().unwrap();
-
-            let mut input = String::new();
-            // Sem terminal (EOF), repetir o prompt vira um laço infinito
-            if !matches!(io::stdin().read_line(&mut input), Ok(n) if n > 0) {
-                println!("\n⚠️  Terminal indisponível; retomando execução");
-                self.debugging = false;
-                return false;
-            }
-
-            let input = input.trim();
-            if input.is_empty() {
-                continue;
-            }
-
-            let words: Vec<&str> = input.split_whitespace().collect();
-            if words.is_empty() {
-                continue;
-            }
-
-            match words[0] {
-                "q" | "quit" => return true,
-                "c" | "continue" => {
-                    self.debugging = false;
-                    return false;
-                }
-                "n" | "next" | "s" | "step" => {
-                    println!("{}", Self::step(cpu));
-                }
-                "b" | "break" => {
-                    if words.len() < 2 {
-                        println!("Uso: b <endereço>");
-                        continue;
-                    }
-                    if let Some(addr) = parse_address(words[1]) {
-                        println!("{}", self.add_breakpoint(addr));
-                    } else {
-                        println!("Endereço inválido: {}", words[1]);
-                    }
-                }
-                "d" | "delete" => {
-                    if words.len() < 2 {
-                        println!("Uso: d <endereço>");
-                        continue;
-                    }
-                    if let Some(addr) = parse_address(words[1]) {
-                        println!("{}", self.remove_breakpoint(addr));
-                    } else {
-                        println!("Endereço inválido: {}", words[1]);
-                    }
-                }
-                "l" | "list" => println!("{}", self.list_breakpoints()),
-                "reg" | "r" => println!("{}", Self::format_registers(cpu)),
-                "p" | "print" | "x" => {
-                    if words.len() < 2 {
-                        println!("Uso: p <endereço> [quantidade]");
-                        continue;
-                    }
-                    if let Some(addr) = parse_address(words[1]) {
-                        let count = words.get(2).and_then(|s| s.parse().ok()).unwrap_or(16);
-                        println!("{}", Self::format_memory(cpu, addr, count));
-                    } else {
-                        println!("Endereço inválido: {}", words[1]);
-                    }
-                }
-                "disass" | "dis" => {
-                    let count = words.get(1).and_then(|s| s.parse().ok()).unwrap_or(5);
-                    println!("{}", Self::format_disassembly(cpu, count));
-                }
-                "io" => println!("{}", Self::format_io(cpu)),
-                "stack" => {
-                    let count = words.get(1).and_then(|s| s.parse().ok()).unwrap_or(8);
-                    println!("{}", Self::format_stack(cpu, count));
-                }
-                "run" => {
-                    if words.len() < 2 {
-                        println!("Uso: run <número de instruções>");
-                        continue;
-                    }
-                    if let Ok(n) = words[1].parse::<usize>() {
-                        println!("{}", self.step_n(cpu, n));
-                    } else {
-                        println!("Número inválido: {}", words[1]);
-                    }
-                }
-                "w" | "watch" => {
-                    if words.len() < 2 {
-                        println!("Uso: w <endereço>");
-                        continue;
-                    }
-                    if let Some(addr) = parse_address(words[1]) {
-                        println!("{}", self.add_watchpoint(addr));
-                    } else {
-                        println!("Endereço inválido: {}", words[1]);
-                    }
-                }
-                "h" | "help" | "?" => self.print_help(),
-                _ => println!(
-                    "Comando desconhecido: '{}'. Digite 'h' para ajuda.",
-                    words[0]
-                ),
-            }
-        }
-    }
-
-    // =========================================================================
     // MODO MULTI-THREAD (via channels)
     // =========================================================================
 
@@ -655,15 +516,6 @@ impl Debugger {
     // =========================================================================
     // HELPERS
     // =========================================================================
-
-    pub fn print_info(&self) {
-        println!("\n🎮 GBD - Game Boy Debugger");
-        println!("Digite 'h' para ajuda\n");
-    }
-
-    fn print_help(&self) {
-        Self::print_help_static();
-    }
 
     fn print_help_static() {
         println!(

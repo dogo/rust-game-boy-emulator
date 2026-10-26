@@ -68,14 +68,6 @@ impl Registers {
         self.e = val;
     }
 
-    pub fn get_f(&self) -> u8 {
-        self.f
-    }
-
-    pub fn set_f(&mut self, val: u8) {
-        self.f = val & 0xF0
-    }
-
     pub fn get_h(&self) -> u8 {
         self.h
     }
