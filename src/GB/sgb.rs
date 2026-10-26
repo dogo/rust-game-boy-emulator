@@ -172,16 +172,23 @@ impl Sgb {
                 block[4] as usize,
                 block[5] as usize,
             );
+            let control = block[0] & 7;
+            // Mudando só o interior ou só o exterior, a linha recebe a mesma paleta
+            let (line_changes, line_palette) = match control {
+                1 => (true, block[1]),
+                4 => (true, block[1] >> 4),
+                _ => (control & 2 != 0, block[1] >> 2),
+            };
             for y in 0..18 {
                 for x in 0..20 {
-                    let (bit, palette) = if x < x1 || x > x2 || y < y1 || y > y2 {
-                        (4, block[1] >> 4)
+                    let (changes, palette) = if x < x1 || x > x2 || y < y1 || y > y2 {
+                        (control & 4 != 0, block[1] >> 4)
                     } else if x == x1 || x == x2 || y == y1 || y == y2 {
-                        (2, block[1] >> 2)
+                        (line_changes, line_palette)
                     } else {
-                        (1, block[1])
+                        (control & 1 != 0, block[1])
                     };
-                    if block[0] & bit != 0 {
+                    if changes {
                         self.attributes[y * 20 + x] = palette & 3;
                     }
                 }
@@ -409,6 +416,32 @@ mod tests {
     }
 
     #[test]
+    fn attribute_block_changing_one_side_also_changes_the_line() {
+        let mut sgb = Sgb::new(true);
+        let mut packet = [0; 16];
+        packet[..8].copy_from_slice(&[0x21, 1, 1, 0x01, 2, 2, 5, 5]); // só dentro = paleta 1
+        send(&mut sgb, &packet);
+        assert_eq!(sgb.attributes[2 * 20 + 2], 1, "linha");
+        assert_eq!(sgb.attributes[3 * 20 + 3], 1, "dentro");
+        assert_eq!(sgb.attributes[0], 0, "fora não muda");
+
+        packet[..8].copy_from_slice(&[0x21, 1, 4, 0x20, 2, 2, 5, 5]); // só fora = paleta 2
+        send(&mut sgb, &packet);
+        assert_eq!(sgb.attributes[0], 2, "fora");
+        assert_eq!(sgb.attributes[2 * 20 + 2], 2, "linha");
+        assert_eq!(sgb.attributes[3 * 20 + 3], 1, "dentro não muda");
+
+        packet[..8].copy_from_slice(&[0x21, 1, 3, 0x03, 2, 2, 5, 5]); // dentro e linha = paleta 3
+        send(&mut sgb, &packet);
+        assert_eq!(
+            sgb.attributes[2 * 20 + 2],
+            0,
+            "linha com sua própria paleta"
+        );
+        assert_eq!(sgb.attributes[3 * 20 + 3], 3, "dentro");
+    }
+
+    #[test]
     fn palette_and_border_transfers_color_the_frame() {
         let mut sgb = Sgb::new(true);
         let mut vram = [0; 0x2000];
@@ -433,7 +466,7 @@ mod tests {
             &[0, 0, 255]
         );
         assert_eq!(
-            &frame[(48 * WIDTH + 56) * 3..(48 * WIDTH + 56) * 3 + 3],
+            &frame[(56 * WIDTH + 64) * 3..(56 * WIDTH + 64) * 3 + 3],
             &[255, 0, 0]
         );
 
