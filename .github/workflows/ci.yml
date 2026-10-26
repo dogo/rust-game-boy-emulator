@@ -12,7 +12,8 @@ on:
 
 jobs:
   build-and-test:
-    runs-on: ubuntu-latest
+    # 26.04 é a primeira LTS com pacote do SDL3 (libsdl3-dev 3.4.x)
+    runs-on: ubuntu-26.04
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -20,27 +21,7 @@ jobs:
           submodules: recursive
 
       - name: Install build dependencies
-        run: sudo apt-get update && sudo apt-get install -y build-essential git cmake libasound2-dev libpulse-dev libaudio-dev libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev libxinerama-dev libxss-dev libwayland-dev libxkbcommon-dev libdrm-dev libgbm-dev libudev-dev libegl1-mesa-dev libgles2-mesa-dev libxtst-dev
-
-      - name: Detect SDL3 version from Cargo.lock
-        id: sdl3ver
-        run: |
-          # sdl3-sys grava a versão como "+SDL3-x.y.z" (até 0.5) ou "+SDL-x.y.z" (0.6+)
-          SDL3_VER=$(grep -oP '\+SDL3?-\K[0-9]+\.[0-9]+\.[0-9]+' Cargo.lock | head -n1)
-          test -n "$SDL3_VER"
-          echo "version=$SDL3_VER" >> $GITHUB_OUTPUT
-      - name: Download SDL3 source (dynamic version)
-        run: git clone --depth 1 --branch release-${{ steps.sdl3ver.outputs.version }} https://github.com/libsdl-org/SDL.git SDL3
-
-      - name: Build and install SDL3
-        run: |
-          cd SDL3
-          mkdir build
-          cd build
-          cmake .. -DSDL_STATIC=OFF -DSDL_SHARED=ON -DCMAKE_BUILD_TYPE=Release
-          make -j$(nproc)
-          sudo make install
-          sudo ldconfig
+        run: sudo apt-get update && sudo apt-get install -y build-essential pkg-config libsdl3-dev
 
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@1.99.1
