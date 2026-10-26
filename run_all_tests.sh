@@ -88,12 +88,6 @@ boot_model_for() {
         *-cgb*) echo cgb ;;
         *-a.gb) echo agb ;;
         *-c.gb) echo cgb ;;
-        *)
-            # ROMs só CGB sem sufixo no nome (cgb_sound, interrupt_time): flag $C0 em $0143
-            if [ "$(od -An -tx1 -j323 -N1 "$1" | tr -d ' ')" = "c0" ]; then
-                echo cgb
-            fi
-            ;;
     esac
 }
 

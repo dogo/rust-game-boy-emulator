@@ -133,7 +133,7 @@ fn dmg_boot_rom_runs_only_on_the_dmg_model() {
 }
 
 #[test]
-fn cgb_only_rom_needs_an_explicit_model() {
+fn cgb_only_rom_defaults_to_cgb_and_refuses_other_models() {
     let dir: PathBuf =
         std::env::temp_dir().join(format!("gb-emu-cgb-only-{:016x}", gb_emu::random_u64()));
     fs::create_dir(&dir).unwrap();
@@ -149,15 +149,15 @@ fn cgb_only_rom_needs_an_explicit_model() {
             .unwrap()
     };
 
-    let refused = run(0xC0, &[]);
+    assert!(run(0xC0, &[]).status.success());
+    assert!(run(0xC0, &["--model", "cgb"]).status.success());
+    let refused = run(0xC0, &["--model", "dmg"]);
     assert!(!refused.status.success());
     let stderr = String::from_utf8_lossy(&refused.stderr);
     assert!(
         stderr.contains("exclusiva de Game Boy Color"),
         "stderr: {stderr}"
     );
-    assert!(run(0xC0, &["--model", "cgb"]).status.success());
-    assert!(!run(0xC0, &["--model", "dmg"]).status.success());
     // CGB-compatível ($80) continua no caminho DMG sem --model
     assert!(run(0x80, &[]).status.success());
 

@@ -34,7 +34,7 @@ cargo build --release
 | *(none)* | Opens a 3× window with audio |
 | `--headless` | Runs without a window as a test runner: exits 0 on pass, 1 on failure, 2 on timeout (Blargg serial/memory and Mooneye protocols) |
 | `--trace` | Prints every executed instruction |
-| `--model <model>` | Hardware to emulate: `dmg0`, `dmg`, `mgb`, `sgb`, `sgb2`, `cgb0`, `cgb`, `agb`. Default: `dmg`. CGB-only ROMs require a CGB model. The ROM file name never selects the model |
+| `--model <model>` | Hardware to emulate: `dmg0`, `dmg`, `mgb`, `sgb`, `sgb2`, `cgb0`, `cgb`, `agb`. Default: `cgb` for CGB-only ROMs, `dmg` otherwise; CGB-only ROMs refuse non-CGB models. The ROM file name never selects the model |
 
 With the `dmg` model, a `dmg_boot.bin` (256 bytes) in the working directory is
 executed; otherwise the emulator starts in the post-boot state of the chosen model.
@@ -82,7 +82,7 @@ an error and leaves the file untouched.
 - **Supported cartridge types** (`$0147`): `$00`–`$03`, `$05`–`$06`, `$08`–`$09`,
   `$0F`–`$13`, `$19`–`$1E`. Other types are rejected at startup.
 - **Game Boy Color:** CGB-compatible ROMs (flag `$80`) default to DMG mode; choose
-  `--model cgb` for native colors. CGB-only ROMs require an explicit CGB model.
+  `--model cgb` for native colors. CGB-only ROMs start in CGB mode.
   Native BG/window/OBJ palettes, VRAM and WRAM banks, and VRAM DMA are supported.
   Colors are direct RGB555 output without CGB LCD color correction; VRAM DMA copies
   complete 16-byte blocks at once, so byte-level timing is not reproduced.
