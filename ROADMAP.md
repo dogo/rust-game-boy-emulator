@@ -180,8 +180,10 @@ Critério de saída: debugger e trace descrevem instruções reais, não existem
 
   Concluído: matriz em [VALIDACAO.md](VALIDACAO.md) com quatro jogos (MBC1, MBC2, MBC3 e MBC5, um deles CGB-compatível no caminho DMG), hash, cartucho e modo. `examples/frame_capture.rs` roda a ROM sem janela com um roteiro de botões e grava screenshots e saves no diretório de saída, sem tocar nos `.sav` originais. Boot, menus, sprites sobrepostos, HUD/window e controles por roteiro funcionaram nos cenários executados; o save do Pokémon foi gravado pelo jogo e reaberto com a nova posição; uma hora emulada de Zelda rodou sem erro. Nenhum defeito observado. Lacunas registradas no próprio documento: células não executadas, save do Kirby não verificado e tudo o que depende da interface SDL e do áudio (Q02).
 
-- [ ] **Q02 — Verificar imagem, áudio e latência na interface.**
+- [x] **Q02 — Verificar imagem, áudio e latência na interface.**
   Comparar screenshots com referências confiáveis e ouvir os quatro canais, transições, pausa e retomada. Observar estalos, afinação, falta/excesso de amostras e resposta dos controles. Transformar divergências reproduzíveis em testes pequenos antes de alterar a APU.
+
+  Concluído (ver [VALIDACAO.md](VALIDACAO.md)): dmg-acid2 bate pixel a pixel com a referência de hardware. A medição de afinação revelou dois defeitos, agora cobertos por `tests/apu_pitch_test.rs` e corrigidos em `src/GB/APU.rs`: os canais de pulso tinham período de N+1 M-cycles (tom até ~11% baixo nas notas agudas) e o ruído rodava 4× mais lento, porque o divisor do Pan Docs, em T-cycles, era contado em M-cycles. O canal de onda já estava certo. Com a correção, o usuário ouviu o jogo na interface sem notar problemas; estalos e latência não foram medidos objetivamente.
 
 - [ ] **Q03 — Medir os caminhos de execução.**
   Registrar máquina, perfil de build, ROM e tempo de execução para headless e uso gráfico. Medir consumo de CPU, ritmo de frames e buffer de áudio. Investigar o loop de `apu.tick_m_cycle()` em `bus.tick` apenas se ele aparecer como custo relevante; processamento em lote deve preservar a ordem dos eventos e resultados de áudio.

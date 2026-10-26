@@ -34,3 +34,19 @@ Não coberto pela Q01: a interface SDL (entrada real, latência, VSync), o áudi
 ## Desempenho observado durante a Q01
 
 Sem janela, com renderização de linhas ligada, `--release`: 750–1.100 fps (12–18× a velocidade real) nas execuções curtas e 1.036 fps (17,3×) na sessão de uma hora. Medição formal na Q03.
+
+## Q02 — Imagem, áudio e latência (25/10/2026, parcial)
+
+**Imagem.** [dmg-acid2](https://github.com/mattcurrie/dmg-acid2) v1.0 (Matt Currie, MIT), executada com `examples/frame_capture` por 120 frames: o screenshot bate pixel a pixel com `img/reference-dmg.png` do projeto (0 de 23.040 pixels diferentes). A ROM e a referência não estão no repositório.
+
+**Afinação.** Medida nas amostras geradas a 44,1 kHz como no `sdl_runner` (`tests/apu_pitch_test.rs`), contra as fórmulas do Pan Docs:
+
+| Canal | Fórmula | Antes | Depois |
+|---|---|---|---|
+| 1 e 2 (pulso) | 131072 / (2048 − x) Hz | período de N+1 M-cycles: x=2000 tocava 2675 Hz em vez de 2730,67 Hz (−2%; ~−11% em x=2040) | correto |
+| 3 (onda) | 65536 / (2048 − x) Hz | correto | correto |
+| 4 (ruído) | 262144 / (r × 2^s) ticks/s | 4× mais lento (duas oitavas abaixo): o divisor em T-cycles era contado em M-cycles | correto |
+
+Amostras sem NaN nem valores fora de [−1, 1] nas medições. As 24 ROMs de som do Blargg continuam passando; elas testam registradores, comprimento, sweep e wave RAM, não a afinação.
+
+**Escuta.** Com a correção, o usuário ouviu o jogo na interface SDL e não notou problemas. Pausa/retomada por F12 e os controles já tinham sido usados na sessão gráfica da etapa 1. Não houve medição objetiva de estalos nem de latência.

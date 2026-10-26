@@ -1436,10 +1436,7 @@ impl APU {
 
         self.ch4_lfsr = 0x7FFF;
 
-        // Inicializar timer de frequência usando tabela oficial DMG
-        const NOISE_DIVISORS: [u16; 8] = [8, 16, 32, 48, 64, 80, 96, 112];
-        let divisor = NOISE_DIVISORS[self.ch4_divisor_code as usize] as u32;
-        self.ch4_frequency_timer = divisor << self.ch4_clock_shift;
+        self.ch4_frequency_timer = self.ch4_period();
 
         // Desabilitar se DAC está off
         if self.ch4_envelope_initial == 0 && !self.ch4_envelope_direction {
@@ -1557,12 +1554,21 @@ impl APU {
     }
 
     /// Atualiza timers dos canais
+    /// Período do LFSR em M-cycles: divisores do Pan Docs (8, 16, 32... T-cycles) / 4,
+    /// porque `update_channel_timers` roda uma vez por M-cycle
+    fn ch4_period(&self) -> u32 {
+        const NOISE_DIVISORS: [u32; 8] = [2, 4, 8, 12, 16, 20, 24, 28];
+        NOISE_DIVISORS[self.ch4_divisor_code as usize] << self.ch4_clock_shift
+    }
+
     fn update_channel_timers(&mut self) {
         // Atualiza timers de frequência dos canais (executado a cada ciclo APU)
 
+        // Os timers recarregam ao chegar a 1: período de N M-cycles, não N+1
+
         // Canal 1 - Timer de frequência
         if self.ch1_enabled {
-            if self.ch1_frequency_timer > 0 {
+            if self.ch1_frequency_timer > 1 {
                 self.ch1_frequency_timer -= 1;
             } else {
                 // Reset timer baseado na frequência (agora já em 1MHz)
@@ -1573,7 +1579,7 @@ impl APU {
 
         // Canal 2 - Timer de frequência
         if self.ch2_enabled {
-            if self.ch2_frequency_timer > 0 {
+            if self.ch2_frequency_timer > 1 {
                 self.ch2_frequency_timer -= 1;
             } else {
                 self.ch2_frequency_timer = 2048 - self.ch2_frequency as u32;
@@ -1583,13 +1589,10 @@ impl APU {
 
         // Canal 4 - Timer de frequência (mais complexo)
         if self.ch4_enabled {
-            if self.ch4_frequency_timer > 0 {
+            if self.ch4_frequency_timer > 1 {
                 self.ch4_frequency_timer -= 1;
             } else {
-                // Timer baseado no divisor e clock shift
-                const NOISE_DIVISORS: [u16; 8] = [8, 16, 32, 48, 64, 80, 96, 112];
-                let divisor = NOISE_DIVISORS[self.ch4_divisor_code as usize] as u32;
-                self.ch4_frequency_timer = divisor << self.ch4_clock_shift;
+                self.ch4_frequency_timer = self.ch4_period();
 
                 // Atualiza LFSR
                 let bit = (self.ch4_lfsr ^ (self.ch4_lfsr >> 1)) & 1;
