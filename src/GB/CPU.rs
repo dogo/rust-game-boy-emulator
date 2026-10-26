@@ -234,7 +234,7 @@ impl CPU {
     pub fn execute_next(&mut self) -> u64 {
         // Nem interrupções destravam; PPU e timer seguem rodando
         if self.locked {
-            self.bus.tick(4);
+            self.bus.tick_cpu_stopped(4);
             return 4;
         }
         // Em STOP o oscilador para: nada avança até uma linha do joypad ir a zero
@@ -254,7 +254,7 @@ impl CPU {
                 self.halted = false;
             } else {
                 // CPU ainda halted, simula 4 ciclos de espera
-                self.bus.tick(4);
+                self.bus.tick_cpu_stopped(4);
                 return 4;
             }
         }

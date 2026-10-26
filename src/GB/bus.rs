@@ -909,6 +909,12 @@ impl MemoryBus {
         }
     }
 
+    /// Avança com a CPU em HALT ou travada: não há instrução para a pausa do HDMA atrasar
+    pub(crate) fn tick_cpu_stopped(&mut self, cycles: u32) {
+        self.tick(cycles);
+        self.hdma_stall_cycles = 0;
+    }
+
     #[inline]
     fn consume_cpu_cycles(&mut self, cycles: u32) {
         if cycles == 0 {

@@ -215,3 +215,30 @@ fn cgb_bg_and_obj_priority_obey_lcdc_and_oam_order() {
     ppu.render_sprites_scanline(0);
     assert_eq!(ppu.cgb_framebuffer[0], 0x03E0); // primeiro sprite no OAM
 }
+
+#[test]
+fn hblank_dma_during_halt_does_not_delay_the_wake_up() {
+    let mut rom = vec![0; 0x8000];
+    rom[0x143] = 0xC0;
+    #[rustfmt::skip]
+    let code = [
+        0x3E, 0x00, 0xE0, 0x51, 0xE0, 0x52, 0xE0, 0x53, 0xE0, 0x54, // origem $0000, destino $8000
+        0x3E, 0x01, 0xE0, 0xFF, // IE = VBlank
+        0x3E, 0xFF, 0xE0, 0x55, // HDMA de 128 blocos
+        0xAF, 0xE0, 0x0F, // IF = 0
+        0x76, 0x00, 0x18, 0xFE, // halt; nop; jr -2
+    ];
+    rom[0x100..0x100 + code.len()].copy_from_slice(&code);
+    let mut cpu = CPU::new_with_model(rom, BootModel::Cgb);
+    cpu.init_post_boot();
+    while !cpu.halted {
+        cpu.execute_next();
+    }
+    let mut waking_call = 0;
+    while cpu.halted {
+        waking_call = cpu.execute_next();
+    }
+    assert_eq!(cpu.bus.read(0xFF55), 0xFF, "HDMA terminou durante o HALT");
+    assert_eq!(waking_call, 4, "só o NOP depois do HALT");
+    assert_eq!(cpu.bus.ppu.ly, 144);
+}
