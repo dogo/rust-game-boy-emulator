@@ -13,21 +13,105 @@ I'm following the excellent guide at [https://aquova.net/emudev/gb/index.html](h
 
 ## Status
 
+A DMG (original Game Boy) emulator. CPU, timer, PPU, APU, OAM DMA, joypad, serial
+and the MBC1/MBC2/MBC3 (with RTC)/MBC5 cartridges are emulated and pass the test
+suites below. The current plan and its history are in [ROADMAP.md](ROADMAP.md);
+what was checked in real games is in [VALIDACAO.md](VALIDACAO.md).
 
-🚧 Work in progress
+## Building and running
 
-## Test Status
+Requires a Rust toolchain (edition 2024) and the SDL3 shared library
+(`sdl3` crate 0.16; CI builds SDL3 from source, see `.github/workflows/ci.yml`).
 
-`./run_all_tests.sh` recompila o binário release antes de cada execução, exige
-as 52 ROMs Blargg ou 111 Mooneye esperadas e mostra a saída de ROMs que falharem.
-O CI executa as duas suítes. Há também 14 testes de regressão marcados como
-`#[ignore]`: eles registram bugs conhecidos do [roadmap](ROADMAP.md) e devem ser
-ativados conforme cada correção for implementada.
+```sh
+cargo build --release
+./target/release/gb_emu <rom.gb> [--headless] [--trace] [--model <model>]
+```
 
-| Suite   | Command                    | Total | Passed | Failed | Timeout |
-|---------|----------------------------|-------|--------|--------|---------|
-| Blargg  | `./run_all_tests.sh blargg` | 52    | 52     | 0      | 0       |
-| Mooneye | `./run_all_tests.sh mooneye` | 111   | 111    | 0      | 0       |
+| Option | Effect |
+|--------|--------|
+| *(none)* | Opens a 3× window with audio |
+| `--headless` | Runs without a window as a test runner: exits 0 on pass, 1 on failure, 2 on timeout (Blargg serial/memory and Mooneye protocols) |
+| `--trace` | Prints every executed instruction |
+| `--model <model>` | Hardware to emulate: `dmg0`, `dmg`, `mgb`, `sgb`, `sgb2`, `cgb0`, `cgb`, `agb`. Default: `dmg`, or `cgb` for CGB-only ROMs. The ROM file name never selects the model |
+
+If a `dmg_boot.bin` (256 bytes) is in the working directory it is executed;
+otherwise the emulator starts in the post-boot state of the chosen model.
+
+`examples/frame_capture.rs` runs a ROM without a window from a button script and
+writes screenshots and saves to an output directory:
+
+```sh
+cargo run --release --example frame_capture -- <rom> <out_dir> [save.sav] wait:600 tap:START shot:title
+```
+
+## Controls
+
+| Key | Game Boy |
+|-----|----------|
+| Arrow keys | D-pad |
+| Z | A |
+| X | B |
+| Enter | Start |
+| Backspace | Select |
+| F12 | Pause and open the debugger in the terminal |
+| Esc | Quit (saves) |
+
+### Debugger
+
+F12 or a breakpoint pauses emulation and opens a `(gbd)` prompt in the terminal
+that started the emulator. Main commands: `c` continue, `n` step, `run <n>`,
+`b <addr>` / `d <addr>` / `l` breakpoints, `reg`, `p <addr> [n]` memory, `disass [n]`,
+`io`, `stack [n]`, `q` quit, `h` help. While the prompt is open the window does not
+process events.
+
+## Saves
+
+Battery-backed cartridge RAM (and the MBC3 clock) is loaded from and saved to a
+`.sav` file next to the ROM. Saving writes a temporary file in the same directory
+and replaces the old save only after the write succeeds; it is not fsynced, so it
+is not guaranteed across power loss. An invalid save makes the emulator exit with
+an error and leaves the file untouched.
+
+## Hardware support and limits
+
+- **Supported cartridge types** (`$0147`): `$00`–`$03`, `$05`–`$06`, `$08`–`$09`,
+  `$0F`–`$13`, `$19`–`$1E`. Other types are rejected at startup.
+- **Game Boy Color:** the PPU is DMG-only. CGB-compatible ROMs (flag `$80`) run as
+  DMG games. **CGB-only ROMs are not supported:** they start in CGB mode but have no
+  CGB graphics (VRAM/WRAM banks, attributes, palettes) or CGB DMA.
+- **Super Game Boy:** the `sgb`/`sgb2` models only set the post-boot state; SGB
+  borders, palettes and commands are not emulated.
+- Graphics are drawn per scanline, so mid-scanline register changes are not
+  reproduced.
+- Illegal opcodes hard-lock the CPU, as on hardware.
+
+## Tests
+
+| Suite | Command | Result |
+|-------|---------|--------|
+| Rust unit and integration tests | `cargo test` | 157 passed, 0 ignored |
+| Blargg | `./run_all_tests.sh blargg` | 52/52 |
+| Mooneye (`acceptance`, `emulator-only`, `misc`) | `./run_all_tests.sh mooneye` | 111/111 |
+
+`./run_all_tests.sh all` runs both ROM suites (163 ROMs; about 8 s on the machine in
+[VALIDACAO.md](VALIDACAO.md)). It rebuilds the
+release binary first, requires the expected number of ROMs, passes `--model` from
+the test-ROM naming conventions and prints the output of failing ROMs. CI runs the
+Rust tests and both ROM suites.
+
+What the suites do and do not show:
+
+- Blargg and Mooneye check CPU instructions, timing, interrupts, timer, OAM DMA,
+  PPU timing, MBCs and APU registers. They are not visual or audio compatibility
+  tests.
+- `tests/acid2_test.rs` runs [dmg-acid2](https://github.com/mattcurrie/dmg-acid2)
+  and compares the frame pixel by pixel with the hardware reference.
+- `tests/apu_pitch_test.rs` measures the frequency of each sound channel from the
+  generated samples.
+- Four games were played through boot, menus, gameplay, saving and a one-hour
+  session; see [VALIDACAO.md](VALIDACAO.md). That is evidence for those scenarios,
+  not a compatibility list.
 
 ### Blargg Test Status
 

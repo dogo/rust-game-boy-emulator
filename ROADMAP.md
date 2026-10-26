@@ -190,8 +190,10 @@ Critério de saída: debugger e trace descrevem instruções reais, não existem
 
   Concluído (ver [VALIDACAO.md](VALIDACAO.md)): sem janela, os quatro jogos rodam a 14–16× a velocidade real (~1 ms por frame). O APU responde por ~18% do tempo de emulação, mas a emulação inteira ocupa ~6% de um núcleo em tempo real, então o laço de `apu.tick_m_cycle()` não foi alterado. Com janela, o processo usava 78% de um núcleo porque a hint de VSync tinha o nome errado (`"SDL_HINT_RENDER_VSYNC"` em vez de `"SDL_RENDER_VSYNC"`) e o laço de render nunca bloqueava; com a correção, 16,5%. A hint de escala do SDL2 também não existia no SDL3, que filtra texturas em linear; a textura agora usa `ScaleMode::Nearest`. Em 2 minutos, 59,7 FPS e buffer de áudio entre 31 e 83 ms sem deriva.
 
-- [ ] **Q04 — Atualizar a documentação com o que foi validado.**
+- [x] **Q04 — Atualizar a documentação com o que foi validado.**
   Atualizar README com comandos, controles, limites DMG/CGB, suítes e resultados atuais. Distinguir testes de registradores/timing de compatibilidade visual e sonora. Manter contagens de testes sincronizadas com as execuções reais.
+
+  Concluído: o README passou a ter compilação e execução (opções `--headless`, `--trace`, `--model`, boot ROM opcional e `examples/frame_capture`), controles, comandos do debugger, comportamento dos saves, tipos de cartucho aceitos e limites (PPU só DMG, ROMs só CGB sem suporte, SGB sem bordas/paletas, desenho por linha). A seção de testes traz as contagens desta execução (157 testes Rust sem ignorados, Blargg 52/52, Mooneye 111/111) e separa o que as suítes de registradores/timing verificam do que dmg-acid2, a afinação do APU e o [VALIDACAO.md](VALIDACAO.md) mostram. O parágrafo antigo sobre 14 regressões ignoradas saiu. Durante a revisão, a ROM do dmg-acid2 se mostrou fora do commit `45a11d7` porque o `.gitignore` excluía `*.gb`; a exceção `!tests/fixtures/**/*.gb` e a ROM entraram em `2465c3b`, verificado num clone limpo.
 
 Critério de saída: há evidência de uso gráfico e sonoro e uma medição reproduzível. Otimizações só entram quando corrigem um gargalo medido e mantêm a precisão.
 
