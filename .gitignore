@@ -7,3 +7,4 @@ mooneye-roms.tmp/
 .DS_Store
 
 !gb-test-roms/**/*.gb
+!tests/fixtures/**/*.gb
