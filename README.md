@@ -36,8 +36,8 @@ cargo build --release
 | `--trace` | Prints every executed instruction |
 | `--model <model>` | Hardware to emulate: `dmg0`, `dmg`, `mgb`, `sgb`, `sgb2`, `cgb0`, `cgb`, `agb`. Default: `dmg`. CGB-only ROMs require a CGB model. The ROM file name never selects the model |
 
-If a `dmg_boot.bin` (256 bytes) is in the working directory it is executed;
-otherwise the emulator starts in the post-boot state of the chosen model.
+With the `dmg` model, a `dmg_boot.bin` (256 bytes) in the working directory is
+executed; otherwise the emulator starts in the post-boot state of the chosen model.
 The selected hardware model applies in either case.
 To show an SGB game's colors and border, run with `--model sgb` (or `sgb2`).
 To use a CGB-compatible game's native colors, run with `--model cgb` (or `cgb0`/`agb`).

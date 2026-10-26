@@ -79,8 +79,10 @@ fn main() {
     // Inicializa CPU
     let mut cpu = GB::CPU::CPU::new_with_model(data.clone(), model);
 
-    // Boot ROM ou estado pós-boot
-    if let Ok(boot_rom) = fs::read("dmg_boot.bin") {
+    // Boot ROM ou estado pós-boot; o boot ROM do DMG deixaria os registradores errados nos outros modelos
+    if model == GB::CPU::BootModel::DmgAbc
+        && let Ok(boot_rom) = fs::read("dmg_boot.bin")
+    {
         cpu.bus.load_boot_rom(boot_rom);
         cpu.registers.set_pc(0x0000);
     } else {

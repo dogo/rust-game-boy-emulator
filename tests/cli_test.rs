@@ -55,8 +55,8 @@ fn invalid_rom_exits_with_failure() {
     assert!(stderr.contains("ROM muito pequena"), "stderr: {stderr}");
 }
 
-/// Passa (protocolo Mooneye) se A=$01 no pós-boot, como no DMG; o MGB começa com A=$FF
-fn rom_passing_only_on_dmg() -> Vec<u8> {
+/// Passa (protocolo Mooneye) se A tiver o valor dado ao entrar em $0100
+fn rom_passing_if_a(a: u8) -> Vec<u8> {
     let mut rom = rom_with_cart_type(0x00);
     rom.resize(0x8000, 0);
     rom[0x0100..0x0104].copy_from_slice(&[0x00, 0xC3, 0x50, 0x01]); // jp $0150
@@ -66,7 +66,7 @@ fn rom_passing_only_on_dmg() -> Vec<u8> {
     let fail = [
         0x06, 0x42, 0x0E, 0x42, 0x16, 0x42, 0x1E, 0x42, 0x26, 0x42, 0x2E, 0x42, 0x40,
     ];
-    let mut code = vec![0xFE, 0x01, 0x20, fib.len() as u8]; // cp $01; jr nz, fail
+    let mut code = vec![0xFE, a, 0x20, fib.len() as u8]; // cp a; jr nz, fail
     code.extend(fib);
     code.extend(fail);
     rom[0x0150..0x0150 + code.len()].copy_from_slice(&code);
@@ -74,7 +74,8 @@ fn rom_passing_only_on_dmg() -> Vec<u8> {
 }
 
 fn run_headless(dir: &std::path::Path, rom_name: &str, extra: &[&str]) -> std::process::Output {
-    fs::write(dir.join(rom_name), rom_passing_only_on_dmg()).unwrap();
+    // O DMG começa com A=$01; o MGB, com A=$FF
+    fs::write(dir.join(rom_name), rom_passing_if_a(0x01)).unwrap();
     Command::new(env!("CARGO_BIN_EXE_gb_emu"))
         .arg("--headless")
         .args(extra)
@@ -99,6 +100,34 @@ fn rom_name_does_not_choose_the_hardware_but_model_flag_does() {
     let invalid = run_headless(&dir, "game.gb", &["--model", "nes"]);
     assert!(!invalid.status.success());
     assert!(String::from_utf8_lossy(&invalid.stderr).contains("Modelo inválido"));
+
+    fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn dmg_boot_rom_runs_only_on_the_dmg_model() {
+    let dir: PathBuf =
+        std::env::temp_dir().join(format!("gb-emu-boot-rom-{:016x}", gb_emu::random_u64()));
+    fs::create_dir(&dir).unwrap();
+    let mut boot = vec![0; 0x100];
+    boot[..5].copy_from_slice(&[0x3E, 0x42, 0xC3, 0xFE, 0x00]); // ld a,$42; jp $00FE
+    boot[0xFE..].copy_from_slice(&[0xE0, 0x50]); // desliga o boot ROM e segue em $0100
+    fs::write(dir.join("dmg_boot.bin"), boot).unwrap();
+    let run = |a: u8, extra: &[&str]| {
+        fs::write(dir.join("game.gb"), rom_passing_if_a(a)).unwrap();
+        Command::new(env!("CARGO_BIN_EXE_gb_emu"))
+            .arg("--headless")
+            .args(extra)
+            .arg(dir.join("game.gb"))
+            .current_dir(&dir)
+            .output()
+            .unwrap()
+            .status
+            .success()
+    };
+
+    assert!(run(0x42, &[]), "o boot ROM roda no DMG");
+    assert!(run(0x11, &["--model", "cgb"]), "o CGB parte do pós-boot");
 
     fs::remove_dir_all(dir).unwrap();
 }
